@@ -5,7 +5,7 @@
   const KEY = 'speech-therapy-planner-v1';
 
   const EMPTY = {
-    settings: { therapistName: '' },
+    settings: { therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable' },
     patients: [], goals: [], materials: [], appointments: [], logs: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
@@ -15,9 +15,20 @@
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) return Object.assign({}, EMPTY, JSON.parse(raw));
+      if (raw) return migrate(Object.assign({}, EMPTY, JSON.parse(raw)));
     } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
     return seed();
+  }
+
+  /* Fill in fields added after the first release. */
+  function migrate(s) {
+    s.settings = Object.assign({}, EMPTY.settings, s.settings);
+    const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
+    s.patients.forEach(function (p) {
+      if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
+      if (p.condition == null) p.condition = s.seeded && demoCases[p.id] || '';
+    });
+    return s;
   }
 
   function save() {
@@ -60,7 +71,7 @@
   function seed() {
     const t = L.todayISO();
     const s = JSON.parse(JSON.stringify(EMPTY));
-    s.settings.therapistName = 'Your Therapist';
+    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Your Therapist' });
     s.seeded = true;
 
     const mat = function (id, name, category, location) { s.materials.push({ id: id, name: name, category: category, location: location }); };
@@ -75,13 +86,20 @@
     mat('m_feelings', 'Emotions & social scenario cards', 'Cards', 'Shelf B');
     mat('m_playdoh', 'Play-Doh & animal figurines', 'Toys', 'Toy cupboard');
 
-    const pat = function (id, name, dob, diagnosis, guardian, contact) {
-      s.patients.push({ id: id, name: name, dob: dob, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
+    mat('m_naming', 'Naming picture cards (everyday objects)', 'Cards', 'Shelf C');
+    mat('m_commbook', 'Communication book & whiteboard', 'AAC', 'Cupboard B');
+    mat('m_blow', 'Straws, whistles & cotton-ball blowing kit', 'Tools', 'Desk drawer');
+    mat('m_nasal', 'Nasal airflow mirror', 'Tools', 'Desk drawer');
+
+    const pat = function (id, name, dob, ageGroup, condition, diagnosis, guardian, contact) {
+      s.patients.push({ id: id, name: name, dob: dob, ageGroup: ageGroup, condition: condition, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
     };
-    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Speech sound disorder (/s/, /r/)', 'Ms. Thompson', 'thompson.family@example.com');
-    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Expressive language delay', 'Mr. Martinez', '(555) 201-3344');
-    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
-    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Autism – social communication', 'Ms. Williams', '(555) 887-1200');
+    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Child', 'Speech sound disorder', 'Errors on /s/ and /r/', 'Ms. Thompson', 'thompson.family@example.com');
+    pat('p_isla', 'Isla Brown', L.addDays(t, -365 * 5), 'Child', 'CLP', 'Repaired cleft palate; glottal substitutions, weak oral pressure', 'Mrs. Brown', 'brown.family@example.com');
+    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Child', 'DLD', 'Expressive language below age level', 'Mr. Martinez', '(555) 201-3344');
+    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Child', 'Stammering', 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
+    pat('p_rob', 'Robert Hughes', L.addDays(t, -365 * 67), 'Adult', 'Stroke – aphasia', 'Left MCA stroke 4 months ago; anomia, good comprehension', '', 'r.hughes@example.com');
+    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200');
 
     const goal = function (id, patientId, area, title, specific, measurable, achievable, relevant, weeks, target, materialIds) {
       s.goals.push({
@@ -113,15 +131,30 @@
       'Noah will maintain a topic for 3 conversational turns', 'in 4 of 5 opportunities',
       'Currently maintains 1–2 turns', 'Needed for lunchtime conversations', 12, 80, ['m_feelings']);
 
-    const appt = function (id, patientId, date, time, goalIds, status, room) {
-      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: status || 'scheduled', notes: '' });
+    goal('g_isla1', 'p_isla', 'Articulation', 'Oral /p/ /b/ with good pressure',
+      'Isla will produce /p/ and /b/ with oral airflow (no glottal substitution) in words', 'with 80% accuracy',
+      'Correct in isolation with nasal mirror feedback', 'Makes her speech easier to understand at school', 12, 80, ['m_blow', 'm_nasal', 'm_artic']);
+    goal('g_isla2', 'p_isla', 'Articulation', '/t/ /d/ at front of mouth',
+      'Isla will produce /t/ and /d/ at the alveolar ridge in syllables and words', 'with 70% accuracy with visual cues',
+      'Emerging in syllables', 'Reduces backing pattern', 16, 70, ['m_mirror', 'm_nasal']);
+    goal('g_rob1', 'p_rob', 'Expressive language', 'Name everyday objects',
+      'Robert will name pictured everyday objects', 'with 80% accuracy using self-cueing strategies',
+      'Names 45% with phonemic cues', 'Lets him take part in family conversation and shopping', 12, 80, ['m_naming', 'm_commbook']);
+    goal('g_rob2', 'p_rob', 'Expressive language', 'Functional phrases for daily needs',
+      'Robert will use 10 functional phrases (e.g. “I need…”, “Can you…”)', 'in 4 of 5 role-play opportunities',
+      'Uses 3–4 automatic phrases', 'Supports independence at home', 10, 80, ['m_commbook']);
+
+    const appt = function (id, patientId, date, time, goalIds, room, duration) {
+      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: duration || 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: 'scheduled', notes: '' });
     };
-    appt('a_1', 'p_ava', t, '09:00', ['g_ava1', 'g_ava2']);
-    appt('a_2', 'p_leo', t, '10:00', ['g_leo1', 'g_leo2'], 'scheduled', 'Room 2');
-    appt('a_3', 'p_maya', t, '11:30', ['g_maya1']);
-    appt('a_4', 'p_noah', t, '14:00', ['g_noah1', 'g_noah2'], 'scheduled', 'Room 2');
-    appt('a_5', 'p_ava', L.addDays(t, 1), '09:00', ['g_ava1']);
-    appt('a_6', 'p_leo', L.addDays(t, 1), '13:00', ['g_leo1']);
+    appt('a_1', 'p_ava', t, '08:30', ['g_ava1', 'g_ava2']);
+    appt('a_2', 'p_isla', t, '09:15', ['g_isla1', 'g_isla2'], 'Room 1', 45);
+    appt('a_3', 'p_leo', t, '10:30', ['g_leo1', 'g_leo2'], 'Room 2');
+    appt('a_4', 'p_maya', t, '11:30', ['g_maya1']);
+    appt('a_5', 'p_rob', t, '13:30', ['g_rob1', 'g_rob2'], 'Room 3', 45);
+    appt('a_6', 'p_noah', t, '14:45', ['g_noah1', 'g_noah2'], 'Room 2');
+    appt('a_7', 'p_ava', L.addDays(t, 1), '09:00', ['g_ava1']);
+    appt('a_8', 'p_leo', L.addDays(t, 1), '13:30', ['g_leo1']);
 
     // Past sessions so the progress charts have history.
     const history = {
@@ -131,7 +164,11 @@
       g_leo2: [50, 45, 55, 60, 60, 65, 70],
       g_maya1: [60, 65, 70, 68, 75, 78, 82],
       g_noah1: [50, 55, 60, 60, 65, 70, 75],
-      g_noah2: [20, 30, 30, 40, 40, 45, 50]
+      g_noah2: [20, 30, 30, 40, 40, 45, 50],
+      g_isla1: [30, 35, 45, 50, 55, 60, 65],
+      g_isla2: [15, 20, 20, 30, 35, 35, 45],
+      g_rob1: [45, 48, 52, 55, 60, 58, 64],
+      g_rob2: [30, 40, 40, 50, 55, 60, 70]
     };
     const byPatient = {};
     s.goals.forEach(function (g) { (byPatient[g.patientId] = byPatient[g.patientId] || []).push(g.id); });
@@ -180,7 +217,7 @@
     importJSON: function (text) {
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      state = Object.assign({}, EMPTY, data);
+      state = migrate(Object.assign({}, EMPTY, data));
       save();
     },
     clearAll: function () { state = JSON.parse(JSON.stringify(EMPTY)); save(); },

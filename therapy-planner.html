@@ -28,6 +28,14 @@
   --overlay: rgba(12, 24, 26, .45);
   --radius: 10px;
   --shadow: 0 1px 2px rgba(16, 40, 42, .06), 0 2px 8px rgba(16, 40, 42, .04);
+  --fam-language: #2f5fb3; --fam-language-soft: #e7eefb;
+  --fam-speech: #7a4fb5; --fam-speech-soft: #f1eafa;
+  --fam-fluency: #a8601a; --fam-fluency-soft: #fcefe0;
+  --fam-social: #a63d6c; --fam-social-soft: #fae7ef;
+  --fam-swallow: #487a1e; --fam-swallow-soft: #ebf4e0;
+  --fam-voice: #86680a; --fam-voice-soft: #f7f0d5;
+  --fam-other: #586a6d; --fam-other-soft: #eef2f2;
+  --lunch: #fbf5e6; --lunch-ink: #7a5a12; --now: #d2452f;
   --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
   --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
@@ -37,6 +45,14 @@
     --primary: #5cc4bf; --primary-ink: #0b1a1a; --primary-soft: #1a3433;
     --good: #5ccf93; --good-soft: #163426; --bad: #f08a78; --bad-soft: #3c1f1a;
     --info: #ab9ff2; --info-soft: #28243f; --overlay: rgba(0, 0, 0, .6); --shadow: none;
+    --fam-language: #8fb3f5; --fam-language-soft: #1c2943;
+    --fam-speech: #c3a4f2; --fam-speech-soft: #2a2140;
+    --fam-fluency: #f0b26c; --fam-fluency-soft: #3a2a17;
+    --fam-social: #f099be; --fam-social-soft: #3b1d2b;
+    --fam-swallow: #a6d677; --fam-swallow-soft: #213119;
+    --fam-voice: #e3c75c; --fam-voice-soft: #352e14;
+    --fam-other: #9bb0b2; --fam-other-soft: #212d2e;
+    --lunch: #2a2616; --lunch-ink: #e6cf8a; --now: #ff7a63;
     color-scheme: dark;
   }
 }
@@ -45,6 +61,14 @@
   --primary: #5cc4bf; --primary-ink: #0b1a1a; --primary-soft: #1a3433;
   --good: #5ccf93; --good-soft: #163426; --bad: #f08a78; --bad-soft: #3c1f1a;
   --info: #ab9ff2; --info-soft: #28243f; --overlay: rgba(0, 0, 0, .6); --shadow: none;
+  --fam-language: #8fb3f5; --fam-language-soft: #1c2943;
+  --fam-speech: #c3a4f2; --fam-speech-soft: #2a2140;
+  --fam-fluency: #f0b26c; --fam-fluency-soft: #3a2a17;
+  --fam-social: #f099be; --fam-social-soft: #3b1d2b;
+  --fam-swallow: #a6d677; --fam-swallow-soft: #213119;
+  --fam-voice: #e3c75c; --fam-voice-soft: #352e14;
+  --fam-other: #9bb0b2; --fam-other-soft: #212d2e;
+  --lunch: #2a2616; --lunch-ink: #e6cf8a; --now: #ff7a63;
   color-scheme: dark;
 }
 
@@ -271,6 +295,77 @@ dialog::backdrop { background: var(--overlay); }
 .stat, .appt-time, .tbl td { font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
 
+/* toolbar */
+.toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.toolbar .date-nav { margin: 0; }
+.seg-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg-toggle button { font: inherit; font-weight: 500; border: 0; background: none; color: var(--muted); padding: 7px 14px; cursor: pointer; min-height: 38px; }
+.seg-toggle button + button { border-left: 1px solid var(--border); }
+.seg-toggle button.on { background: var(--primary-soft); color: var(--primary); }
+.seg-toggle button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.stat-sep { color: var(--muted); font-weight: 400; }
+.span-2 { grid-column: span 2; }
+@media (max-width: 560px) { .span-2 { grid-column: auto; } }
+
+/* case type tags: colour = condition family */
+.case { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 6px; white-space: nowrap; vertical-align: middle;
+  color: var(--fam-c, var(--fam-other)); background: var(--fam-s, var(--fam-other-soft)); }
+.fam-language { --fam-c: var(--fam-language); --fam-s: var(--fam-language-soft); }
+.fam-speech { --fam-c: var(--fam-speech); --fam-s: var(--fam-speech-soft); }
+.fam-fluency { --fam-c: var(--fam-fluency); --fam-s: var(--fam-fluency-soft); }
+.fam-social { --fam-c: var(--fam-social); --fam-s: var(--fam-social-soft); }
+.fam-swallow { --fam-c: var(--fam-swallow); --fam-s: var(--fam-swallow-soft); }
+.fam-voice { --fam-c: var(--fam-voice); --fam-s: var(--fam-voice-soft); }
+.fam-other { --fam-c: var(--fam-other); --fam-s: var(--fam-other-soft); }
+.tt-block .case { background: var(--surface); }
+
+/* timetable */
+.tt { --tt-gutter: 64px; position: relative; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.tt-row { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border); }
+.tt-row.hour { border-top-style: solid; }
+.tt-row:first-child { border-top: 0; }
+.tt-label { position: absolute; left: 0; width: calc(var(--tt-gutter) - 10px); top: 4px; text-align: right; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tt-slot { position: absolute; left: var(--tt-gutter); right: 0; top: 0; bottom: 0; border: 0; background: none; cursor: pointer; text-align: left; padding: 0 10px; color: var(--primary); font: inherit; font-size: .8rem; }
+.tt-slot span { opacity: 0; }
+.tt-slot:hover { background: var(--primary-soft); }
+.tt-slot:hover span, .tt-slot:focus-visible span { opacity: 1; }
+.tt-slot:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+.tt-lunch { position: absolute; left: 0; right: 0; background: repeating-linear-gradient(135deg, var(--lunch) 0 10px, transparent 10px 20px), var(--lunch);
+  border-block: 2px solid var(--lunch-ink); color: var(--lunch-ink); display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 2px;
+  pointer-events: none; font-size: .8rem; text-align: center; padding: 0 8px; }
+.tt-lunch strong { font-family: var(--font-display); font-size: 1rem; letter-spacing: .02em; }
+.tt-half { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; font-weight: 700; opacity: .85; }
+.tt-now { position: absolute; left: calc(var(--tt-gutter) - 6px); right: 0; height: 0; border-top: 2px solid var(--now); z-index: 3; pointer-events: none; }
+.tt-now::before { content: ""; position: absolute; left: -5px; top: -6px; width: 10px; height: 10px; border-radius: 50%; background: var(--now); }
+.tt-block { position: absolute; z-index: 2; overflow: hidden; display: flex; flex-direction: column; gap: 2px; padding: 6px 10px;
+  border-radius: 8px; border: 1px solid var(--border); border-left: 4px solid var(--fam-c, var(--fam-other));
+  background: var(--fam-s, var(--fam-other-soft)); color: var(--text); font-size: .82rem; line-height: 1.3; }
+.tt-block:hover { text-decoration: none; box-shadow: 0 0 0 2px var(--fam-c, var(--primary)); }
+.tt-block:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+.tt-block.cancelled { opacity: .5; text-decoration: line-through; }
+.tt-line { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; min-width: 0; }
+.tt-time { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--fam-c, var(--text)); }
+.tt-name { font-size: .92rem; }
+.tt-goals { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tt-block.compact { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 8px; padding-block: 3px; }
+.tt-block.compact .tt-goals, .tt-block.compact .badge { display: none; }
+.tt-block .badge { font-size: .65rem; padding: 0 6px; }
+.tt-hint { margin-top: 8px; }
+@media (max-width: 560px) {
+  .tt { --tt-gutter: 46px; }
+  .tt-label { font-size: .68rem; }
+  .tt-block { padding: 4px 8px; font-size: .78rem; }
+}
+
+/* list view lunch split */
+.half-head { font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 18px 0 8px; }
+.lunch-divider { display: flex; align-items: center; gap: 12px; margin: 18px 0 4px; color: var(--lunch-ink); font-weight: 700; font-size: .85rem; }
+.lunch-divider::before, .lunch-divider::after { content: ""; flex: 1; border-top: 2px dashed var(--lunch-ink); opacity: .5; }
+.lunch-divider span { background: var(--lunch); padding: 4px 12px; border-radius: 99px; }
+.case { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.appt-time { width: 112px; }
+@media (max-width: 560px) { .appt-time { width: auto; } }
+
 </style>
 </head>
 <body>
@@ -436,6 +531,83 @@ dialog::backdrop { background: var(--overlay); }
     return ids;
   }
 
+  function toMinutes(hhmm) {
+    if (!hhmm) return 0;
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + (m || 0);
+  }
+
+  function fromMinutes(mins) { return pad(Math.floor(mins / 60)) + ':' + pad(mins % 60); }
+
+  /*
+   * Timetable layout for one day. Overlapping sessions sit side by side in lanes.
+   * Returns { start, end, blocks:[{appt, start, end, lane, lanes}] } with times in minutes since midnight.
+   * The visible range is at least dayStart–dayEnd and stretches to whole hours around any session outside it.
+   */
+  function layoutDay(appointments, dayStart, dayEnd) {
+    const items = appointments.map(function (a) {
+      const start = toMinutes(a.time);
+      return { appt: a, start: start, end: start + (Number(a.duration) || 30), lane: 0, lanes: 1 };
+    }).sort(function (a, b) { return a.start - b.start || b.end - a.end; });
+
+    let cluster = [], laneEnds = [], clusterEnd = -1;
+    function closeCluster() {
+      cluster.forEach(function (it) { it.lanes = laneEnds.length; });
+      cluster = []; laneEnds = [];
+    }
+    items.forEach(function (it) {
+      if (it.start >= clusterEnd) closeCluster();
+      let lane = laneEnds.findIndex(function (end) { return end <= it.start; });
+      if (lane < 0) { lane = laneEnds.length; laneEnds.push(it.end); } else laneEnds[lane] = it.end;
+      it.lane = lane;
+      cluster.push(it);
+      clusterEnd = Math.max(clusterEnd, it.end);
+    });
+    closeCluster();
+
+    let start = toMinutes(dayStart || '08:00'), end = toMinutes(dayEnd || '17:00');
+    items.forEach(function (it) {
+      start = Math.min(start, Math.floor(it.start / 60) * 60);
+      end = Math.max(end, Math.ceil(it.end / 60) * 60);
+    });
+    return { start: start, end: end, blocks: items };
+  }
+
+  /* Split sessions into before / after lunch by start time. */
+  function splitByLunch(appointments, lunchStart) {
+    const cut = toMinutes(lunchStart || '12:00');
+    return {
+      morning: appointments.filter(function (a) { return toMinutes(a.time) < cut; }),
+      afternoon: appointments.filter(function (a) { return toMinutes(a.time) >= cut; })
+    };
+  }
+
+  /* Case types: the condition picks a colour family so a day's mix is visible at a glance. */
+  const CONDITIONS = {
+    Child: ['DLD', 'Speech sound disorder', 'CLP', 'Childhood apraxia of speech', 'Autism', 'Stammering', 'Hearing loss', 'Feeding', 'Voice', 'Global developmental delay'],
+    Adult: ['Stroke – aphasia', 'Stroke – dysarthria', 'Dysphagia', "Parkinson's", 'TBI', 'Head & neck cancer', 'Dementia', 'Voice', 'Stammering', 'MND']
+  };
+  const FAMILY_RULES = [
+    ['swallow', /dysphag|feed|swallow/i],
+    ['language', /dld|aphasia|language|dementia|tbi|developmental/i],
+    ['speech', /clp|cleft|speech sound|ssd|apraxia|cas|dysarthria|parkinson|mnd|artic|phono|hearing/i],
+    ['fluency', /stammer|stutter|fluen/i],
+    ['social', /autis|asd|social|pragmat/i],
+    ['voice', /voice|head & neck|laryn/i]
+  ];
+  function conditionFamily(condition) {
+    for (let i = 0; i < FAMILY_RULES.length; i++) if (FAMILY_RULES[i][1].test(condition || '')) return FAMILY_RULES[i][0];
+    return 'other';
+  }
+  function ageGroup(patient, onISO) {
+    if (patient.ageGroup) return patient.ageGroup;
+    if (!patient.dob) return '';
+    return age(patient.dob, onISO) >= 18 ? 'Adult' : 'Child';
+  }
+  function caseLabel(patient) {
+    return [ageGroup(patient), patient.condition].filter(Boolean).join(' · ');
+  }
+
   const PROGRESS_LABELS = {
     improving: 'Improving',
     steady: 'Steady',
@@ -449,12 +621,13 @@ dialog::backdrop { background: var(--overlay); }
     const p = opts.patient, log = opts.log, goalsById = opts.goalsById;
     const therapist = opts.therapist || 'Your speech therapist';
     const first = (p.name || '').split(' ')[0] || 'your child';
+    const direct = ageGroup(p) === 'Adult' && !p.guardian;
     const lines = [];
     lines.push('Session summary for ' + p.name + ' — ' + formatDate(log.date));
     lines.push('');
-    lines.push('Hello' + (p.guardian ? ' ' + p.guardian : '') + ',');
+    lines.push(('Hello ' + (direct ? first : p.guardian || '')).trim() + ',');
     lines.push('');
-    lines.push('Here is a summary of ' + first + "'s speech therapy session today.");
+    lines.push('Here is a summary of ' + (direct ? 'your' : first + "'s") + ' speech therapy session today.');
     lines.push('');
     lines.push('What we worked on:');
     (log.entries || []).forEach(function (e) {
@@ -493,7 +666,9 @@ dialog::backdrop { background: var(--overlay); }
     formatDate: formatDate, formatTime: formatTime, accuracy: accuracy, age: age,
     smartStatement: smartStatement, goalSeries: goalSeries, goalStats: goalStats,
     materialsForDay: materialsForDay, appointmentMaterialIds: appointmentMaterialIds,
-    clientReport: clientReport, PROGRESS_LABELS: PROGRESS_LABELS
+    clientReport: clientReport, PROGRESS_LABELS: PROGRESS_LABELS,
+    toMinutes: toMinutes, fromMinutes: fromMinutes, layoutDay: layoutDay, splitByLunch: splitByLunch,
+    CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
@@ -507,7 +682,7 @@ dialog::backdrop { background: var(--overlay); }
   const KEY = 'speech-therapy-planner-v1';
 
   const EMPTY = {
-    settings: { therapistName: '' },
+    settings: { therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable' },
     patients: [], goals: [], materials: [], appointments: [], logs: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
@@ -517,9 +692,20 @@ dialog::backdrop { background: var(--overlay); }
   function load() {
     try {
       const raw = localStorage.getItem(KEY);
-      if (raw) return Object.assign({}, EMPTY, JSON.parse(raw));
+      if (raw) return migrate(Object.assign({}, EMPTY, JSON.parse(raw)));
     } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
     return seed();
+  }
+
+  /* Fill in fields added after the first release. */
+  function migrate(s) {
+    s.settings = Object.assign({}, EMPTY.settings, s.settings);
+    const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
+    s.patients.forEach(function (p) {
+      if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
+      if (p.condition == null) p.condition = s.seeded && demoCases[p.id] || '';
+    });
+    return s;
   }
 
   function save() {
@@ -562,7 +748,7 @@ dialog::backdrop { background: var(--overlay); }
   function seed() {
     const t = L.todayISO();
     const s = JSON.parse(JSON.stringify(EMPTY));
-    s.settings.therapistName = 'Your Therapist';
+    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Your Therapist' });
     s.seeded = true;
 
     const mat = function (id, name, category, location) { s.materials.push({ id: id, name: name, category: category, location: location }); };
@@ -577,13 +763,20 @@ dialog::backdrop { background: var(--overlay); }
     mat('m_feelings', 'Emotions & social scenario cards', 'Cards', 'Shelf B');
     mat('m_playdoh', 'Play-Doh & animal figurines', 'Toys', 'Toy cupboard');
 
-    const pat = function (id, name, dob, diagnosis, guardian, contact) {
-      s.patients.push({ id: id, name: name, dob: dob, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
+    mat('m_naming', 'Naming picture cards (everyday objects)', 'Cards', 'Shelf C');
+    mat('m_commbook', 'Communication book & whiteboard', 'AAC', 'Cupboard B');
+    mat('m_blow', 'Straws, whistles & cotton-ball blowing kit', 'Tools', 'Desk drawer');
+    mat('m_nasal', 'Nasal airflow mirror', 'Tools', 'Desk drawer');
+
+    const pat = function (id, name, dob, ageGroup, condition, diagnosis, guardian, contact) {
+      s.patients.push({ id: id, name: name, dob: dob, ageGroup: ageGroup, condition: condition, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
     };
-    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Speech sound disorder (/s/, /r/)', 'Ms. Thompson', 'thompson.family@example.com');
-    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Expressive language delay', 'Mr. Martinez', '(555) 201-3344');
-    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
-    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Autism – social communication', 'Ms. Williams', '(555) 887-1200');
+    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Child', 'Speech sound disorder', 'Errors on /s/ and /r/', 'Ms. Thompson', 'thompson.family@example.com');
+    pat('p_isla', 'Isla Brown', L.addDays(t, -365 * 5), 'Child', 'CLP', 'Repaired cleft palate; glottal substitutions, weak oral pressure', 'Mrs. Brown', 'brown.family@example.com');
+    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Child', 'DLD', 'Expressive language below age level', 'Mr. Martinez', '(555) 201-3344');
+    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Child', 'Stammering', 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
+    pat('p_rob', 'Robert Hughes', L.addDays(t, -365 * 67), 'Adult', 'Stroke – aphasia', 'Left MCA stroke 4 months ago; anomia, good comprehension', '', 'r.hughes@example.com');
+    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200');
 
     const goal = function (id, patientId, area, title, specific, measurable, achievable, relevant, weeks, target, materialIds) {
       s.goals.push({
@@ -615,15 +808,30 @@ dialog::backdrop { background: var(--overlay); }
       'Noah will maintain a topic for 3 conversational turns', 'in 4 of 5 opportunities',
       'Currently maintains 1–2 turns', 'Needed for lunchtime conversations', 12, 80, ['m_feelings']);
 
-    const appt = function (id, patientId, date, time, goalIds, status, room) {
-      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: status || 'scheduled', notes: '' });
+    goal('g_isla1', 'p_isla', 'Articulation', 'Oral /p/ /b/ with good pressure',
+      'Isla will produce /p/ and /b/ with oral airflow (no glottal substitution) in words', 'with 80% accuracy',
+      'Correct in isolation with nasal mirror feedback', 'Makes her speech easier to understand at school', 12, 80, ['m_blow', 'm_nasal', 'm_artic']);
+    goal('g_isla2', 'p_isla', 'Articulation', '/t/ /d/ at front of mouth',
+      'Isla will produce /t/ and /d/ at the alveolar ridge in syllables and words', 'with 70% accuracy with visual cues',
+      'Emerging in syllables', 'Reduces backing pattern', 16, 70, ['m_mirror', 'm_nasal']);
+    goal('g_rob1', 'p_rob', 'Expressive language', 'Name everyday objects',
+      'Robert will name pictured everyday objects', 'with 80% accuracy using self-cueing strategies',
+      'Names 45% with phonemic cues', 'Lets him take part in family conversation and shopping', 12, 80, ['m_naming', 'm_commbook']);
+    goal('g_rob2', 'p_rob', 'Expressive language', 'Functional phrases for daily needs',
+      'Robert will use 10 functional phrases (e.g. “I need…”, “Can you…”)', 'in 4 of 5 role-play opportunities',
+      'Uses 3–4 automatic phrases', 'Supports independence at home', 10, 80, ['m_commbook']);
+
+    const appt = function (id, patientId, date, time, goalIds, room, duration) {
+      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: duration || 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: 'scheduled', notes: '' });
     };
-    appt('a_1', 'p_ava', t, '09:00', ['g_ava1', 'g_ava2']);
-    appt('a_2', 'p_leo', t, '10:00', ['g_leo1', 'g_leo2'], 'scheduled', 'Room 2');
-    appt('a_3', 'p_maya', t, '11:30', ['g_maya1']);
-    appt('a_4', 'p_noah', t, '14:00', ['g_noah1', 'g_noah2'], 'scheduled', 'Room 2');
-    appt('a_5', 'p_ava', L.addDays(t, 1), '09:00', ['g_ava1']);
-    appt('a_6', 'p_leo', L.addDays(t, 1), '13:00', ['g_leo1']);
+    appt('a_1', 'p_ava', t, '08:30', ['g_ava1', 'g_ava2']);
+    appt('a_2', 'p_isla', t, '09:15', ['g_isla1', 'g_isla2'], 'Room 1', 45);
+    appt('a_3', 'p_leo', t, '10:30', ['g_leo1', 'g_leo2'], 'Room 2');
+    appt('a_4', 'p_maya', t, '11:30', ['g_maya1']);
+    appt('a_5', 'p_rob', t, '13:30', ['g_rob1', 'g_rob2'], 'Room 3', 45);
+    appt('a_6', 'p_noah', t, '14:45', ['g_noah1', 'g_noah2'], 'Room 2');
+    appt('a_7', 'p_ava', L.addDays(t, 1), '09:00', ['g_ava1']);
+    appt('a_8', 'p_leo', L.addDays(t, 1), '13:30', ['g_leo1']);
 
     // Past sessions so the progress charts have history.
     const history = {
@@ -633,7 +841,11 @@ dialog::backdrop { background: var(--overlay); }
       g_leo2: [50, 45, 55, 60, 60, 65, 70],
       g_maya1: [60, 65, 70, 68, 75, 78, 82],
       g_noah1: [50, 55, 60, 60, 65, 70, 75],
-      g_noah2: [20, 30, 30, 40, 40, 45, 50]
+      g_noah2: [20, 30, 30, 40, 40, 45, 50],
+      g_isla1: [30, 35, 45, 50, 55, 60, 65],
+      g_isla2: [15, 20, 20, 30, 35, 35, 45],
+      g_rob1: [45, 48, 52, 55, 60, 58, 64],
+      g_rob2: [30, 40, 40, 50, 55, 60, 70]
     };
     const byPatient = {};
     s.goals.forEach(function (g) { (byPatient[g.patientId] = byPatient[g.patientId] || []).push(g.id); });
@@ -682,7 +894,7 @@ dialog::backdrop { background: var(--overlay); }
     importJSON: function (text) {
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      state = Object.assign({}, EMPTY, data);
+      state = migrate(Object.assign({}, EMPTY, data));
       save();
     },
     clearAll: function () { state = JSON.parse(JSON.stringify(EMPTY)); save(); },
@@ -834,42 +1046,108 @@ dialog::backdrop { background: var(--overlay); }
 
   /* ---------- views ---------- */
 
+  function caseTag(p) {
+    const label = L.caseLabel(p || {});
+    if (!label) return '';
+    return '<span class="case fam-' + L.conditionFamily(p.condition) + '">' + esc(label) + '</span>';
+  }
+
+  const PX_PER_MIN = 2.4;
+
   function viewSchedule(params) {
     const date = params.date || L.todayISO();
+    const st = S.state.settings;
     const appts = S.appointmentsOn(date);
     const m = maps();
     const active = appts.filter(function (a) { return a.status !== 'cancelled'; });
     const logged = active.filter(function (a) { return S.logForAppointment(a.id); });
     const sent = logged.filter(function (a) { return S.logForAppointment(a.id).reportSent; });
     const common = L.materialsForDay(appts, m.goals, m.materials, m.patients).filter(function (x) { return x.count > 1; });
+    const halves = L.splitByLunch(active, st.lunchStart);
+    const mode = st.scheduleView || 'timetable';
 
     let html = '<header class="page-head"><div><h1>Schedule</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div>' +
       '<button class="btn btn-primary" data-action="new-appt" data-date="' + date + '">+ Add session</button></header>' +
-      dateNav('schedule', date);
+      '<div class="toolbar">' + dateNav('schedule', date) +
+      '<div class="seg-toggle" role="group" aria-label="Schedule layout">' +
+      '<button class="' + (mode === 'timetable' ? 'on' : '') + '" data-action="sched-view" data-view="timetable" aria-pressed="' + (mode === 'timetable') + '">Timetable</button>' +
+      '<button class="' + (mode === 'list' ? 'on' : '') + '" data-action="sched-view" data-view="list" aria-pressed="' + (mode === 'list') + '">List</button></div></div>';
 
     html += '<div class="summary">' +
-      '<div><span class="stat">' + active.length + '</span><span class="muted small">Sessions</span></div>' +
+      '<div><span class="stat">' + halves.morning.length + ' <span class="stat-sep">/</span> ' + halves.afternoon.length + '</span><span class="muted small">Before / after lunch</span></div>' +
       '<div><span class="stat">' + logged.length + '/' + active.length + '</span><span class="muted small">Logged</span></div>' +
       '<div><span class="stat">' + sent.length + '/' + logged.length + '</span><span class="muted small">Reports sent</span></div>' +
       '<a href="#/materials?date=' + date + '"><span class="stat">' + common.length + '</span><span class="muted small">Shared materials →</span></a>' +
       '</div>';
 
-    if (!appts.length) {
-      html += '<div class="empty"><p>No sessions scheduled for this day.</p></div>';
-    } else {
-      html += '<ol class="schedule">' + appts.map(function (a) {
-        const p = m.patients[a.patientId] || { name: 'Unknown patient' };
-        const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
-        const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
-        return '<li><a class="appt' + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
-          '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
-          '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + statusBadge(a) + '</div>' +
-          '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
-          '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
-          '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
-          '</div><span class="chev" aria-hidden="true">›</span></a></li>';
-      }).join('') + '</ol>';
+    html += mode === 'list' ? scheduleList(appts, m, st) : timetable(appts, m, st, date);
+    return html;
+  }
+
+  function timetable(appts, m, st, date) {
+    const lay = L.layoutDay(appts, st.dayStart, st.dayEnd);
+    const y = function (mins) { return (mins - lay.start) * PX_PER_MIN; };
+    const lunchS = L.toMinutes(st.lunchStart), lunchE = L.toMinutes(st.lunchEnd);
+    let html = '<div class="tt" style="height:' + y(lay.end) + 'px">';
+
+    // Half-hour rows double as "add a session here" targets.
+    for (let t = lay.start; t < lay.end; t += 30) {
+      const hhmm = L.fromMinutes(t);
+      const onHour = t % 60 === 0;
+      html += '<div class="tt-row' + (onHour ? ' hour' : '') + '" style="top:' + y(t) + 'px;height:' + 30 * PX_PER_MIN + 'px">' +
+        (onHour ? '<span class="tt-label">' + esc(L.formatTime(hhmm).replace(':00', '')) + '</span>' : '') +
+        '<button class="tt-slot" data-action="new-appt" data-date="' + date + '" data-time="' + hhmm + '" aria-label="Add session at ' + esc(L.formatTime(hhmm)) + '"><span>+ ' + esc(L.formatTime(hhmm)) + '</span></button></div>';
     }
+    if (lunchE > lunchS && lunchE > lay.start && lunchS < lay.end) {
+      const s0 = Math.max(lunchS, lay.start), e0 = Math.min(lunchE, lay.end);
+      const halves = L.splitByLunch(appts.filter(function (a) { return a.status !== 'cancelled'; }), st.lunchStart);
+      const n = function (k) { return halves[k].length + ' session' + (halves[k].length === 1 ? '' : 's'); };
+      html += '<div class="tt-lunch" style="top:' + y(s0) + 'px;height:' + (e0 - s0) * PX_PER_MIN + 'px">' +
+        '<span class="tt-half">▲ Morning · ' + n('morning') + '</span>' +
+        '<strong>Lunch ' + esc(L.formatTime(st.lunchStart)) + '–' + esc(L.formatTime(st.lunchEnd)) + '</strong>' +
+        '<span class="tt-half">▼ Afternoon · ' + n('afternoon') + '</span></div>';
+    }
+
+    if (date === L.todayISO()) {
+      const now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
+      if (mins >= lay.start && mins <= lay.end) html += '<div class="tt-now" style="top:' + y(mins) + 'px" aria-hidden="true"></div>';
+    }
+
+    html += lay.blocks.map(function (b) {
+      const a = b.appt;
+      const p = m.patients[a.patientId] || { name: 'Unknown patient' };
+      const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+      const h = (b.end - b.start) * PX_PER_MIN;
+      return '<a class="tt-block fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (h < 60 ? ' compact' : '') + '" href="#/session/' + a.id + '" ' +
+        'style="top:' + (y(b.start) + 1) + 'px;height:' + (h - 2) + 'px;left:calc(var(--tt-gutter) + (100% - var(--tt-gutter)) * ' + b.lane + ' / ' + b.lanes + ');width:calc((100% - var(--tt-gutter)) / ' + b.lanes + ' - 4px)">' +
+        '<div class="tt-line"><span class="tt-time">' + esc(L.formatTime(a.time)) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' + statusBadge(a) + '</div>' +
+        '<div class="tt-line"><strong class="tt-name">' + esc(p.name) + '</strong>' + caseTag(p) + '</div>' +
+        '<div class="tt-goals">' + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
+        '</a>';
+    }).join('');
+    html += '</div>';
+    if (!appts.length) html += '<p class="muted small tt-hint">No sessions yet. Tap a time slot to add one.</p>';
+    return html;
+  }
+
+  function scheduleList(appts, m, st) {
+    if (!appts.length) return '<div class="empty"><p>No sessions scheduled for this day.</p></div>';
+    const halves = L.splitByLunch(appts, st.lunchStart);
+    const item = function (a) {
+      const p = m.patients[a.patientId] || { name: 'Unknown patient' };
+      const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+      const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
+      return '<li><a class="appt fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
+        '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
+        '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + caseTag(p) + statusBadge(a) + '</div>' +
+        '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
+        '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
+        '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
+        '</div><span class="chev" aria-hidden="true">›</span></a></li>';
+    };
+    let html = '<h2 class="half-head">Morning</h2>' + (halves.morning.length ? '<ol class="schedule">' + halves.morning.map(item).join('') + '</ol>' : '<p class="muted small">No morning sessions.</p>');
+    html += '<div class="lunch-divider"><span>Lunch · ' + esc(L.formatTime(st.lunchStart)) + '–' + esc(L.formatTime(st.lunchEnd)) + '</span></div>';
+    html += '<h2 class="half-head">Afternoon</h2>' + (halves.afternoon.length ? '<ol class="schedule">' + halves.afternoon.map(item).join('') + '</ol>' : '<p class="muted small">No afternoon sessions.</p>');
     return html;
   }
 
@@ -886,7 +1164,7 @@ dialog::backdrop { background: var(--overlay); }
       '<header class="page-head"><div><h1>' + esc(p.name) + '</h1><p class="muted">' +
       esc(L.formatDate(a.date, { weekday: 'short', month: 'short', day: 'numeric' })) + ' · ' + esc(L.formatTime(a.time)) +
       ' · ' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + ' ' + statusBadge(a) + '</p>' +
-      '<p class="small muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
+      '<p class="small muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
       '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a>' +
       '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button></div></header>' +
       tabs(base, tab, [['prep', 'Goals & materials'], ['log', log ? 'Session log ✓' : 'Log session'], ['progress', 'Progress'], ['report', 'Report']]);
@@ -980,16 +1258,23 @@ dialog::backdrop { background: var(--overlay); }
       '</div></section>';
   }
 
-  function viewPatients() {
+  function viewPatients(params) {
     const st = S.state;
+    const fAge = params.age || '', fCond = params.condition || '';
+    const conds = st.patients.map(function (p) { return p.condition; }).filter(function (c, i, arr) { return c && arr.indexOf(c) === i; }).sort();
+    const shown = st.patients.filter(function (p) { return (!fAge || L.ageGroup(p) === fAge) && (!fCond || p.condition === fCond); });
     let html = '<header class="page-head"><div><h1>Patients</h1><p class="muted">' + st.patients.length + ' on caseload</p></div>' +
       '<button class="btn btn-primary" data-action="new-patient">+ Add patient</button></header>';
     if (!st.patients.length) return html + '<div class="empty"><p>No patients yet.</p></div>';
-    html += '<ul class="list">' + st.patients.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
+    html += '<div class="filters" id="patient-filters">' +
+      '<select name="age" aria-label="Adult or child">' + opt('', 'Adults & children') + opt('Child', 'Children', fAge === 'Child') + opt('Adult', 'Adults', fAge === 'Adult') + '</select>' +
+      '<select name="condition" aria-label="Case type">' + opt('', 'All case types') + conds.map(function (c) { return opt(c, c, fCond === c); }).join('') + '</select></div>';
+    if (!shown.length) return html + '<div class="empty"><p>No patients match.</p></div>';
+    html += '<ul class="list">' + shown.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
       const goals = S.goalsForPatient(p.id).filter(function (g) { return g.status === 'active'; });
       const next = st.appointments.filter(function (a) { return a.patientId === p.id && a.date >= L.todayISO() && a.status !== 'cancelled'; })
         .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); })[0];
-      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong>' +
+      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong> ' + caseTag(p) +
         '<div class="muted small">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</div></div>' +
         '<div class="right small"><div>' + goals.length + ' active goal' + (goals.length === 1 ? '' : 's') + '</div>' +
         '<div class="muted">' + (next ? 'Next: ' + esc(L.formatDate(next.date, { month: 'short', day: 'numeric' })) + ' ' + esc(L.formatTime(next.time)) : 'No upcoming session') + '</div></div></a></li>';
@@ -1008,7 +1293,7 @@ dialog::backdrop { background: var(--overlay); }
 
     let html = '<a class="back" href="#/patients">‹ Patients</a>' +
       '<header class="page-head"><div><h1>' + esc(p.name) + '</h1>' +
-      '<p class="muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
+      '<p class="muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
       '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p></div>' +
       '<div class="head-actions"><button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' +
       '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button></div></header>' +
@@ -1147,6 +1432,10 @@ dialog::backdrop { background: var(--overlay); }
     const st = S.state;
     return '<header class="page-head"><div><h1>Settings</h1><p class="muted">Data is stored only in this browser on this device.</p></div></header>' +
       '<form class="card" id="settings-form"><label>Your name (used to sign reports)<input name="therapistName" value="' + esc(st.settings.therapistName) + '"></label>' +
+      '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(st.settings.dayStart) + '"></label>' +
+      '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(st.settings.lunchStart) + '"></label>' +
+      '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(st.settings.lunchEnd) + '"></label>' +
+      '<label>Day ends<input type="time" name="dayEnd" value="' + esc(st.settings.dayEnd) + '"></label></div>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save</button></div></form>' +
       '<section class="card"><h2>Backup</h2><p class="muted small">Download a backup regularly, and use it to move your data to another device.</p>' +
       '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
@@ -1184,14 +1473,18 @@ dialog::backdrop { background: var(--overlay); }
     const p = id ? S.patient(id) : {};
     openModal(id ? 'Edit patient' : 'New patient',
       '<label>Full name<input name="name" required value="' + esc(p.name) + '"></label>' +
+      '<div class="grid-3"><label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', (p.ageGroup || 'Child') === 'Child') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label>' +
+      '<label class="span-2">Case type<input name="condition" list="conditions" placeholder="e.g. DLD, CLP, Stroke – aphasia" value="' + esc(p.condition) + '"></label></div>' +
+      '<datalist id="conditions">' + L.CONDITIONS.Child.concat(L.CONDITIONS.Adult).filter(function (c, i, a) { return a.indexOf(c) === i; }).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
       '<div class="grid-2"><label>Date of birth<input type="date" name="dob" value="' + esc(p.dob) + '"></label>' +
-      '<label>Diagnosis / focus<input name="diagnosis" value="' + esc(p.diagnosis) + '"></label></div>' +
-      '<div class="grid-2"><label>Parent / guardian<input name="guardian" value="' + esc(p.guardian) + '"></label>' +
+      '<label>Diagnosis details<input name="diagnosis" placeholder="e.g. Left MCA stroke, anomia" value="' + esc(p.diagnosis) + '"></label></div>' +
+      '<div class="grid-2"><label>Parent / guardian / carer<input name="guardian" placeholder="Blank = address adult directly" value="' + esc(p.guardian) + '"></label>' +
       '<label>Email or phone<input name="contact" value="' + esc(p.contact) + '"></label></div>' +
       '<label>Notes<textarea name="notes" rows="3">' + esc(p.notes) + '</textarea></label>',
       function (fd) {
         const saved = S.upsert('patients', Object.assign({}, p, {
           name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
+          ageGroup: fd.get('ageGroup'), condition: fd.get('condition').trim(),
           guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes')
         }));
         if (!id) go('#/patients/' + saved.id);
@@ -1266,7 +1559,7 @@ dialog::backdrop { background: var(--overlay); }
       }).join('');
     };
     const form = openModal(id ? 'Edit session' : 'New session',
-      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { return opt(p.id, p.name, a.patientId === p.id); }).join('') + '</select></label>' +
+      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { const c = L.caseLabel(p); return opt(p.id, p.name + (c ? ' (' + c + ')' : ''), a.patientId === p.id); }).join('') + '</select></label>' +
       '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
       '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"></label>' +
       '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
@@ -1305,7 +1598,7 @@ dialog::backdrop { background: var(--overlay); }
     let html;
     if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
-    else if (section === 'patients') html = viewPatients();
+    else if (section === 'patients') html = viewPatients(r.params);
     else if (section === 'goals') html = viewGoals(r.params);
     else if (section === 'materials') html = viewMaterials(r.params);
     else if (section === 'reports') html = viewReports(r.params);
@@ -1330,7 +1623,8 @@ dialog::backdrop { background: var(--overlay); }
     const act = el.dataset.action;
     const id = el.dataset.id;
     switch (act) {
-      case 'new-appt': apptForm(null, { date: el.dataset.date || L.todayISO(), patientId: el.dataset.patient || '' }); break;
+      case 'new-appt': apptForm(null, { date: el.dataset.date || L.todayISO(), time: el.dataset.time || '09:00', patientId: el.dataset.patient || '' }); break;
+      case 'sched-view': S.state.settings.scheduleView = el.dataset.view; S.save(); render(); break;
       case 'edit-appt': apptForm(id); break;
       case 'new-patient': patientForm(null); break;
       case 'edit-patient': patientForm(id); break;
@@ -1397,6 +1691,10 @@ dialog::backdrop { background: var(--overlay); }
       document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
     }
     if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
+    if (t.closest('#patient-filters')) {
+      const f = t.closest('#patient-filters');
+      go('#/patients?age=' + encodeURIComponent(f.querySelector('[name=age]').value) + '&condition=' + encodeURIComponent(f.querySelector('[name=condition]').value));
+    }
     if (t.closest('#goal-filters')) {
       const f = t.closest('#goal-filters');
       const qs = ['patient', 'area', 'status'].map(function (k) { return k + '=' + encodeURIComponent(f.querySelector('[name=' + k + ']').value); }).join('&');
@@ -1452,6 +1750,10 @@ dialog::backdrop { background: var(--overlay); }
     if (form.id === 'settings-form') {
       ev.preventDefault();
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
+      ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {
+        const v = form.querySelector('[name=' + k + ']').value;
+        if (v) S.state.settings[k] = v;
+      });
       S.save(); toast('Saved');
     }
   });

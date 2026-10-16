@@ -6,11 +6,11 @@ A day-to-day workspace for speech therapists. Open the schedule, tap a patient, 
 
 | Area | What you get |
 |---|---|
-| **Schedule** (home) | The day's sessions in time order. Each shows the goals being targeted, the materials needed, and whether it is scheduled, logged or reported. Move between days, add sessions (with weekly repeats). |
+| **Schedule** (home) | A **timetable** of the day with a lunch band splitting morning and afternoon (lunch and working hours are set in Settings). Each session block shows the time, patient, **case type** (e.g. *Child · CLP*, *Adult · Stroke – aphasia*, colour-coded by area: language, speech, fluency, social, swallowing, voice) and goals. Tap an empty slot to book that time. Switch to **List** for a morning/afternoon list with materials. Overlapping sessions sit side by side. |
 | **Session** (tap a patient) | Four tabs: **Goals & materials** (SMART breakdown, last accuracy vs target, materials checklist) → **Log session** (trials/times done, correct, auto-calculated accuracy, cueing level, progress rating, per-goal notes, session journal notes, home practice) → **Progress** (accuracy chart with target line, trend) → **Report** (auto-written family summary: edit, copy, email, mark as sent). |
 | **Materials** | *For the day*: **common materials** used in 2+ sessions, the full pick list (who needs each item and where it's kept), and a per-session breakdown. Ticks stay in sync across all three lists. Copy the pick list as text. *Library*: every material and which goals use it. |
 | **Goals** | All SMART goals across the caseload, filterable by patient, area and status. |
-| **Patients** | Caseload list; each patient has SMART goals, progress charts for every goal, and a dated session journal. |
+| **Patients** | Caseload list filterable by adult/child and case type; each patient has SMART goals, progress charts for every goal, and a dated session journal. |
 | **Reports** | Every session of the day with its report status, so nothing is left unsent. |
 | **Settings** | Your name for signing reports, backup download/restore, demo data, delete all. |
 

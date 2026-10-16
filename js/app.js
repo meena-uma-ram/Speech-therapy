@@ -142,42 +142,108 @@
 
   /* ---------- views ---------- */
 
+  function caseTag(p) {
+    const label = L.caseLabel(p || {});
+    if (!label) return '';
+    return '<span class="case fam-' + L.conditionFamily(p.condition) + '">' + esc(label) + '</span>';
+  }
+
+  const PX_PER_MIN = 2.4;
+
   function viewSchedule(params) {
     const date = params.date || L.todayISO();
+    const st = S.state.settings;
     const appts = S.appointmentsOn(date);
     const m = maps();
     const active = appts.filter(function (a) { return a.status !== 'cancelled'; });
     const logged = active.filter(function (a) { return S.logForAppointment(a.id); });
     const sent = logged.filter(function (a) { return S.logForAppointment(a.id).reportSent; });
     const common = L.materialsForDay(appts, m.goals, m.materials, m.patients).filter(function (x) { return x.count > 1; });
+    const halves = L.splitByLunch(active, st.lunchStart);
+    const mode = st.scheduleView || 'timetable';
 
     let html = '<header class="page-head"><div><h1>Schedule</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div>' +
       '<button class="btn btn-primary" data-action="new-appt" data-date="' + date + '">+ Add session</button></header>' +
-      dateNav('schedule', date);
+      '<div class="toolbar">' + dateNav('schedule', date) +
+      '<div class="seg-toggle" role="group" aria-label="Schedule layout">' +
+      '<button class="' + (mode === 'timetable' ? 'on' : '') + '" data-action="sched-view" data-view="timetable" aria-pressed="' + (mode === 'timetable') + '">Timetable</button>' +
+      '<button class="' + (mode === 'list' ? 'on' : '') + '" data-action="sched-view" data-view="list" aria-pressed="' + (mode === 'list') + '">List</button></div></div>';
 
     html += '<div class="summary">' +
-      '<div><span class="stat">' + active.length + '</span><span class="muted small">Sessions</span></div>' +
+      '<div><span class="stat">' + halves.morning.length + ' <span class="stat-sep">/</span> ' + halves.afternoon.length + '</span><span class="muted small">Before / after lunch</span></div>' +
       '<div><span class="stat">' + logged.length + '/' + active.length + '</span><span class="muted small">Logged</span></div>' +
       '<div><span class="stat">' + sent.length + '/' + logged.length + '</span><span class="muted small">Reports sent</span></div>' +
       '<a href="#/materials?date=' + date + '"><span class="stat">' + common.length + '</span><span class="muted small">Shared materials →</span></a>' +
       '</div>';
 
-    if (!appts.length) {
-      html += '<div class="empty"><p>No sessions scheduled for this day.</p></div>';
-    } else {
-      html += '<ol class="schedule">' + appts.map(function (a) {
-        const p = m.patients[a.patientId] || { name: 'Unknown patient' };
-        const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
-        const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
-        return '<li><a class="appt' + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
-          '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
-          '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + statusBadge(a) + '</div>' +
-          '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
-          '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
-          '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
-          '</div><span class="chev" aria-hidden="true">›</span></a></li>';
-      }).join('') + '</ol>';
+    html += mode === 'list' ? scheduleList(appts, m, st) : timetable(appts, m, st, date);
+    return html;
+  }
+
+  function timetable(appts, m, st, date) {
+    const lay = L.layoutDay(appts, st.dayStart, st.dayEnd);
+    const y = function (mins) { return (mins - lay.start) * PX_PER_MIN; };
+    const lunchS = L.toMinutes(st.lunchStart), lunchE = L.toMinutes(st.lunchEnd);
+    let html = '<div class="tt" style="height:' + y(lay.end) + 'px">';
+
+    // Half-hour rows double as "add a session here" targets.
+    for (let t = lay.start; t < lay.end; t += 30) {
+      const hhmm = L.fromMinutes(t);
+      const onHour = t % 60 === 0;
+      html += '<div class="tt-row' + (onHour ? ' hour' : '') + '" style="top:' + y(t) + 'px;height:' + 30 * PX_PER_MIN + 'px">' +
+        (onHour ? '<span class="tt-label">' + esc(L.formatTime(hhmm).replace(':00', '')) + '</span>' : '') +
+        '<button class="tt-slot" data-action="new-appt" data-date="' + date + '" data-time="' + hhmm + '" aria-label="Add session at ' + esc(L.formatTime(hhmm)) + '"><span>+ ' + esc(L.formatTime(hhmm)) + '</span></button></div>';
     }
+    if (lunchE > lunchS && lunchE > lay.start && lunchS < lay.end) {
+      const s0 = Math.max(lunchS, lay.start), e0 = Math.min(lunchE, lay.end);
+      const halves = L.splitByLunch(appts.filter(function (a) { return a.status !== 'cancelled'; }), st.lunchStart);
+      const n = function (k) { return halves[k].length + ' session' + (halves[k].length === 1 ? '' : 's'); };
+      html += '<div class="tt-lunch" style="top:' + y(s0) + 'px;height:' + (e0 - s0) * PX_PER_MIN + 'px">' +
+        '<span class="tt-half">▲ Morning · ' + n('morning') + '</span>' +
+        '<strong>Lunch ' + esc(L.formatTime(st.lunchStart)) + '–' + esc(L.formatTime(st.lunchEnd)) + '</strong>' +
+        '<span class="tt-half">▼ Afternoon · ' + n('afternoon') + '</span></div>';
+    }
+
+    if (date === L.todayISO()) {
+      const now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
+      if (mins >= lay.start && mins <= lay.end) html += '<div class="tt-now" style="top:' + y(mins) + 'px" aria-hidden="true"></div>';
+    }
+
+    html += lay.blocks.map(function (b) {
+      const a = b.appt;
+      const p = m.patients[a.patientId] || { name: 'Unknown patient' };
+      const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+      const h = (b.end - b.start) * PX_PER_MIN;
+      return '<a class="tt-block fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (h < 60 ? ' compact' : '') + '" href="#/session/' + a.id + '" ' +
+        'style="top:' + (y(b.start) + 1) + 'px;height:' + (h - 2) + 'px;left:calc(var(--tt-gutter) + (100% - var(--tt-gutter)) * ' + b.lane + ' / ' + b.lanes + ');width:calc((100% - var(--tt-gutter)) / ' + b.lanes + ' - 4px)">' +
+        '<div class="tt-line"><span class="tt-time">' + esc(L.formatTime(a.time)) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' + statusBadge(a) + '</div>' +
+        '<div class="tt-line"><strong class="tt-name">' + esc(p.name) + '</strong>' + caseTag(p) + '</div>' +
+        '<div class="tt-goals">' + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
+        '</a>';
+    }).join('');
+    html += '</div>';
+    if (!appts.length) html += '<p class="muted small tt-hint">No sessions yet. Tap a time slot to add one.</p>';
+    return html;
+  }
+
+  function scheduleList(appts, m, st) {
+    if (!appts.length) return '<div class="empty"><p>No sessions scheduled for this day.</p></div>';
+    const halves = L.splitByLunch(appts, st.lunchStart);
+    const item = function (a) {
+      const p = m.patients[a.patientId] || { name: 'Unknown patient' };
+      const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+      const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
+      return '<li><a class="appt fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
+        '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
+        '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + caseTag(p) + statusBadge(a) + '</div>' +
+        '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
+        '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
+        '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
+        '</div><span class="chev" aria-hidden="true">›</span></a></li>';
+    };
+    let html = '<h2 class="half-head">Morning</h2>' + (halves.morning.length ? '<ol class="schedule">' + halves.morning.map(item).join('') + '</ol>' : '<p class="muted small">No morning sessions.</p>');
+    html += '<div class="lunch-divider"><span>Lunch · ' + esc(L.formatTime(st.lunchStart)) + '–' + esc(L.formatTime(st.lunchEnd)) + '</span></div>';
+    html += '<h2 class="half-head">Afternoon</h2>' + (halves.afternoon.length ? '<ol class="schedule">' + halves.afternoon.map(item).join('') + '</ol>' : '<p class="muted small">No afternoon sessions.</p>');
     return html;
   }
 
@@ -194,7 +260,7 @@
       '<header class="page-head"><div><h1>' + esc(p.name) + '</h1><p class="muted">' +
       esc(L.formatDate(a.date, { weekday: 'short', month: 'short', day: 'numeric' })) + ' · ' + esc(L.formatTime(a.time)) +
       ' · ' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + ' ' + statusBadge(a) + '</p>' +
-      '<p class="small muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
+      '<p class="small muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
       '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a>' +
       '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button></div></header>' +
       tabs(base, tab, [['prep', 'Goals & materials'], ['log', log ? 'Session log ✓' : 'Log session'], ['progress', 'Progress'], ['report', 'Report']]);
@@ -288,16 +354,23 @@
       '</div></section>';
   }
 
-  function viewPatients() {
+  function viewPatients(params) {
     const st = S.state;
+    const fAge = params.age || '', fCond = params.condition || '';
+    const conds = st.patients.map(function (p) { return p.condition; }).filter(function (c, i, arr) { return c && arr.indexOf(c) === i; }).sort();
+    const shown = st.patients.filter(function (p) { return (!fAge || L.ageGroup(p) === fAge) && (!fCond || p.condition === fCond); });
     let html = '<header class="page-head"><div><h1>Patients</h1><p class="muted">' + st.patients.length + ' on caseload</p></div>' +
       '<button class="btn btn-primary" data-action="new-patient">+ Add patient</button></header>';
     if (!st.patients.length) return html + '<div class="empty"><p>No patients yet.</p></div>';
-    html += '<ul class="list">' + st.patients.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
+    html += '<div class="filters" id="patient-filters">' +
+      '<select name="age" aria-label="Adult or child">' + opt('', 'Adults & children') + opt('Child', 'Children', fAge === 'Child') + opt('Adult', 'Adults', fAge === 'Adult') + '</select>' +
+      '<select name="condition" aria-label="Case type">' + opt('', 'All case types') + conds.map(function (c) { return opt(c, c, fCond === c); }).join('') + '</select></div>';
+    if (!shown.length) return html + '<div class="empty"><p>No patients match.</p></div>';
+    html += '<ul class="list">' + shown.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
       const goals = S.goalsForPatient(p.id).filter(function (g) { return g.status === 'active'; });
       const next = st.appointments.filter(function (a) { return a.patientId === p.id && a.date >= L.todayISO() && a.status !== 'cancelled'; })
         .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); })[0];
-      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong>' +
+      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong> ' + caseTag(p) +
         '<div class="muted small">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</div></div>' +
         '<div class="right small"><div>' + goals.length + ' active goal' + (goals.length === 1 ? '' : 's') + '</div>' +
         '<div class="muted">' + (next ? 'Next: ' + esc(L.formatDate(next.date, { month: 'short', day: 'numeric' })) + ' ' + esc(L.formatTime(next.time)) : 'No upcoming session') + '</div></div></a></li>';
@@ -316,7 +389,7 @@
 
     let html = '<a class="back" href="#/patients">‹ Patients</a>' +
       '<header class="page-head"><div><h1>' + esc(p.name) + '</h1>' +
-      '<p class="muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
+      '<p class="muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
       '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p></div>' +
       '<div class="head-actions"><button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' +
       '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button></div></header>' +
@@ -455,6 +528,10 @@
     const st = S.state;
     return '<header class="page-head"><div><h1>Settings</h1><p class="muted">Data is stored only in this browser on this device.</p></div></header>' +
       '<form class="card" id="settings-form"><label>Your name (used to sign reports)<input name="therapistName" value="' + esc(st.settings.therapistName) + '"></label>' +
+      '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(st.settings.dayStart) + '"></label>' +
+      '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(st.settings.lunchStart) + '"></label>' +
+      '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(st.settings.lunchEnd) + '"></label>' +
+      '<label>Day ends<input type="time" name="dayEnd" value="' + esc(st.settings.dayEnd) + '"></label></div>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save</button></div></form>' +
       '<section class="card"><h2>Backup</h2><p class="muted small">Download a backup regularly, and use it to move your data to another device.</p>' +
       '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
@@ -492,14 +569,18 @@
     const p = id ? S.patient(id) : {};
     openModal(id ? 'Edit patient' : 'New patient',
       '<label>Full name<input name="name" required value="' + esc(p.name) + '"></label>' +
+      '<div class="grid-3"><label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', (p.ageGroup || 'Child') === 'Child') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label>' +
+      '<label class="span-2">Case type<input name="condition" list="conditions" placeholder="e.g. DLD, CLP, Stroke – aphasia" value="' + esc(p.condition) + '"></label></div>' +
+      '<datalist id="conditions">' + L.CONDITIONS.Child.concat(L.CONDITIONS.Adult).filter(function (c, i, a) { return a.indexOf(c) === i; }).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
       '<div class="grid-2"><label>Date of birth<input type="date" name="dob" value="' + esc(p.dob) + '"></label>' +
-      '<label>Diagnosis / focus<input name="diagnosis" value="' + esc(p.diagnosis) + '"></label></div>' +
-      '<div class="grid-2"><label>Parent / guardian<input name="guardian" value="' + esc(p.guardian) + '"></label>' +
+      '<label>Diagnosis details<input name="diagnosis" placeholder="e.g. Left MCA stroke, anomia" value="' + esc(p.diagnosis) + '"></label></div>' +
+      '<div class="grid-2"><label>Parent / guardian / carer<input name="guardian" placeholder="Blank = address adult directly" value="' + esc(p.guardian) + '"></label>' +
       '<label>Email or phone<input name="contact" value="' + esc(p.contact) + '"></label></div>' +
       '<label>Notes<textarea name="notes" rows="3">' + esc(p.notes) + '</textarea></label>',
       function (fd) {
         const saved = S.upsert('patients', Object.assign({}, p, {
           name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
+          ageGroup: fd.get('ageGroup'), condition: fd.get('condition').trim(),
           guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes')
         }));
         if (!id) go('#/patients/' + saved.id);
@@ -574,7 +655,7 @@
       }).join('');
     };
     const form = openModal(id ? 'Edit session' : 'New session',
-      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { return opt(p.id, p.name, a.patientId === p.id); }).join('') + '</select></label>' +
+      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { const c = L.caseLabel(p); return opt(p.id, p.name + (c ? ' (' + c + ')' : ''), a.patientId === p.id); }).join('') + '</select></label>' +
       '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
       '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"></label>' +
       '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
@@ -613,7 +694,7 @@
     let html;
     if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
-    else if (section === 'patients') html = viewPatients();
+    else if (section === 'patients') html = viewPatients(r.params);
     else if (section === 'goals') html = viewGoals(r.params);
     else if (section === 'materials') html = viewMaterials(r.params);
     else if (section === 'reports') html = viewReports(r.params);
@@ -638,7 +719,8 @@
     const act = el.dataset.action;
     const id = el.dataset.id;
     switch (act) {
-      case 'new-appt': apptForm(null, { date: el.dataset.date || L.todayISO(), patientId: el.dataset.patient || '' }); break;
+      case 'new-appt': apptForm(null, { date: el.dataset.date || L.todayISO(), time: el.dataset.time || '09:00', patientId: el.dataset.patient || '' }); break;
+      case 'sched-view': S.state.settings.scheduleView = el.dataset.view; S.save(); render(); break;
       case 'edit-appt': apptForm(id); break;
       case 'new-patient': patientForm(null); break;
       case 'edit-patient': patientForm(id); break;
@@ -705,6 +787,10 @@
       document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
     }
     if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
+    if (t.closest('#patient-filters')) {
+      const f = t.closest('#patient-filters');
+      go('#/patients?age=' + encodeURIComponent(f.querySelector('[name=age]').value) + '&condition=' + encodeURIComponent(f.querySelector('[name=condition]').value));
+    }
     if (t.closest('#goal-filters')) {
       const f = t.closest('#goal-filters');
       const qs = ['patient', 'area', 'status'].map(function (k) { return k + '=' + encodeURIComponent(f.querySelector('[name=' + k + ']').value); }).join('&');
@@ -760,6 +846,10 @@
     if (form.id === 'settings-form') {
       ev.preventDefault();
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
+      ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {
+        const v = form.querySelector('[name=' + k + ']').value;
+        if (v) S.state.settings[k] = v;
+      });
       S.save(); toast('Saved');
     }
   });
