@@ -1,0 +1,1465 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Therapy Planner</title>
+  <meta name="description" content="Daily schedule, SMART goals, materials, session logs, progress and client reports for speech therapists.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
+  <style>
+/* Layout: fixed left rail (bottom bar on phones) + one working column; the day's schedule is the spine. */
+:root {
+  --bg: #f4f7f7;
+  --surface: #ffffff;
+  --text: #182426;
+  --muted: #586a6d;
+  --border: #dde5e6;
+  --primary: #0e6b6b;
+  --primary-ink: #ffffff;
+  --primary-soft: #e1f0ef;
+  --good: #1f7a4d;
+  --good-soft: #e2f3e9;
+  --bad: #b43b2b;
+  --bad-soft: #fbe8e4;
+  --info: #5a49b8;
+  --info-soft: #ece9fa;
+  --overlay: rgba(12, 24, 26, .45);
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 40, 42, .06), 0 2px 8px rgba(16, 40, 42, .04);
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101718; --surface: #172122; --text: #e4ecec; --muted: #9bb0b2; --border: #283738;
+    --primary: #5cc4bf; --primary-ink: #0b1a1a; --primary-soft: #1a3433;
+    --good: #5ccf93; --good-soft: #163426; --bad: #f08a78; --bad-soft: #3c1f1a;
+    --info: #ab9ff2; --info-soft: #28243f; --overlay: rgba(0, 0, 0, .6); --shadow: none;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101718; --surface: #172122; --text: #e4ecec; --muted: #9bb0b2; --border: #283738;
+  --primary: #5cc4bf; --primary-ink: #0b1a1a; --primary-soft: #1a3433;
+  --good: #5ccf93; --good-soft: #163426; --bad: #f08a78; --bad-soft: #3c1f1a;
+  --info: #ab9ff2; --info-soft: #28243f; --overlay: rgba(0, 0, 0, .6); --shadow: none;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font: 15px/1.5 var(--font-body);
+  background: var(--bg);
+  color: var(--text);
+}
+a { color: var(--primary); text-decoration: none; }
+a:hover { text-decoration: underline; }
+h1, h2, .brand { font-family: var(--font-display); text-wrap: balance; }
+h1 { font-size: 1.7rem; margin: 0; line-height: 1.15; font-weight: 700; letter-spacing: -.01em; }
+h2 { font-size: 1.12rem; margin: 1.5rem 0 .6rem; font-weight: 600; }
+p { margin: .4rem 0; }
+.muted { color: var(--muted); }
+.small { font-size: .85rem; }
+.good { color: var(--good); }
+.bad { color: var(--bad); }
+.skip { position: absolute; left: -9999px; }
+.skip:focus { left: 8px; top: 8px; z-index: 10; background: var(--surface); padding: 8px; }
+
+/* layout */
+.layout { display: flex; min-height: 100vh; }
+.sidebar {
+  width: 220px; flex-shrink: 0; background: var(--surface); border-right: 1px solid var(--border);
+  padding: 20px 12px; position: sticky; top: 0; height: 100vh;
+}
+.brand { font-weight: 700; font-size: 1.1rem; padding: 0 10px 18px; display: flex; gap: 8px; align-items: center; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; color: var(--text); }
+.nav a:hover { background: var(--bg); text-decoration: none; }
+.nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
+main { flex: 1; min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
+
+@media (max-width: 760px) {
+  .layout { flex-direction: column; }
+  .sidebar {
+    position: fixed; bottom: 0; top: auto; left: 0; right: 0; width: auto; height: auto; z-index: 5;
+    border-right: 0; border-top: 1px solid var(--border); padding-block: 4px calc(4px + env(safe-area-inset-bottom, 0px)); padding-left: max(4px, env(safe-area-inset-left, 0px)); padding-right: max(4px, env(safe-area-inset-right, 0px));
+  }
+  .brand { display: none; }
+  .nav { flex-direction: row; justify-content: space-around; }
+  .nav a { flex-direction: column; gap: 0; font-size: .65rem; padding: 6px 2px; }
+  .nav a svg { width: 22px; height: 22px; }
+  main { padding-block: 16px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  h1 { font-size: 1.35rem; }
+}
+
+/* page header */
+.page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.head-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.back { display: inline-block; margin-bottom: 8px; font-size: .9rem; }
+
+/* buttons */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  font: inherit; font-weight: 500; padding: 8px 14px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); min-height: 38px;
+}
+.btn:hover { text-decoration: none; border-color: var(--muted); }
+.btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
+.btn-primary:hover { filter: brightness(1.05); border-color: var(--primary); }
+.btn-ghost { background: transparent; }
+.btn-danger { color: var(--bad); border-color: var(--bad); background: transparent; }
+.btn-sm { padding: 4px 10px; min-height: 30px; font-size: .85rem; }
+.link { background: none; border: 0; color: var(--primary); cursor: pointer; font: inherit; padding: 0; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; margin: 14px 0; }
+.actions.wrap { flex-wrap: wrap; justify-content: flex-start; }
+
+/* badges & chips */
+.badge {
+  display: inline-block; font-size: .72rem; font-weight: 600; padding: 2px 8px; border-radius: 99px;
+  background: var(--bg); color: var(--muted); border: 1px solid var(--border); text-transform: capitalize; vertical-align: middle;
+}
+.badge-good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.badge-info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.badge-muted { opacity: .7; }
+.chip { font-size: .72rem; font-weight: 600; color: var(--primary); background: var(--primary-soft); padding: 2px 8px; border-radius: 6px; }
+
+/* date nav */
+.date-nav { display: flex; gap: 6px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+.date-input { font: inherit; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--text); min-height: 38px; width: auto; }
+
+/* summary strip */
+.summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
+.summary > * { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: flex; flex-direction: column; color: var(--text); }
+.summary a:hover { border-color: var(--primary); text-decoration: none; }
+.stat { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+
+/* schedule */
+.schedule { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.appt {
+  display: flex; gap: 16px; align-items: center; background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px; color: var(--text); box-shadow: var(--shadow);
+}
+.appt:hover { border-color: var(--primary); text-decoration: none; }
+.appt.cancelled { opacity: .55; }
+.appt-time { width: 90px; flex-shrink: 0; display: flex; flex-direction: column; }
+.appt-body { flex: 1; min-width: 0; }
+.appt-title { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.appt-meta { margin-top: 4px; font-size: .9rem; }
+.chev { font-size: 1.6rem; color: var(--muted); }
+@media (max-width: 560px) { .appt { flex-direction: column; align-items: stretch; gap: 6px; } .appt-time { width: auto; flex-direction: row; gap: 8px; align-items: baseline; } .chev { display: none; } }
+
+/* cards & lists */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+.card h2 { margin: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+.list { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.list li + li { border-top: 1px solid var(--border); }
+.row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; color: var(--text); }
+a.row:hover { background: var(--bg); text-decoration: none; }
+.right { text-align: right; }
+.empty { text-align: center; padding: 40px 16px; background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); color: var(--muted); }
+
+/* SMART grid */
+.smart { display: grid; gap: 4px; margin: 10px 0 0; }
+.smart > div { display: flex; gap: 10px; align-items: baseline; }
+.smart dt { width: 22px; height: 22px; flex-shrink: 0; border-radius: 6px; background: var(--primary-soft); color: var(--primary); font-weight: 700; display: grid; place-items: center; font-size: .8rem; }
+.smart dd { margin: 0; }
+.smart dd .muted { display: inline-block; min-width: 84px; }
+
+/* checklists */
+.checklist { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.card .checklist { border: 0; background: none; }
+.checklist li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; flex-wrap: wrap; }
+.checklist li + li { border-top: 1px solid var(--border); }
+.checklist label { display: flex; flex-direction: row; gap: 10px; align-items: center; cursor: pointer; margin: 0; font-size: inherit; font-weight: 400; }
+.checklist input { width: 18px; height: 18px; accent-color: var(--primary); }
+.checklist input:checked + span { text-decoration: line-through; color: var(--muted); }
+
+/* stats */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+.stats > div { display: flex; flex-direction: column; }
+.stats .stat { font-size: 1.05rem; }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* chart */
+.chart { width: 100%; height: auto; display: block; margin-top: 6px; }
+.chart .grid { stroke: var(--border); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font-size: 11px; }
+.chart .line { fill: none; stroke: var(--primary); stroke-width: 2.5; stroke-linejoin: round; }
+.chart .dot { fill: var(--surface); stroke: var(--primary); stroke-width: 2; }
+.chart .target { stroke: var(--good); stroke-dasharray: 5 4; stroke-width: 1.5; }
+.chart .target-label { fill: var(--good); font-size: 11px; font-weight: 600; }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 16px; overflow-x: auto; }
+.tab { padding: 9px 14px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; font-weight: 500; }
+.tab:hover { color: var(--text); text-decoration: none; }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+
+/* forms */
+label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; font-weight: 500; margin-bottom: 10px; }
+.label { font-size: .85rem; font-weight: 500; }
+input, select, textarea {
+  font: inherit; font-size: .95rem; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+  background: var(--surface); color: var(--text); width: 100%;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary-soft); border-color: var(--primary); }
+textarea { resize: vertical; }
+.grid-2, .grid-3, .grid-4 { display: grid; gap: 10px; }
+.grid-2 { grid-template-columns: 1fr 1fr; }
+.grid-3 { grid-template-columns: repeat(3, 1fr); }
+.grid-4 { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 560px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } .grid-4 { grid-template-columns: 1fr 1fr; } }
+fieldset { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 0 12px; }
+legend { font-weight: 600; padding: 0 6px; }
+.log-entry legend { font-size: .95rem; }
+.pick { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.pick legend { font-size: .85rem; }
+label.check { flex-direction: row; align-items: center; gap: 6px; font-weight: 400; margin: 0; }
+label.check input { width: auto; }
+.inline-new { width: 100%; margin-top: 8px; }
+.field { margin-bottom: 10px; }
+.segmented { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.segmented label { margin: 0; }
+.segmented input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.segmented span { display: inline-block; padding: 6px 12px; border: 1px solid var(--border); border-radius: 99px; cursor: pointer; font-weight: 500; }
+.segmented input:checked + span { background: var(--primary); color: var(--primary-ink); border-color: var(--primary); }
+.segmented input:focus-visible + span { outline: 2px solid var(--primary); outline-offset: 2px; }
+.filters { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+.filters select { width: auto; }
+#report-text { font-family: inherit; line-height: 1.55; }
+
+/* table */
+.tbl { width: 100%; border-collapse: collapse; font-size: .88rem; margin: 6px 0; }
+.tbl th, .tbl td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 500; }
+
+/* modal */
+dialog { border: 0; border-radius: 14px; padding: 0; width: min(640px, calc(100vw - 24px)); max-height: calc(100vh - 40px); background: var(--surface); color: var(--text); box-shadow: 0 20px 60px rgba(0,0,0,.3); }
+dialog::backdrop { background: var(--overlay); }
+.modal-form { display: flex; flex-direction: column; max-height: calc(100vh - 40px); }
+.modal-form header, .modal-form footer { display: flex; justify-content: space-between; align-items: center; padding: 12px 18px; border-bottom: 1px solid var(--border); }
+.modal-form footer { border-bottom: 0; border-top: 1px solid var(--border); }
+.modal-form h2 { margin: 0; }
+.modal-body { padding: 16px 18px; overflow-y: auto; }
+
+/* toast */
+#toast { position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); max-width: calc(100vw - 32px); transform: translate(-50%, 40px); opacity: 0; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: 8px; transition: .2s; pointer-events: none; z-index: 20; }
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+@media (max-width: 760px) { #toast { bottom: calc(80px + env(safe-area-inset-bottom, 0px)); } }
+
+/* print: just the content, e.g. the materials pick list */
+@media print {
+  .sidebar, .page-head button, .page-head .btn, .tabs, .date-nav, #toast { display: none !important; }
+  main { padding: 0; }
+  .card, .checklist, .list { box-shadow: none; break-inside: avoid; }
+}
+
+/* additions */
+.nav svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.brand svg { width: 24px; height: 24px; fill: none; stroke: var(--primary); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.meta-label { font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-right: 4px; }
+.btn:focus-visible, .tab:focus-visible, .nav a:focus-visible, a.appt:focus-visible, a.row:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.btn-danger-solid { background: var(--bad); border-color: var(--bad); color: var(--surface); }
+#confirm { width: min(420px, calc(100vw - 32px)); }
+.confirm-form { padding: 18px; }
+.confirm-form p { margin: 0 0 6px; font-size: 1rem; }
+.stat, .appt-time, .tbl td { font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+
+</style>
+</head>
+<body>
+  <a class="skip" href="#view">Skip to content</a>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></svg> Therapy Planner</div>
+      <nav class="nav" aria-label="Main">
+        <a href="#/schedule" data-nav="schedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg> Schedule</a>
+        <a href="#/materials" data-nav="materials"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M9 8V5h6v3M4 13h16"/></svg> Materials</a>
+        <a href="#/goals" data-nav="goals"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg> Goals</a>
+        <a href="#/patients" data-nav="patients"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg> Patients</a>
+        <a href="#/reports" data-nav="reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 7 8.5-7"/></svg> Reports</a>
+        <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg> Settings</a>
+      </nav>
+    </aside>
+    <main id="view" tabindex="-1"></main>
+  </div>
+  <dialog id="modal" aria-label="Form"></dialog>
+  <dialog id="confirm" aria-label="Confirm"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+/* Pure helpers with no DOM or storage access, so they can be unit-tested in Node. */
+(function (root) {
+  'use strict';
+
+  function uid(prefix) {
+    return (prefix || 'id') + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  }
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function toISODate(d) {
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  }
+
+  function todayISO() { return toISODate(new Date()); }
+
+  function addDays(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return toISODate(new Date(y, m - 1, d + n));
+  }
+
+  function formatDate(iso, opts) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(undefined, opts || {
+      weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+    });
+  }
+
+  function formatTime(hhmm) {
+    if (!hhmm) return '';
+    const [h, m] = hhmm.split(':').map(Number);
+    const suffix = h >= 12 ? 'PM' : 'AM';
+    return ((h + 11) % 12 + 1) + ':' + pad(m) + ' ' + suffix;
+  }
+
+  /* Accuracy as a whole percentage, or null when there were no trials. */
+  function accuracy(correct, trials) {
+    const t = Number(trials), c = Number(correct);
+    if (!t || t <= 0 || isNaN(c)) return null;
+    return Math.round(Math.min(Math.max(c, 0), t) / t * 100);
+  }
+
+  function age(dobISO, onISO) {
+    if (!dobISO) return '';
+    const [y, m, d] = dobISO.split('-').map(Number);
+    const [ty, tm, td] = (onISO || todayISO()).split('-').map(Number);
+    let years = ty - y;
+    if (tm < m || (tm === m && td < d)) years--;
+    return years;
+  }
+
+  /* One-line SMART goal statement assembled from its parts. */
+  function smartStatement(goal) {
+    const parts = [goal.specific];
+    if (goal.measurable) parts.push(goal.measurable);
+    if (goal.timeBound) parts.push('by ' + formatDate(goal.timeBound, { month: 'short', day: 'numeric', year: 'numeric' }));
+    return parts.filter(Boolean).join(', ') + '.';
+  }
+
+  /* Accuracy history for one goal, oldest first: [{date, accuracy, trials, correct, progress}] */
+  function goalSeries(goalId, logs) {
+    const points = [];
+    logs.forEach(function (log) {
+      (log.entries || []).forEach(function (e) {
+        if (e.goalId !== goalId) return;
+        const acc = e.accuracy != null ? e.accuracy : accuracy(e.correct, e.trials);
+        if (acc == null) return;
+        points.push({ date: log.date, accuracy: acc, trials: e.trials, correct: e.correct, progress: e.progress, note: e.note });
+      });
+    });
+    return points.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  }
+
+  /* Summary stats for a goal's series. Trend compares the last 3 sessions with the 3 before. */
+  function goalStats(series, target) {
+    if (!series.length) return { sessions: 0, latest: null, average: null, trend: 'none', metTarget: false };
+    const vals = series.map(function (p) { return p.accuracy; });
+    const avg = function (a) { return a.reduce(function (s, v) { return s + v; }, 0) / a.length; };
+    const recent = vals.slice(-3), prior = vals.slice(-6, -3);
+    let trend = 'steady';
+    if (prior.length) {
+      const diff = avg(recent) - avg(prior);
+      trend = diff >= 5 ? 'up' : diff <= -5 ? 'down' : 'steady';
+    } else if (vals.length >= 2) {
+      const diff = vals[vals.length - 1] - vals[0];
+      trend = diff >= 5 ? 'up' : diff <= -5 ? 'down' : 'steady';
+    }
+    const latest = vals[vals.length - 1];
+    return {
+      sessions: vals.length,
+      latest: latest,
+      average: Math.round(avg(vals)),
+      trend: trend,
+      metTarget: target != null && target !== '' && latest >= Number(target)
+    };
+  }
+
+  /*
+   * Materials needed across a set of appointments.
+   * Returns [{material, sessions:[{appointment, patient}], count}] sorted by count desc then name.
+   */
+  function materialsForDay(appointments, goalsById, materialsById, patientsById) {
+    const map = {};
+    appointments.forEach(function (appt) {
+      if (appt.status === 'cancelled') return;
+      const seen = {};
+      (appt.goalIds || []).forEach(function (gid) {
+        const goal = goalsById[gid];
+        if (!goal) return;
+        (goal.materialIds || []).forEach(function (mid) {
+          if (seen[mid] || !materialsById[mid]) return;
+          seen[mid] = true;
+          if (!map[mid]) map[mid] = { material: materialsById[mid], sessions: [] };
+          map[mid].sessions.push({ appointment: appt, patient: patientsById[appt.patientId] });
+        });
+      });
+      (appt.extraMaterialIds || []).forEach(function (mid) {
+        if (seen[mid] || !materialsById[mid]) return;
+        seen[mid] = true;
+        if (!map[mid]) map[mid] = { material: materialsById[mid], sessions: [] };
+        map[mid].sessions.push({ appointment: appt, patient: patientsById[appt.patientId] });
+      });
+    });
+    return Object.keys(map).map(function (k) {
+      map[k].count = map[k].sessions.length;
+      return map[k];
+    }).sort(function (a, b) {
+      return b.count - a.count || a.material.name.localeCompare(b.material.name);
+    });
+  }
+
+  /* Material ids needed for a single appointment (goal materials + extras, de-duplicated). */
+  function appointmentMaterialIds(appt, goalsById) {
+    const ids = [];
+    (appt.goalIds || []).forEach(function (gid) {
+      const g = goalsById[gid];
+      (g && g.materialIds || []).forEach(function (mid) { if (ids.indexOf(mid) < 0) ids.push(mid); });
+    });
+    (appt.extraMaterialIds || []).forEach(function (mid) { if (ids.indexOf(mid) < 0) ids.push(mid); });
+    return ids;
+  }
+
+  const PROGRESS_LABELS = {
+    improving: 'Improving',
+    steady: 'Steady',
+    emerging: 'Emerging',
+    regressing: 'Needs more support',
+    met: 'Goal criterion met'
+  };
+
+  /* Plain-language session summary to send to the client/family. */
+  function clientReport(opts) {
+    const p = opts.patient, log = opts.log, goalsById = opts.goalsById;
+    const therapist = opts.therapist || 'Your speech therapist';
+    const first = (p.name || '').split(' ')[0] || 'your child';
+    const lines = [];
+    lines.push('Session summary for ' + p.name + ' — ' + formatDate(log.date));
+    lines.push('');
+    lines.push('Hello' + (p.guardian ? ' ' + p.guardian : '') + ',');
+    lines.push('');
+    lines.push('Here is a summary of ' + first + "'s speech therapy session today.");
+    lines.push('');
+    lines.push('What we worked on:');
+    (log.entries || []).forEach(function (e) {
+      const g = goalsById[e.goalId];
+      if (!g) return;
+      const acc = e.accuracy != null ? e.accuracy : accuracy(e.correct, e.trials);
+      if (acc == null && !e.trials && !e.progress && !e.note) return; // not worked on this session
+      let line = '• ' + (g.title || g.specific);
+      const bits = [];
+      if (acc != null) bits.push(acc + '% accuracy');
+      if (e.trials) bits.push(e.correct + ' of ' + e.trials + ' attempts');
+      if (e.cueing) bits.push(e.cueing.toLowerCase() + ' cues');
+      if (bits.length) line += ': ' + bits.join(', ');
+      if (e.progress && PROGRESS_LABELS[e.progress]) line += ' (' + PROGRESS_LABELS[e.progress] + ')';
+      lines.push(line);
+      if (e.note) lines.push('   ' + e.note);
+    });
+    if (log.notes) {
+      lines.push('');
+      lines.push('Session notes:');
+      lines.push(log.notes);
+    }
+    if (log.homework) {
+      lines.push('');
+      lines.push('Practice at home:');
+      lines.push(log.homework);
+    }
+    lines.push('');
+    lines.push('Please reach out with any questions.');
+    lines.push(therapist);
+    return lines.join('\n');
+  }
+
+  const api = {
+    uid: uid, toISODate: toISODate, todayISO: todayISO, addDays: addDays,
+    formatDate: formatDate, formatTime: formatTime, accuracy: accuracy, age: age,
+    smartStatement: smartStatement, goalSeries: goalSeries, goalStats: goalStats,
+    materialsForDay: materialsForDay, appointmentMaterialIds: appointmentMaterialIds,
+    clientReport: clientReport, PROGRESS_LABELS: PROGRESS_LABELS
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Logic = api;
+})(typeof window !== 'undefined' ? window : this);
+
+/* Local data store. Everything lives in this browser's localStorage; nothing is sent anywhere. */
+(function () {
+  'use strict';
+  const L = window.Logic;
+  const KEY = 'speech-therapy-planner-v1';
+
+  const EMPTY = {
+    settings: { therapistName: '' },
+    patients: [], goals: [], materials: [], appointments: [], logs: [],
+    packed: {} // { 'YYYY-MM-DD': { materialId: true } }
+  };
+
+  let state = load();
+
+  function load() {
+    try {
+      const raw = localStorage.getItem(KEY);
+      if (raw) return Object.assign({}, EMPTY, JSON.parse(raw));
+    } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
+    return seed();
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    catch (e) { console.warn('Could not save to localStorage', e); }
+  }
+
+  function byId(list) {
+    const m = {};
+    list.forEach(function (x) { m[x.id] = x; });
+    return m;
+  }
+
+  function upsert(collection, item) {
+    const list = state[collection];
+    if (!item.id) item.id = L.uid(collection.slice(0, 3));
+    const i = list.findIndex(function (x) { return x.id === item.id; });
+    if (i >= 0) list[i] = item; else list.push(item);
+    save();
+    return item;
+  }
+
+  function remove(collection, id) {
+    state[collection] = state[collection].filter(function (x) { return x.id !== id; });
+    if (collection === 'patients') {
+      state.goals = state.goals.filter(function (g) { return g.patientId !== id; });
+      state.appointments = state.appointments.filter(function (a) { return a.patientId !== id; });
+      state.logs = state.logs.filter(function (l) { return l.patientId !== id; });
+    }
+    if (collection === 'goals') {
+      state.appointments.forEach(function (a) { a.goalIds = (a.goalIds || []).filter(function (g) { return g !== id; }); });
+    }
+    if (collection === 'materials') {
+      state.goals.forEach(function (g) { g.materialIds = (g.materialIds || []).filter(function (m) { return m !== id; }); });
+      state.appointments.forEach(function (a) { a.extraMaterialIds = (a.extraMaterialIds || []).filter(function (m) { return m !== id; }); });
+    }
+    save();
+  }
+
+  function seed() {
+    const t = L.todayISO();
+    const s = JSON.parse(JSON.stringify(EMPTY));
+    s.settings.therapistName = 'Your Therapist';
+    s.seeded = true;
+
+    const mat = function (id, name, category, location) { s.materials.push({ id: id, name: name, category: category, location: location }); };
+    mat('m_artic', 'Articulation cards – /s/ & /r/', 'Cards', 'Shelf A, bin 2');
+    mat('m_mirror', 'Hand mirror', 'Tools', 'Desk drawer');
+    mat('m_tokens', 'Token board & stickers', 'Reinforcers', 'Desk');
+    mat('m_bubbles', 'Bubbles', 'Reinforcers', 'Toy cupboard');
+    mat('m_books', 'Picture books (Brown Bear, Very Hungry Caterpillar)', 'Books', 'Bookshelf');
+    mat('m_aac', 'Core-word AAC board', 'AAC', 'Cupboard B');
+    mat('m_wh', 'WH-question picture cards', 'Cards', 'Shelf A, bin 4');
+    mat('m_metronome', 'Metronome / pacing board', 'Tools', 'Desk drawer');
+    mat('m_feelings', 'Emotions & social scenario cards', 'Cards', 'Shelf B');
+    mat('m_playdoh', 'Play-Doh & animal figurines', 'Toys', 'Toy cupboard');
+
+    const pat = function (id, name, dob, diagnosis, guardian, contact) {
+      s.patients.push({ id: id, name: name, dob: dob, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
+    };
+    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Speech sound disorder (/s/, /r/)', 'Ms. Thompson', 'thompson.family@example.com');
+    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Expressive language delay', 'Mr. Martinez', '(555) 201-3344');
+    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
+    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Autism – social communication', 'Ms. Williams', '(555) 887-1200');
+
+    const goal = function (id, patientId, area, title, specific, measurable, achievable, relevant, weeks, target, materialIds) {
+      s.goals.push({
+        id: id, patientId: patientId, area: area, title: title,
+        specific: specific, measurable: measurable, achievable: achievable, relevant: relevant,
+        timeBound: L.addDays(t, weeks * 7), targetAccuracy: target, status: 'active', materialIds: materialIds,
+        createdAt: L.addDays(t, -60)
+      });
+    };
+    goal('g_ava1', 'p_ava', 'Articulation', '/s/ in initial position of words',
+      'Ava will produce /s/ in the initial position of words', 'with 80% accuracy across 3 consecutive sessions',
+      'Currently ~50% with visual cues; stimulable', 'Improves intelligibility in class', 12, 80, ['m_artic', 'm_mirror', 'm_tokens']);
+    goal('g_ava2', 'p_ava', 'Articulation', 'Vocalic /r/ at word level',
+      'Ava will produce vocalic /r/ in single words', 'with 70% accuracy given minimal cues',
+      'Emerging in isolation', 'Needed for reading aloud and peer conversation', 16, 70, ['m_artic', 'm_mirror']);
+    goal('g_leo1', 'p_leo', 'Expressive language', '2–3 word phrases',
+      'Leo will combine 2–3 words to request or comment', '10 times per session with no more than 1 model',
+      'Uses 40+ single words', 'Reduces frustration at home and preschool', 12, 80, ['m_aac', 'm_bubbles', 'm_playdoh']);
+    goal('g_leo2', 'p_leo', 'Receptive language', 'Answer “what/where” questions',
+      'Leo will answer what/where questions about pictures', 'with 80% accuracy',
+      'Answers “what” with 50% accuracy', 'Supports story comprehension', 12, 80, ['m_wh', 'm_books']);
+    goal('g_maya1', 'p_maya', 'Fluency', 'Easy onset in structured sentences',
+      'Maya will use easy onset in structured sentences', 'with 85% fluent utterances',
+      'Uses easy onset at word level', 'Builds confidence for class presentations', 10, 85, ['m_metronome', 'm_books']);
+    goal('g_noah1', 'p_noah', 'Pragmatics', 'Identify emotions in scenarios',
+      'Noah will identify the feelings of characters in social scenarios', 'with 80% accuracy',
+      'Labels basic emotions in photos', 'Supports peer relationships at recess', 12, 80, ['m_feelings', 'm_tokens']);
+    goal('g_noah2', 'p_noah', 'Pragmatics', 'Conversational turn-taking',
+      'Noah will maintain a topic for 3 conversational turns', 'in 4 of 5 opportunities',
+      'Currently maintains 1–2 turns', 'Needed for lunchtime conversations', 12, 80, ['m_feelings']);
+
+    const appt = function (id, patientId, date, time, goalIds, status, room) {
+      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: status || 'scheduled', notes: '' });
+    };
+    appt('a_1', 'p_ava', t, '09:00', ['g_ava1', 'g_ava2']);
+    appt('a_2', 'p_leo', t, '10:00', ['g_leo1', 'g_leo2'], 'scheduled', 'Room 2');
+    appt('a_3', 'p_maya', t, '11:30', ['g_maya1']);
+    appt('a_4', 'p_noah', t, '14:00', ['g_noah1', 'g_noah2'], 'scheduled', 'Room 2');
+    appt('a_5', 'p_ava', L.addDays(t, 1), '09:00', ['g_ava1']);
+    appt('a_6', 'p_leo', L.addDays(t, 1), '13:00', ['g_leo1']);
+
+    // Past sessions so the progress charts have history.
+    const history = {
+      g_ava1: [40, 45, 50, 55, 60, 62, 68],
+      g_ava2: [20, 25, 25, 30, 35, 40, 42],
+      g_leo1: [30, 35, 40, 50, 50, 55, 60],
+      g_leo2: [50, 45, 55, 60, 60, 65, 70],
+      g_maya1: [60, 65, 70, 68, 75, 78, 82],
+      g_noah1: [50, 55, 60, 60, 65, 70, 75],
+      g_noah2: [20, 30, 30, 40, 40, 45, 50]
+    };
+    const byPatient = {};
+    s.goals.forEach(function (g) { (byPatient[g.patientId] = byPatient[g.patientId] || []).push(g.id); });
+    Object.keys(byPatient).forEach(function (pid) {
+      for (let i = 0; i < 7; i++) {
+        const date = L.addDays(t, -7 * (7 - i));
+        const entries = byPatient[pid].map(function (gid) {
+          const acc = history[gid][i];
+          const trials = 20;
+          const correct = Math.round(acc / 100 * trials);
+          const prev = i ? history[gid][i - 1] : acc;
+          return {
+            goalId: gid, trials: trials, correct: correct, accuracy: L.accuracy(correct, trials),
+            cueing: i < 3 ? 'Moderate' : 'Minimal',
+            progress: acc > prev ? 'improving' : acc < prev ? 'regressing' : 'steady', note: ''
+          };
+        });
+        s.logs.push({ id: 'l_' + pid + i, appointmentId: null, patientId: pid, date: date, entries: entries, notes: 'Good engagement.', homework: '' });
+      }
+    });
+    return s;
+  }
+
+  window.Store = {
+    get state() { return state; },
+    save: save,
+    byId: byId,
+    upsert: upsert,
+    remove: remove,
+    patient: function (id) { return state.patients.find(function (p) { return p.id === id; }); },
+    goal: function (id) { return state.goals.find(function (g) { return g.id === id; }); },
+    appointment: function (id) { return state.appointments.find(function (a) { return a.id === id; }); },
+    logForAppointment: function (apptId) { return state.logs.find(function (l) { return l.appointmentId === apptId; }); },
+    logsForPatient: function (pid) { return state.logs.filter(function (l) { return l.patientId === pid; }); },
+    goalsForPatient: function (pid) { return state.goals.filter(function (g) { return g.patientId === pid; }); },
+    appointmentsOn: function (date) {
+      return state.appointments.filter(function (a) { return a.date === date; })
+        .sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); });
+    },
+    setPacked: function (date, mid, val) {
+      state.packed[date] = state.packed[date] || {};
+      if (val) state.packed[date][mid] = true; else delete state.packed[date][mid];
+      save();
+    },
+    exportJSON: function () { return JSON.stringify(state, null, 2); },
+    importJSON: function (text) {
+      const data = JSON.parse(text);
+      if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
+      state = Object.assign({}, EMPTY, data);
+      save();
+    },
+    clearAll: function () { state = JSON.parse(JSON.stringify(EMPTY)); save(); },
+    resetDemo: function () { state = seed(); save(); }
+  };
+})();
+
+/* UI: hash router, views and forms. */
+(function () {
+  'use strict';
+  const L = window.Logic;
+  const S = window.Store;
+  const view = document.getElementById('view');
+  const modal = document.getElementById('modal');
+
+  const AREAS = ['Articulation', 'Phonology', 'Expressive language', 'Receptive language', 'Fluency', 'Voice', 'Pragmatics', 'AAC', 'Feeding / swallowing', 'Literacy', 'Other'];
+  const CUEING = ['Independent', 'Minimal', 'Moderate', 'Maximal'];
+  const PROGRESS = ['improving', 'steady', 'emerging', 'regressing', 'met'];
+  const TREND = { up: '▲ Improving', down: '▼ Declining', steady: '► Steady', none: '—' };
+
+  /* ---------- helpers ---------- */
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function opt(value, label, selected) {
+    return '<option value="' + esc(value) + '"' + (selected ? ' selected' : '') + '>' + esc(label) + '</option>';
+  }
+  function maps() {
+    const st = S.state;
+    return { goals: S.byId(st.goals), materials: S.byId(st.materials), patients: S.byId(st.patients) };
+  }
+  function parseHash() {
+    const raw = route.replace(/^#\/?/, '') || 'schedule';
+    const [path, qs] = raw.split('?');
+    const params = {};
+    (qs || '').split('&').filter(Boolean).forEach(function (kv) {
+      const [k, v] = kv.split('=');
+      params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+    });
+    return { parts: path.split('/').filter(Boolean), params: params };
+  }
+  let route = location.hash || '#/schedule';
+  function go(hash) {
+    if (hash === route) return;
+    route = hash;
+    try { history.replaceState(null, '', hash); } catch (e) { /* sandboxed frame */ }
+    render();
+    window.scrollTo(0, 0);
+  }
+  function toast(msg) {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+  function ask(message, okLabel) {
+    const dlg = document.getElementById('confirm');
+    dlg.innerHTML = '<form method="dialog" class="confirm-form"><p>' + esc(message) + '</p><div class="actions">' +
+      '<button class="btn" value="no">Cancel</button> <button class="btn btn-danger-solid" value="yes">' + esc(okLabel || 'Delete') + '</button></div></form>';
+    return new Promise(function (resolve) {
+      dlg.addEventListener('close', function done() { dlg.removeEventListener('close', done); resolve(dlg.returnValue === 'yes'); });
+      dlg.returnValue = '';
+      dlg.showModal();
+      dlg.querySelector('[value=no]').focus();
+    });
+  }
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { toast('Copied to clipboard'); }, fallback);
+    } else fallback();
+    function fallback() {
+      const ta = document.createElement('textarea');
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); toast('Copied to clipboard'); } catch (e) { toast('Copy failed – select and copy manually'); }
+      ta.remove();
+    }
+  }
+  function statusBadge(appt) {
+    const log = S.logForAppointment(appt.id);
+    if (appt.status === 'cancelled') return '<span class="badge badge-muted">Cancelled</span>';
+    if (log && log.reportSent) return '<span class="badge badge-good">Report sent</span>';
+    if (log) return '<span class="badge badge-info">Logged</span>';
+    return '<span class="badge">Scheduled</span>';
+  }
+  function dateNav(base, date, extra) {
+    return '<div class="date-nav">' +
+      '<a class="btn btn-ghost" href="#/' + base + '?date=' + L.addDays(date, -1) + '" aria-label="Previous day">‹</a>' +
+      '<input type="date" class="date-input" data-nav="' + base + '" value="' + date + '" aria-label="Choose date">' +
+      '<a class="btn btn-ghost" href="#/' + base + '?date=' + L.addDays(date, 1) + '" aria-label="Next day">›</a>' +
+      (date !== L.todayISO() ? '<a class="btn btn-ghost" href="#/' + base + '?date=' + L.todayISO() + '">Today</a>' : '') +
+      (extra || '') + '</div>';
+  }
+  function tabs(baseHash, current, list) {
+    return '<nav class="tabs" role="tablist">' + list.map(function (t) {
+      return '<a role="tab" class="tab' + (t[0] === current ? ' active' : '') + '" href="' + baseHash + '?tab=' + t[0] + '"' +
+        (t[0] === current ? ' aria-selected="true"' : '') + '>' + esc(t[1]) + '</a>';
+    }).join('') + '</nav>';
+  }
+  function trendClass(t) { return t === 'up' ? 'good' : t === 'down' ? 'bad' : ''; }
+
+  /* ---------- progress chart (inline SVG) ---------- */
+
+  function chart(series, target) {
+    if (!series.length) return '<p class="muted small">No data logged yet.</p>';
+    const W = 560, H = 180, pl = 34, pr = 12, pt = 12, pb = 26;
+    const iw = W - pl - pr, ih = H - pt - pb;
+    const x = function (i) { return pl + (series.length === 1 ? iw / 2 : i * iw / (series.length - 1)); };
+    const y = function (v) { return pt + ih - v / 100 * ih; };
+    let svg = '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Accuracy over time">';
+    [0, 25, 50, 75, 100].forEach(function (v) {
+      svg += '<line class="grid" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>' +
+        '<text class="axis" x="' + (pl - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    });
+    if (target) {
+      svg += '<line class="target" x1="' + pl + '" x2="' + (W - pr) + '" y1="' + y(target) + '" y2="' + y(target) + '"/>' +
+        '<text class="target-label" x="' + (W - pr) + '" y="' + (y(target) - 5) + '" text-anchor="end">Target ' + target + '%</text>';
+    }
+    const pts = series.map(function (p, i) { return x(i) + ',' + y(p.accuracy); }).join(' ');
+    svg += '<polyline class="line" points="' + pts + '"/>';
+    const step = Math.ceil(series.length / 8);
+    series.forEach(function (p, i) {
+      svg += '<circle class="dot" cx="' + x(i) + '" cy="' + y(p.accuracy) + '" r="4"><title>' +
+        esc(L.formatDate(p.date, { month: 'short', day: 'numeric' }) + ': ' + p.accuracy + '%') + '</title></circle>';
+      if (i % step === 0 || i === series.length - 1) {
+        svg += '<text class="axis" x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' +
+          esc(L.formatDate(p.date, { month: 'numeric', day: 'numeric' })) + '</text>';
+      }
+    });
+    return svg + '</svg>';
+  }
+
+  function goalProgressCard(goal, logs) {
+    const series = L.goalSeries(goal.id, logs);
+    const st = L.goalStats(series, goal.targetAccuracy);
+    return '<article class="card">' +
+      '<div class="card-head"><div><span class="chip">' + esc(goal.area) + '</span> <strong>' + esc(goal.title) + '</strong></div>' +
+      (st.metTarget ? '<span class="badge badge-good">At target</span>' : '') + '</div>' +
+      '<div class="stats">' +
+      '<div><span class="stat">' + (st.latest != null ? st.latest + '%' : '—') + '</span><span class="muted small">Latest</span></div>' +
+      '<div><span class="stat">' + (st.average != null ? st.average + '%' : '—') + '</span><span class="muted small">Average</span></div>' +
+      '<div><span class="stat">' + st.sessions + '</span><span class="muted small">Sessions</span></div>' +
+      '<div><span class="stat ' + trendClass(st.trend) + '">' + TREND[st.trend] + '</span><span class="muted small">Trend</span></div>' +
+      '</div>' + chart(series, goal.targetAccuracy) + '</article>';
+  }
+
+  /* ---------- views ---------- */
+
+  function viewSchedule(params) {
+    const date = params.date || L.todayISO();
+    const appts = S.appointmentsOn(date);
+    const m = maps();
+    const active = appts.filter(function (a) { return a.status !== 'cancelled'; });
+    const logged = active.filter(function (a) { return S.logForAppointment(a.id); });
+    const sent = logged.filter(function (a) { return S.logForAppointment(a.id).reportSent; });
+    const common = L.materialsForDay(appts, m.goals, m.materials, m.patients).filter(function (x) { return x.count > 1; });
+
+    let html = '<header class="page-head"><div><h1>Schedule</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div>' +
+      '<button class="btn btn-primary" data-action="new-appt" data-date="' + date + '">+ Add session</button></header>' +
+      dateNav('schedule', date);
+
+    html += '<div class="summary">' +
+      '<div><span class="stat">' + active.length + '</span><span class="muted small">Sessions</span></div>' +
+      '<div><span class="stat">' + logged.length + '/' + active.length + '</span><span class="muted small">Logged</span></div>' +
+      '<div><span class="stat">' + sent.length + '/' + logged.length + '</span><span class="muted small">Reports sent</span></div>' +
+      '<a href="#/materials?date=' + date + '"><span class="stat">' + common.length + '</span><span class="muted small">Shared materials →</span></a>' +
+      '</div>';
+
+    if (!appts.length) {
+      html += '<div class="empty"><p>No sessions scheduled for this day.</p></div>';
+    } else {
+      html += '<ol class="schedule">' + appts.map(function (a) {
+        const p = m.patients[a.patientId] || { name: 'Unknown patient' };
+        const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+        const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
+        return '<li><a class="appt' + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
+          '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
+          '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + statusBadge(a) + '</div>' +
+          '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
+          '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
+          '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
+          '</div><span class="chev" aria-hidden="true">›</span></a></li>';
+      }).join('') + '</ol>';
+    }
+    return html;
+  }
+
+  function viewSession(apptId, params) {
+    const a = S.appointment(apptId);
+    if (!a) return '<div class="empty"><p>Session not found.</p><a href="#/schedule">Back to schedule</a></div>';
+    const m = maps();
+    const p = m.patients[a.patientId] || { name: 'Unknown' };
+    const tab = params.tab || 'prep';
+    const base = '#/session/' + a.id;
+    const log = S.logForAppointment(a.id);
+
+    let html = '<a class="back" href="#/schedule?date=' + a.date + '">‹ Schedule</a>' +
+      '<header class="page-head"><div><h1>' + esc(p.name) + '</h1><p class="muted">' +
+      esc(L.formatDate(a.date, { weekday: 'short', month: 'short', day: 'numeric' })) + ' · ' + esc(L.formatTime(a.time)) +
+      ' · ' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + ' ' + statusBadge(a) + '</p>' +
+      '<p class="small muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
+      '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a>' +
+      '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button></div></header>' +
+      tabs(base, tab, [['prep', 'Goals & materials'], ['log', log ? 'Session log ✓' : 'Log session'], ['progress', 'Progress'], ['report', 'Report']]);
+
+    const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
+
+    if (tab === 'prep') {
+      const matIds = L.appointmentMaterialIds(a, m.goals);
+      const packed = S.state.packed[a.date] || {};
+      html += '<section><h2>Goals for this session</h2>';
+      if (!goals.length) html += '<p class="muted">No goals selected. <button class="link" data-action="edit-appt" data-id="' + a.id + '">Choose goals</button></p>';
+      html += goals.map(function (g) {
+        const st = L.goalStats(L.goalSeries(g.id, S.logsForPatient(p.id)), g.targetAccuracy);
+        return '<article class="card goal-card"><div class="card-head"><div><span class="chip">' + esc(g.area) + '</span> <strong>' + esc(g.title) + '</strong></div>' +
+          '<span class="small muted">Last: ' + (st.latest != null ? st.latest + '%' : '—') + ' · Target ' + esc(g.targetAccuracy || '—') + '%</span></div>' +
+          '<p>' + esc(L.smartStatement(g)) + '</p>' + smartGrid(g) + '</article>';
+      }).join('');
+      html += '</section><section><h2>Materials to bring</h2>';
+      html += matIds.length ? '<ul class="checklist">' + matIds.map(function (id) {
+        const mat = m.materials[id];
+        return '<li><label><input type="checkbox" data-action="pack" data-date="' + a.date + '" data-id="' + id + '"' + (packed[id] ? ' checked' : '') + '> ' +
+          '<span>' + esc(mat.name) + '</span></label><span class="muted small">' + esc(mat.location || '') + '</span></li>';
+      }).join('') + '</ul>' : '<p class="muted">No materials linked to these goals.</p>';
+      html += '</section><div class="actions"><a class="btn btn-primary" href="' + base + '?tab=log">Start session log →</a></div>';
+    }
+
+    if (tab === 'log') html += sessionLogForm(a, goals, log);
+
+    if (tab === 'progress') {
+      const logs = S.logsForPatient(p.id);
+      html += goals.length ? goals.map(function (g) { return goalProgressCard(g, logs); }).join('') : '<p class="muted">No goals for this session.</p>';
+      html += '<p><a href="#/patients/' + p.id + '?tab=progress">See all of ' + esc(p.name.split(' ')[0]) + '\'s goals →</a></p>';
+    }
+
+    if (tab === 'report') {
+      if (!log) {
+        html += '<div class="empty"><p>Log the session first, then the report is generated for you.</p><a class="btn btn-primary" href="' + base + '?tab=log">Log session</a></div>';
+      } else {
+        html += reportPanel(log, p, m);
+      }
+    }
+    return html;
+  }
+
+  function smartGrid(g) {
+    const rows = [['S', 'Specific', g.specific], ['M', 'Measurable', g.measurable], ['A', 'Achievable', g.achievable], ['R', 'Relevant', g.relevant],
+      ['T', 'Time-bound', g.timeBound ? 'By ' + L.formatDate(g.timeBound, { month: 'short', day: 'numeric', year: 'numeric' }) : '']];
+    return '<dl class="smart">' + rows.map(function (r) {
+      return '<div><dt title="' + r[1] + '">' + r[0] + '</dt><dd><span class="muted small">' + r[1] + '</span> ' + esc(r[2] || '—') + '</dd></div>';
+    }).join('') + '</dl>';
+  }
+
+  function sessionLogForm(a, goals, log) {
+    const entries = {};
+    (log ? log.entries : []).forEach(function (e) { entries[e.goalId] = e; });
+    if (!goals.length) return '<p class="muted">Add goals to this session before logging.</p>';
+    return '<form id="log-form" data-appt="' + a.id + '">' + goals.map(function (g) {
+      const e = entries[g.id] || {};
+      return '<fieldset class="card log-entry" data-goal="' + g.id + '"><legend><span class="chip">' + esc(g.area) + '</span> ' + esc(g.title) +
+        ' <span class="muted small">target ' + esc(g.targetAccuracy || '—') + '%</span></legend>' +
+        '<div class="grid-4">' +
+        '<label>Times done (trials)<input type="number" min="0" inputmode="numeric" name="trials" value="' + esc(e.trials || '') + '"></label>' +
+        '<label>Correct<input type="number" min="0" inputmode="numeric" name="correct" value="' + esc(e.correct != null ? e.correct : '') + '"></label>' +
+        '<label>Accuracy %<input type="number" min="0" max="100" inputmode="numeric" name="accuracy" value="' + esc(e.accuracy != null ? e.accuracy : '') + '"></label>' +
+        '<label>Cueing<select name="cueing">' + opt('', '—') + CUEING.map(function (c) { return opt(c, c, e.cueing === c); }).join('') + '</select></label>' +
+        '</div>' +
+        '<div class="field"><span class="label">Progress</span><div class="segmented">' + PROGRESS.map(function (k) {
+          return '<label><input type="radio" name="progress-' + g.id + '" value="' + k + '"' + (e.progress === k ? ' checked' : '') + '><span>' + esc(L.PROGRESS_LABELS[k]) + '</span></label>';
+        }).join('') + '</div></div>' +
+        '<label>Notes for this goal<textarea name="note" rows="2" placeholder="e.g. Better with visual cue; errors on /sk/ blends">' + esc(e.note || '') + '</textarea></label>' +
+        '</fieldset>';
+    }).join('') +
+      '<div class="card"><label>Session notes (SOAP / journal)<textarea name="notes" rows="4" placeholder="Behaviour, engagement, strategies used, plan for next session">' + esc(log ? log.notes : '') + '</textarea></label>' +
+      '<label>Home practice<textarea name="homework" rows="2" placeholder="What the family can practise this week">' + esc(log ? log.homework : '') + '</textarea></label></div>' +
+      '<div class="actions"><button type="submit" class="btn btn-primary">Save &amp; create report</button></div></form>';
+  }
+
+  function reportPanel(log, p, m) {
+    const text = log.reportText || L.clientReport({ patient: p, log: log, goalsById: m.goals, therapist: S.state.settings.therapistName });
+    const email = /@/.test(p.contact || '') ? p.contact : '';
+    const subject = 'Speech therapy session summary – ' + L.formatDate(log.date, { month: 'short', day: 'numeric' });
+    return '<section class="card"><div class="card-head"><h2>Client report</h2>' +
+      (log.reportSent ? '<span class="badge badge-good">Sent</span>' : '<span class="badge">Not sent</span>') + '</div>' +
+      '<p class="muted small">Edit freely; changes are saved with this session.</p>' +
+      '<textarea id="report-text" data-log="' + log.id + '" rows="16">' + esc(text) + '</textarea>' +
+      '<div class="actions wrap">' +
+      '<button class="btn" data-action="copy-report">Copy</button>' +
+      (email ? '<a class="btn" data-action="email-report" href="mailto:' + esc(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text) + '">Email ' + esc(p.guardian || 'family') + '</a>' : '') +
+      '<button class="btn" data-action="regen-report" data-log="' + log.id + '">Regenerate from log</button>' +
+      '<button class="btn btn-primary" data-action="toggle-sent" data-log="' + log.id + '">' + (log.reportSent ? 'Mark as not sent' : 'Mark as sent') + '</button>' +
+      '</div></section>';
+  }
+
+  function viewPatients() {
+    const st = S.state;
+    let html = '<header class="page-head"><div><h1>Patients</h1><p class="muted">' + st.patients.length + ' on caseload</p></div>' +
+      '<button class="btn btn-primary" data-action="new-patient">+ Add patient</button></header>';
+    if (!st.patients.length) return html + '<div class="empty"><p>No patients yet.</p></div>';
+    html += '<ul class="list">' + st.patients.slice().sort(function (a, b) { return a.name.localeCompare(b.name); }).map(function (p) {
+      const goals = S.goalsForPatient(p.id).filter(function (g) { return g.status === 'active'; });
+      const next = st.appointments.filter(function (a) { return a.patientId === p.id && a.date >= L.todayISO() && a.status !== 'cancelled'; })
+        .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); })[0];
+      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong>' +
+        '<div class="muted small">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</div></div>' +
+        '<div class="right small"><div>' + goals.length + ' active goal' + (goals.length === 1 ? '' : 's') + '</div>' +
+        '<div class="muted">' + (next ? 'Next: ' + esc(L.formatDate(next.date, { month: 'short', day: 'numeric' })) + ' ' + esc(L.formatTime(next.time)) : 'No upcoming session') + '</div></div></a></li>';
+    }).join('') + '</ul>';
+    return html;
+  }
+
+  function viewPatient(id, params) {
+    const p = S.patient(id);
+    if (!p) return '<div class="empty"><p>Patient not found.</p><a href="#/patients">Back</a></div>';
+    const tab = params.tab || 'goals';
+    const base = '#/patients/' + p.id;
+    const goals = S.goalsForPatient(p.id);
+    const logs = S.logsForPatient(p.id);
+    const m = maps();
+
+    let html = '<a class="back" href="#/patients">‹ Patients</a>' +
+      '<header class="page-head"><div><h1>' + esc(p.name) + '</h1>' +
+      '<p class="muted">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
+      '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p></div>' +
+      '<div class="head-actions"><button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' +
+      '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button></div></header>' +
+      tabs(base, tab, [['goals', 'SMART goals'], ['progress', 'Progress'], ['history', 'Session journal']]);
+
+    if (tab === 'goals') {
+      html += '<div class="actions"><button class="btn btn-primary" data-action="new-goal" data-patient="' + p.id + '">+ Add SMART goal</button></div>';
+      html += goals.length ? goals.map(function (g) { return goalCard(g, m, false); }).join('') : '<p class="muted">No goals yet.</p>';
+    }
+    if (tab === 'progress') {
+      const active = goals.filter(function (g) { return g.status !== 'discontinued'; });
+      html += active.length ? active.map(function (g) { return goalProgressCard(g, logs); }).join('') : '<p class="muted">No goals yet.</p>';
+    }
+    if (tab === 'history') {
+      const sorted = logs.slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
+      html += sorted.length ? sorted.map(function (log) {
+        return '<article class="card"><div class="card-head"><strong>' + esc(L.formatDate(log.date, { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })) + '</strong>' +
+          (log.appointmentId ? '<a class="small" href="#/session/' + log.appointmentId + '?tab=log">Open</a>' : '') + '</div>' +
+          '<table class="tbl"><thead><tr><th>Goal</th><th>Trials</th><th>Acc.</th><th>Cueing</th><th>Progress</th></tr></thead><tbody>' +
+          log.entries.map(function (e) {
+            const g = m.goals[e.goalId];
+            return '<tr><td>' + esc(g ? g.title : '(deleted goal)') + (e.note ? '<div class="muted small">' + esc(e.note) + '</div>' : '') + '</td><td>' + esc(e.trials != null ? e.correct + '/' + e.trials : '') + '</td><td>' +
+              esc(e.accuracy != null ? e.accuracy + '%' : '') + '</td><td>' + esc(e.cueing || '') + '</td><td>' + esc(L.PROGRESS_LABELS[e.progress] || '') + '</td></tr>';
+          }).join('') + '</tbody></table>' +
+          (log.notes ? '<p class="small"><strong>Notes:</strong> ' + esc(log.notes) + '</p>' : '') +
+          (log.homework ? '<p class="small"><strong>Home practice:</strong> ' + esc(log.homework) + '</p>' : '') + '</article>';
+      }).join('') : '<p class="muted">No sessions logged yet.</p>';
+    }
+    return html;
+  }
+
+  function goalCard(g, m, showPatient) {
+    const p = m.patients[g.patientId];
+    const mats = (g.materialIds || []).map(function (id) { return m.materials[id]; }).filter(Boolean);
+    const statusCls = g.status === 'met' ? 'badge-good' : g.status === 'active' ? 'badge-info' : 'badge-muted';
+    return '<article class="card goal-card"><div class="card-head"><div>' +
+      (showPatient && p ? '<a class="small" href="#/patients/' + p.id + '">' + esc(p.name) + '</a><br>' : '') +
+      '<span class="chip">' + esc(g.area) + '</span> <strong>' + esc(g.title) + '</strong></div>' +
+      '<div class="head-actions"><span class="badge ' + statusCls + '">' + esc(g.status) + '</span>' +
+      '<button class="btn btn-ghost btn-sm" data-action="edit-goal" data-id="' + g.id + '">Edit</button></div></div>' +
+      '<p>' + esc(L.smartStatement(g)) + '</p>' + smartGrid(g) +
+      '<p class="small"><span class="muted">Materials:</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : '—') + '</p></article>';
+  }
+
+  function viewGoals(params) {
+    const st = S.state, m = maps();
+    const f = { patient: params.patient || '', area: params.area || '', status: 'status' in params ? params.status : 'active' };
+    const list = st.goals.filter(function (g) {
+      return (!f.patient || g.patientId === f.patient) && (!f.area || g.area === f.area) && (!f.status || g.status === f.status);
+    });
+    let html = '<header class="page-head"><div><h1>Goals</h1><p class="muted">SMART goals across your caseload</p></div>' +
+      '<button class="btn btn-primary" data-action="new-goal">+ Add goal</button></header>' +
+      '<div class="filters" id="goal-filters">' +
+      '<select name="patient" aria-label="Patient">' + opt('', 'All patients') + st.patients.map(function (p) { return opt(p.id, p.name, f.patient === p.id); }).join('') + '</select>' +
+      '<select name="area" aria-label="Area">' + opt('', 'All areas') + AREAS.map(function (a) { return opt(a, a, f.area === a); }).join('') + '</select>' +
+      '<select name="status" aria-label="Status">' + opt('', 'Any status', !f.status) + ['active', 'met', 'paused', 'discontinued'].map(function (s) { return opt(s, s[0].toUpperCase() + s.slice(1), f.status === s); }).join('') + '</select>' +
+      '</div>';
+    html += list.length ? list.map(function (g) { return goalCard(g, m, true); }).join('') : '<div class="empty"><p>No goals match.</p></div>';
+    return html;
+  }
+
+  function viewMaterials(params) {
+    const tab = params.tab || 'day';
+    const date = params.date || L.todayISO();
+    const m = maps();
+    let html = '<header class="page-head"><div><h1>Materials</h1><p class="muted">' +
+      (tab === 'day' ? esc(L.formatDate(date)) : 'Your materials library') + '</p></div>' +
+      (tab === 'library' ? '<button class="btn btn-primary" data-action="new-material">+ Add material</button>' : '<button class="btn" data-action="copy-picklist" data-date="' + date + '">Copy pick list</button>') +
+      '</header>' +
+      '<nav class="tabs"><a class="tab' + (tab === 'day' ? ' active' : '') + '" href="#/materials?tab=day&date=' + date + '">For the day</a>' +
+      '<a class="tab' + (tab === 'library' ? ' active' : '') + '" href="#/materials?tab=library">Library</a></nav>';
+
+    if (tab === 'library') {
+      const used = {};
+      S.state.goals.forEach(function (g) { (g.materialIds || []).forEach(function (id) { (used[id] = used[id] || []).push(g); }); });
+      const mats = S.state.materials.slice().sort(function (a, b) { return (a.category || '').localeCompare(b.category || '') || a.name.localeCompare(b.name); });
+      if (!mats.length) return html + '<div class="empty"><p>No materials yet.</p></div>';
+      return html + '<ul class="list">' + mats.map(function (x) {
+        const goals = used[x.id] || [];
+        return '<li><div class="row"><div><strong>' + esc(x.name) + '</strong><div class="muted small">' + esc([x.category, x.location].filter(Boolean).join(' · ')) + '</div>' +
+          '<div class="small">' + (goals.length ? 'Used for: ' + goals.map(function (g) { return esc((m.patients[g.patientId] || {}).name + ' – ' + g.title); }).join('; ') : '<span class="muted">Not linked to any goal</span>') + '</div></div>' +
+          '<button class="btn btn-ghost btn-sm" data-action="edit-material" data-id="' + x.id + '">Edit</button></div></li>';
+      }).join('') + '</ul>';
+    }
+
+    const appts = S.appointmentsOn(date).filter(function (a) { return a.status !== 'cancelled'; });
+    const all = L.materialsForDay(appts, m.goals, m.materials, m.patients);
+    const packed = S.state.packed[date] || {};
+    const common = all.filter(function (x) { return x.count > 1; });
+    const packedCount = all.filter(function (x) { return packed[x.material.id]; }).length;
+    html += dateNav('materials', date);
+
+    if (!appts.length) return html + '<div class="empty"><p>No sessions on this day.</p></div>';
+
+    html += '<p class="muted small">' + packedCount + ' of ' + all.length + ' items ready. Ticks are shared across this day\'s views.</p>';
+    const item = function (x, showWho) {
+      return '<li><label><input type="checkbox" data-action="pack" data-date="' + date + '" data-id="' + x.material.id + '"' + (packed[x.material.id] ? ' checked' : '') + '> ' +
+        '<span>' + esc(x.material.name) + '</span></label>' +
+        '<span class="muted small">' + (showWho ? esc(x.sessions.map(function (s) { return (s.patient || {}).name; }).join(', ')) + (x.material.location ? ' · ' : '') : '') + esc(x.material.location || '') + '</span></li>';
+    };
+    html += '<section><h2>Common materials <span class="muted small">needed in 2+ sessions</span></h2>' +
+      (common.length ? '<ul class="checklist">' + common.map(function (x) { return item(x, true); }).join('') + '</ul>' : '<p class="muted">No materials are shared between sessions today.</p>') + '</section>';
+    html += '<section><h2>All materials for the day</h2><ul class="checklist">' + all.map(function (x) { return item(x, true); }).join('') + '</ul></section>';
+    html += '<section><h2>By session</h2>' + appts.map(function (a) {
+      const p = m.patients[a.patientId] || {};
+      const ids = L.appointmentMaterialIds(a, m.goals);
+      return '<article class="card"><div class="card-head"><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(p.name) + '</strong><a class="small" href="#/session/' + a.id + '">Open</a></div>' +
+        (ids.length ? '<ul class="checklist">' + ids.map(function (id) {
+          const x = m.materials[id];
+          return '<li><label><input type="checkbox" data-action="pack" data-date="' + date + '" data-id="' + id + '"' + (packed[id] ? ' checked' : '') + '> <span>' + esc(x.name) + '</span></label><span class="muted small">' + esc(x.location || '') + '</span></li>';
+        }).join('') + '</ul>' : '<p class="muted small">No materials.</p>') + '</article>';
+    }).join('') + '</section>';
+    return html;
+  }
+
+  function viewReports(params) {
+    const date = params.date || L.todayISO();
+    const m = maps();
+    const appts = S.appointmentsOn(date).filter(function (a) { return a.status !== 'cancelled'; });
+    let html = '<header class="page-head"><div><h1>Daily reports</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div></header>' + dateNav('reports', date);
+    if (!appts.length) return html + '<div class="empty"><p>No sessions on this day.</p></div>';
+    html += '<ul class="list">' + appts.map(function (a) {
+      const p = m.patients[a.patientId] || {};
+      const log = S.logForAppointment(a.id);
+      let action;
+      if (!log) action = '<a class="btn btn-sm" href="#/session/' + a.id + '?tab=log">Log session</a>';
+      else action = '<button class="btn btn-sm" data-action="copy-log-report" data-log="' + log.id + '">Copy</button>' +
+        '<a class="btn btn-sm ' + (log.reportSent ? '' : 'btn-primary') + '" href="#/session/' + a.id + '?tab=report">' + (log.reportSent ? 'View' : 'Review & send') + '</a>';
+      return '<li><div class="row"><div><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(p.name) + '</strong> ' + statusBadge(a) +
+        '<div class="muted small">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</div></div><div class="head-actions">' + action + '</div></div></li>';
+    }).join('') + '</ul>';
+    return html;
+  }
+
+  function viewSettings() {
+    const st = S.state;
+    return '<header class="page-head"><div><h1>Settings</h1><p class="muted">Data is stored only in this browser on this device.</p></div></header>' +
+      '<form class="card" id="settings-form"><label>Your name (used to sign reports)<input name="therapistName" value="' + esc(st.settings.therapistName) + '"></label>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Save</button></div></form>' +
+      '<section class="card"><h2>Backup</h2><p class="muted small">Download a backup regularly, and use it to move your data to another device.</p>' +
+      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
+      '<label class="btn">Restore from backup<input type="file" accept="application/json,.json" id="import-file" hidden></label></div></section>' +
+      '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
+      '<button class="btn" data-action="reset-demo">Load demo data</button>' +
+      '<button class="btn btn-danger" data-action="clear-all">Delete all data</button></div></section>';
+  }
+
+  /* ---------- forms in a modal ---------- */
+
+  function openModal(title, body, onSubmit, onDelete) {
+    modal.innerHTML = '<form method="dialog" class="modal-form"><header><h2>' + esc(title) + '</h2>' +
+      '<button type="button" class="btn btn-ghost" data-close aria-label="Close">✕</button></header>' +
+      '<div class="modal-body">' + body + '</div><footer>' +
+      (onDelete ? '<button type="button" class="btn btn-danger" data-delete>Delete</button>' : '<span></span>') +
+      '<div><button type="button" class="btn" data-close>Cancel</button> <button type="submit" class="btn btn-primary">Save</button></div></footer></form>';
+    const form = modal.querySelector('form');
+    form.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (!form.reportValidity()) return;
+      if (onSubmit(new FormData(form), form) !== false) { modal.close(); render(); }
+    });
+    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { modal.close(); }); });
+    if (onDelete) modal.querySelector('[data-delete]').addEventListener('click', function () {
+      ask('Delete this? This cannot be undone.').then(function (ok) { if (ok) { modal.close(); onDelete(); render(); } });
+    });
+    modal.showModal();
+    const first = modal.querySelector('.modal-body input, .modal-body select, .modal-body textarea');
+    if (first) first.focus();
+    return form;
+  }
+
+  function patientForm(id) {
+    const p = id ? S.patient(id) : {};
+    openModal(id ? 'Edit patient' : 'New patient',
+      '<label>Full name<input name="name" required value="' + esc(p.name) + '"></label>' +
+      '<div class="grid-2"><label>Date of birth<input type="date" name="dob" value="' + esc(p.dob) + '"></label>' +
+      '<label>Diagnosis / focus<input name="diagnosis" value="' + esc(p.diagnosis) + '"></label></div>' +
+      '<div class="grid-2"><label>Parent / guardian<input name="guardian" value="' + esc(p.guardian) + '"></label>' +
+      '<label>Email or phone<input name="contact" value="' + esc(p.contact) + '"></label></div>' +
+      '<label>Notes<textarea name="notes" rows="3">' + esc(p.notes) + '</textarea></label>',
+      function (fd) {
+        const saved = S.upsert('patients', Object.assign({}, p, {
+          name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
+          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes')
+        }));
+        if (!id) go('#/patients/' + saved.id);
+      },
+      id ? function () { S.remove('patients', id); go('#/patients'); } : null);
+  }
+
+  function goalForm(id, patientId) {
+    const g = id ? S.goal(id) : { patientId: patientId || '', status: 'active', targetAccuracy: 80, materialIds: [], area: AREAS[0] };
+    const st = S.state;
+    openModal(id ? 'Edit SMART goal' : 'New SMART goal',
+      '<div class="grid-2"><label>Patient<select name="patientId" required>' + opt('', 'Choose…') +
+      st.patients.map(function (p) { return opt(p.id, p.name, g.patientId === p.id); }).join('') + '</select></label>' +
+      '<label>Area<select name="area">' + AREAS.map(function (a) { return opt(a, a, g.area === a); }).join('') + '</select></label></div>' +
+      '<label>Short title<input name="title" required placeholder="e.g. /s/ in initial position" value="' + esc(g.title) + '"></label>' +
+      '<label><b>S</b>pecific – who will do what<textarea name="specific" rows="2" required placeholder="Ava will produce /s/ in the initial position of words">' + esc(g.specific) + '</textarea></label>' +
+      '<label><b>M</b>easurable – criterion<input name="measurable" placeholder="with 80% accuracy across 3 consecutive sessions" value="' + esc(g.measurable) + '"></label>' +
+      '<label><b>A</b>chievable – current baseline<input name="achievable" placeholder="Currently 50% with visual cues" value="' + esc(g.achievable) + '"></label>' +
+      '<label><b>R</b>elevant – why it matters<input name="relevant" placeholder="Improves intelligibility in class" value="' + esc(g.relevant) + '"></label>' +
+      '<div class="grid-3"><label><b>T</b>ime-bound – target date<input type="date" name="timeBound" value="' + esc(g.timeBound) + '"></label>' +
+      '<label>Target accuracy %<input type="number" min="0" max="100" name="targetAccuracy" value="' + esc(g.targetAccuracy) + '"></label>' +
+      '<label>Status<select name="status">' + ['active', 'met', 'paused', 'discontinued'].map(function (s) { return opt(s, s, g.status === s); }).join('') + '</select></label></div>' +
+      '<fieldset class="pick"><legend>Materials needed</legend>' + (st.materials.length ? st.materials.map(function (x) {
+        return '<label class="check"><input type="checkbox" name="materialIds" value="' + x.id + '"' + ((g.materialIds || []).indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + esc(x.name) + '</label>';
+      }).join('') : '<p class="muted small">Add materials in the Materials → Library tab.</p>') +
+      '<label class="inline-new">Add a new material<input name="newMaterial" placeholder="e.g. Minimal pair cards"></label></fieldset>',
+      function (fd) {
+        const materialIds = fd.getAll('materialIds');
+        const newMat = (fd.get('newMaterial') || '').trim();
+        if (newMat) materialIds.push(S.upsert('materials', { name: newMat, category: '', location: '' }).id);
+        const isNew = !g.id;
+        const saved = S.upsert('goals', Object.assign({}, g, {
+          patientId: fd.get('patientId'), area: fd.get('area'), title: fd.get('title').trim(),
+          specific: fd.get('specific').trim(), measurable: fd.get('measurable').trim(), achievable: fd.get('achievable').trim(),
+          relevant: fd.get('relevant').trim(), timeBound: fd.get('timeBound'),
+          targetAccuracy: fd.get('targetAccuracy') === '' ? '' : Number(fd.get('targetAccuracy')),
+          status: fd.get('status'), materialIds: materialIds, createdAt: g.createdAt || L.todayISO()
+        }));
+        // New active goals join the patient's upcoming sessions automatically.
+        if (isNew && saved.status === 'active') {
+          S.state.appointments.forEach(function (a) {
+            if (a.patientId === saved.patientId && a.date >= L.todayISO() && a.status === 'scheduled' && !S.logForAppointment(a.id)) a.goalIds.push(saved.id);
+          });
+          S.save();
+        }
+      },
+      id ? function () { S.remove('goals', id); } : null);
+  }
+
+  function materialForm(id) {
+    const x = id ? S.state.materials.find(function (m) { return m.id === id; }) : {};
+    openModal(id ? 'Edit material' : 'New material',
+      '<label>Name<input name="name" required value="' + esc(x.name) + '"></label>' +
+      '<div class="grid-2"><label>Category<input name="category" list="mat-cats" placeholder="Cards, Toys, Books…" value="' + esc(x.category) + '"></label>' +
+      '<label>Where it is kept<input name="location" placeholder="Shelf A, bin 2" value="' + esc(x.location) + '"></label></div>' +
+      '<datalist id="mat-cats">' + ['Cards', 'Books', 'Toys', 'Games', 'Reinforcers', 'Tools', 'AAC', 'Worksheets', 'Food / oral motor'].map(function (c) { return '<option value="' + c + '">'; }).join('') + '</datalist>',
+      function (fd) {
+        S.upsert('materials', Object.assign({}, x, { name: fd.get('name').trim(), category: fd.get('category').trim(), location: fd.get('location').trim() }));
+      },
+      id ? function () { S.remove('materials', id); } : null);
+  }
+
+  function apptForm(id, defaults) {
+    const st = S.state;
+    const a = id ? S.appointment(id) : Object.assign({ date: L.todayISO(), time: '09:00', duration: 30, room: '', goalIds: [], extraMaterialIds: [], status: 'scheduled', patientId: '' }, defaults || {});
+    const goalChecks = function (pid, selected) {
+      const goals = S.goalsForPatient(pid).filter(function (g) { return g.status === 'active' || selected.indexOf(g.id) >= 0; });
+      if (!pid) return '<p class="muted small">Choose a patient first.</p>';
+      if (!goals.length) return '<p class="muted small">This patient has no active goals yet.</p>';
+      return goals.map(function (g) {
+        return '<label class="check"><input type="checkbox" name="goalIds" value="' + g.id + '"' + (selected.indexOf(g.id) >= 0 ? ' checked' : '') + '> ' + esc(g.title) + '</label>';
+      }).join('');
+    };
+    const form = openModal(id ? 'Edit session' : 'New session',
+      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { return opt(p.id, p.name, a.patientId === p.id); }).join('') + '</select></label>' +
+      '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
+      '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"></label>' +
+      '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
+      '<div class="grid-2"><label>Room / location<input name="room" value="' + esc(a.room) + '"></label>' +
+      '<label>Status<select name="status">' + ['scheduled', 'completed', 'cancelled'].map(function (s) { return opt(s, s, a.status === s); }).join('') + '</select></label></div>' +
+      '<fieldset class="pick"><legend>Goals to target</legend><div id="goal-checks">' + goalChecks(a.patientId, id ? a.goalIds : S.goalsForPatient(a.patientId).filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; })) + '</div></fieldset>' +
+      '<fieldset class="pick"><legend>Extra materials (beyond the goals\' own)</legend>' + st.materials.map(function (x) {
+        return '<label class="check"><input type="checkbox" name="extraMaterialIds" value="' + x.id + '"' + ((a.extraMaterialIds || []).indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + esc(x.name) + '</label>';
+      }).join('') + '</fieldset>' +
+      (id ? '' : '<label>Repeat weekly for<select name="repeat">' + [1, 2, 4, 6, 8, 12].map(function (n) { return opt(n, n === 1 ? 'Just this once' : n + ' weeks'); }).join('') + '</select></label>'),
+      function (fd) {
+        const base = {
+          patientId: fd.get('patientId'), time: fd.get('time'), duration: Number(fd.get('duration')) || 30,
+          room: fd.get('room').trim(), status: fd.get('status'), goalIds: fd.getAll('goalIds'), extraMaterialIds: fd.getAll('extraMaterialIds')
+        };
+        if (id) { S.upsert('appointments', Object.assign({}, a, base, { date: fd.get('date') })); return; }
+        const n = Number(fd.get('repeat')) || 1;
+        for (let i = 0; i < n; i++) S.upsert('appointments', Object.assign({ notes: '' }, base, { id: null, date: L.addDays(fd.get('date'), 7 * i) }));
+        toast(n > 1 ? n + ' sessions added' : 'Session added');
+      },
+      id ? function () {
+        S.remove('appointments', id);
+        go('#/schedule?date=' + a.date);
+      } : null);
+    form.querySelector('[name=patientId]').addEventListener('change', function (ev) {
+      const pid = ev.target.value;
+      form.querySelector('#goal-checks').innerHTML = goalChecks(pid, S.goalsForPatient(pid).filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; }));
+    });
+  }
+
+  /* ---------- router ---------- */
+
+  function render() {
+    const r = parseHash();
+    const section = r.parts[0];
+    let html;
+    if (section === 'session') html = viewSession(r.parts[1], r.params);
+    else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
+    else if (section === 'patients') html = viewPatients();
+    else if (section === 'goals') html = viewGoals(r.params);
+    else if (section === 'materials') html = viewMaterials(r.params);
+    else if (section === 'reports') html = viewReports(r.params);
+    else if (section === 'settings') html = viewSettings();
+    else html = viewSchedule(r.params);
+    view.innerHTML = html;
+
+    const navKey = section === 'session' ? 'schedule' : (section || 'schedule');
+    document.querySelectorAll('.nav a').forEach(function (a) {
+      a.classList.toggle('active', a.dataset.nav === navKey);
+      if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+    });
+  }
+
+  /* ---------- events ---------- */
+
+  document.addEventListener('click', function (ev) {
+    const link = ev.target.closest('a[href^="#/"]');
+    if (link && !ev.metaKey && !ev.ctrlKey) { ev.preventDefault(); go(link.getAttribute('href')); return; }
+    const el = ev.target.closest('[data-action]');
+    if (!el) return;
+    const act = el.dataset.action;
+    const id = el.dataset.id;
+    switch (act) {
+      case 'new-appt': apptForm(null, { date: el.dataset.date || L.todayISO(), patientId: el.dataset.patient || '' }); break;
+      case 'edit-appt': apptForm(id); break;
+      case 'new-patient': patientForm(null); break;
+      case 'edit-patient': patientForm(id); break;
+      case 'new-goal': goalForm(null, el.dataset.patient || parseHash().params.patient); break;
+      case 'edit-goal': goalForm(id); break;
+      case 'new-material': materialForm(null); break;
+      case 'edit-material': materialForm(id); break;
+      case 'copy-picklist': {
+        const d = el.dataset.date, mm = maps();
+        const appts = S.appointmentsOn(d).filter(function (a) { return a.status !== 'cancelled'; });
+        const list = L.materialsForDay(appts, mm.goals, mm.materials, mm.patients);
+        copyText('Materials for ' + L.formatDate(d) + '\n' + list.map(function (x) {
+          return '[ ] ' + x.material.name + (x.material.location ? ' (' + x.material.location + ')' : '') + ' – ' + x.sessions.map(function (s) { return (s.patient || {}).name; }).join(', ');
+        }).join('\n'));
+        break;
+      }
+      case 'copy-backup': copyText(S.exportJSON()); break;
+      case 'copy-report': copyText(document.getElementById('report-text').value); break;
+      case 'copy-log-report': {
+        const log = S.state.logs.find(function (l) { return l.id === el.dataset.log; });
+        const m = maps();
+        copyText(log.reportText || L.clientReport({ patient: m.patients[log.patientId], log: log, goalsById: m.goals, therapist: S.state.settings.therapistName }));
+        break;
+      }
+      case 'email-report': {
+        // Refresh the mailto body with any edits made in the textarea.
+        const text = document.getElementById('report-text').value;
+        el.href = el.href.replace(/&body=.*$/, '&body=' + encodeURIComponent(text));
+        break;
+      }
+      case 'regen-report': {
+        const log = S.state.logs.find(function (l) { return l.id === el.dataset.log; });
+        delete log.reportText; S.save(); render(); toast('Report regenerated');
+        break;
+      }
+      case 'toggle-sent': {
+        const log = S.state.logs.find(function (l) { return l.id === el.dataset.log; });
+        log.reportText = document.getElementById('report-text').value;
+        log.reportSent = !log.reportSent; S.save(); render();
+        break;
+      }
+      case 'export': {
+        const blob = new Blob([S.exportJSON()], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'speech-therapy-backup-' + L.todayISO() + '.json';
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        break;
+      }
+      case 'reset-demo':
+        ask('Replace all current data with demo data?', 'Replace').then(function (ok) { if (ok) { S.resetDemo(); go('#/schedule'); render(); toast('Demo data loaded'); } });
+        break;
+      case 'clear-all':
+        ask('Delete ALL patients, goals, sessions and materials from this browser?', 'Delete everything').then(function (ok) { if (ok) { S.clearAll(); go('#/schedule'); render(); toast('All data deleted'); } });
+        break;
+    }
+  });
+
+  document.addEventListener('change', function (ev) {
+    const t = ev.target;
+    if (t.dataset.action === 'pack') {
+      S.setPacked(t.dataset.date, t.dataset.id, t.checked);
+      document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
+    }
+    if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
+    if (t.closest('#goal-filters')) {
+      const f = t.closest('#goal-filters');
+      const qs = ['patient', 'area', 'status'].map(function (k) { return k + '=' + encodeURIComponent(f.querySelector('[name=' + k + ']').value); }).join('&');
+      go('#/goals?' + qs);
+    }
+    if (t.id === 'report-text') {
+      const log = S.state.logs.find(function (l) { return l.id === t.dataset.log; });
+      log.reportText = t.value; S.save();
+    }
+    if (t.id === 'import-file' && t.files[0]) {
+      t.files[0].text().then(function (text) {
+        try { S.importJSON(text); render(); toast('Backup restored'); }
+        catch (e) { toast('Could not restore: ' + e.message); }
+      });
+    }
+  });
+
+  // Auto-fill accuracy from trials/correct while logging.
+  document.addEventListener('input', function (ev) {
+    const t = ev.target;
+    const fs = t.closest('.log-entry');
+    if (!fs || (t.name !== 'trials' && t.name !== 'correct')) return;
+    const acc = L.accuracy(fs.querySelector('[name=correct]').value, fs.querySelector('[name=trials]').value);
+    if (acc != null) fs.querySelector('[name=accuracy]').value = acc;
+  });
+
+  document.addEventListener('submit', function (ev) {
+    const form = ev.target;
+    if (form.id === 'log-form') {
+      ev.preventDefault();
+      const a = S.appointment(form.dataset.appt);
+      const existing = S.logForAppointment(a.id);
+      const entries = Array.prototype.map.call(form.querySelectorAll('.log-entry'), function (fs) {
+        const val = function (n) { return fs.querySelector('[name=' + n + ']').value; };
+        const trials = val('trials') === '' ? null : Number(val('trials'));
+        const correct = val('correct') === '' ? null : Number(val('correct'));
+        let acc = val('accuracy') === '' ? null : Math.max(0, Math.min(100, Number(val('accuracy'))));
+        if (acc == null) acc = L.accuracy(correct, trials);
+        const prog = fs.querySelector('input[type=radio]:checked');
+        return { goalId: fs.dataset.goal, trials: trials, correct: correct, accuracy: acc, cueing: val('cueing'), progress: prog ? prog.value : '', note: val('note').trim() };
+      });
+      const log = Object.assign(existing || { appointmentId: a.id, patientId: a.patientId }, {
+        date: a.date, entries: entries,
+        notes: form.querySelector('[name=notes]').value.trim(), homework: form.querySelector('[name=homework]').value.trim()
+      });
+      delete log.reportText; // regenerate from the updated log
+      S.upsert('logs', log);
+      a.status = 'completed';
+      S.save();
+      toast('Session saved');
+      go('#/session/' + a.id + '?tab=report');
+    }
+    if (form.id === 'settings-form') {
+      ev.preventDefault();
+      S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
+      S.save(); toast('Saved');
+    }
+  });
+
+  window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0 && location.hash !== route) go(location.hash); });
+  render();
+})();
+
+</script>
+</body>
+</html>

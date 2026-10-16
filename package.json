@@ -5,6 +5,7 @@
   "description": "Daily schedule, SMART goals, materials, session logs, progress and client reports for speech therapists.",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
+    "build": "node scripts/build-single.js",
     "test": "node --test tests/logic.test.js"
   }
 }

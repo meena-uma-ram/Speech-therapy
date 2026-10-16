@@ -26,7 +26,7 @@
     return { goals: S.byId(st.goals), materials: S.byId(st.materials), patients: S.byId(st.patients) };
   }
   function parseHash() {
-    const raw = location.hash.replace(/^#\/?/, '') || 'schedule';
+    const raw = route.replace(/^#\/?/, '') || 'schedule';
     const [path, qs] = raw.split('?');
     const params = {};
     (qs || '').split('&').filter(Boolean).forEach(function (kv) {
@@ -35,13 +35,31 @@
     });
     return { parts: path.split('/').filter(Boolean), params: params };
   }
-  function go(hash) { location.hash = hash; }
+  let route = location.hash || '#/schedule';
+  function go(hash) {
+    if (hash === route) return;
+    route = hash;
+    try { history.replaceState(null, '', hash); } catch (e) { /* sandboxed frame */ }
+    render();
+    window.scrollTo(0, 0);
+  }
   function toast(msg) {
     const el = document.getElementById('toast');
     el.textContent = msg;
     el.classList.add('show');
     clearTimeout(toast._t);
     toast._t = setTimeout(function () { el.classList.remove('show'); }, 2200);
+  }
+  function ask(message, okLabel) {
+    const dlg = document.getElementById('confirm');
+    dlg.innerHTML = '<form method="dialog" class="confirm-form"><p>' + esc(message) + '</p><div class="actions">' +
+      '<button class="btn" value="no">Cancel</button> <button class="btn btn-danger-solid" value="yes">' + esc(okLabel || 'Delete') + '</button></div></form>';
+    return new Promise(function (resolve) {
+      dlg.addEventListener('close', function done() { dlg.removeEventListener('close', done); resolve(dlg.returnValue === 'yes'); });
+      dlg.returnValue = '';
+      dlg.showModal();
+      dlg.querySelector('[value=no]').focus();
+    });
   }
   function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -155,8 +173,8 @@
           '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
           '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + statusBadge(a) + '</div>' +
           '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
-          '<div class="appt-meta"><span>🎯 ' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
-          '<div class="appt-meta muted small">🧰 ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
+          '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
+          '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
           '</div><span class="chev" aria-hidden="true">›</span></a></li>';
       }).join('') + '</ol>';
     }
@@ -366,7 +384,7 @@
     const m = maps();
     let html = '<header class="page-head"><div><h1>Materials</h1><p class="muted">' +
       (tab === 'day' ? esc(L.formatDate(date)) : 'Your materials library') + '</p></div>' +
-      (tab === 'library' ? '<button class="btn btn-primary" data-action="new-material">+ Add material</button>' : '<button class="btn" data-action="print">Print pick list</button>') +
+      (tab === 'library' ? '<button class="btn btn-primary" data-action="new-material">+ Add material</button>' : '<button class="btn" data-action="copy-picklist" data-date="' + date + '">Copy pick list</button>') +
       '</header>' +
       '<nav class="tabs"><a class="tab' + (tab === 'day' ? ' active' : '') + '" href="#/materials?tab=day&date=' + date + '">For the day</a>' +
       '<a class="tab' + (tab === 'library' ? ' active' : '') + '" href="#/materials?tab=library">Library</a></nav>';
@@ -439,7 +457,7 @@
       '<form class="card" id="settings-form"><label>Your name (used to sign reports)<input name="therapistName" value="' + esc(st.settings.therapistName) + '"></label>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save</button></div></form>' +
       '<section class="card"><h2>Backup</h2><p class="muted small">Download a backup regularly, and use it to move your data to another device.</p>' +
-      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button>' +
+      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
       '<label class="btn">Restore from backup<input type="file" accept="application/json,.json" id="import-file" hidden></label></div></section>' +
       '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
       '<button class="btn" data-action="reset-demo">Load demo data</button>' +
@@ -462,7 +480,7 @@
     });
     modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { modal.close(); }); });
     if (onDelete) modal.querySelector('[data-delete]').addEventListener('click', function () {
-      if (confirm('Delete this? This cannot be undone.')) { onDelete(); modal.close(); render(); }
+      ask('Delete this? This cannot be undone.').then(function (ok) { if (ok) { modal.close(); onDelete(); render(); } });
     });
     modal.showModal();
     const first = modal.querySelector('.modal-body input, .modal-body select, .modal-body textarea');
@@ -613,6 +631,8 @@
   /* ---------- events ---------- */
 
   document.addEventListener('click', function (ev) {
+    const link = ev.target.closest('a[href^="#/"]');
+    if (link && !ev.metaKey && !ev.ctrlKey) { ev.preventDefault(); go(link.getAttribute('href')); return; }
     const el = ev.target.closest('[data-action]');
     if (!el) return;
     const act = el.dataset.action;
@@ -626,7 +646,16 @@
       case 'edit-goal': goalForm(id); break;
       case 'new-material': materialForm(null); break;
       case 'edit-material': materialForm(id); break;
-      case 'print': window.print(); break;
+      case 'copy-picklist': {
+        const d = el.dataset.date, mm = maps();
+        const appts = S.appointmentsOn(d).filter(function (a) { return a.status !== 'cancelled'; });
+        const list = L.materialsForDay(appts, mm.goals, mm.materials, mm.patients);
+        copyText('Materials for ' + L.formatDate(d) + '\n' + list.map(function (x) {
+          return '[ ] ' + x.material.name + (x.material.location ? ' (' + x.material.location + ')' : '') + ' – ' + x.sessions.map(function (s) { return (s.patient || {}).name; }).join(', ');
+        }).join('\n'));
+        break;
+      }
+      case 'copy-backup': copyText(S.exportJSON()); break;
       case 'copy-report': copyText(document.getElementById('report-text').value); break;
       case 'copy-log-report': {
         const log = S.state.logs.find(function (l) { return l.id === el.dataset.log; });
@@ -661,10 +690,10 @@
         break;
       }
       case 'reset-demo':
-        if (confirm('Replace all current data with demo data?')) { S.resetDemo(); go('#/schedule'); render(); toast('Demo data loaded'); }
+        ask('Replace all current data with demo data?', 'Replace').then(function (ok) { if (ok) { S.resetDemo(); go('#/schedule'); render(); toast('Demo data loaded'); } });
         break;
       case 'clear-all':
-        if (confirm('Delete ALL patients, goals, sessions and materials from this browser?')) { S.clearAll(); go('#/schedule'); render(); toast('All data deleted'); }
+        ask('Delete ALL patients, goals, sessions and materials from this browser?', 'Delete everything').then(function (ok) { if (ok) { S.clearAll(); go('#/schedule'); render(); toast('All data deleted'); } });
         break;
     }
   });
@@ -688,7 +717,7 @@
     if (t.id === 'import-file' && t.files[0]) {
       t.files[0].text().then(function (text) {
         try { S.importJSON(text); render(); toast('Backup restored'); }
-        catch (e) { alert('Could not restore: ' + e.message); }
+        catch (e) { toast('Could not restore: ' + e.message); }
       });
     }
   });
@@ -735,6 +764,6 @@
     }
   });
 
-  window.addEventListener('hashchange', function () { render(); window.scrollTo(0, 0); });
+  window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0 && location.hash !== route) go(location.hash); });
   render();
 })();
