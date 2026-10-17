@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /* Pure helpers with no DOM or storage access, so they can be unit-tested in Node. */
 (function (root) {
   'use strict';
@@ -445,7 +446,7 @@
 
   /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
 
-  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders'];
+  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders', 'consents'];
 
   /*
    * Split app data into what is shared (people, materials, settings, receipts) and one bundle per patient,

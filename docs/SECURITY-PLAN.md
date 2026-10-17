@@ -1,6 +1,6 @@
 # Security, privacy and launch plan
 
-Working plan for taking Therapy Planner from a single-device prototype to a hosted service for clinics in India. This is not legal advice: confirm retention periods, consent wording and children's-data handling with an Indian privacy lawyer.
+Working plan for taking TJS from a single-device prototype to a hosted service for clinics in India. This is not legal advice: confirm retention periods, consent wording and children's-data handling with an Indian privacy lawyer.
 
 ## 0. Where data is stored today
 

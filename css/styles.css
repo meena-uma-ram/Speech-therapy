@@ -559,3 +559,46 @@ button.tm-block { cursor: pointer; }
 button.tw-chip { cursor: pointer; }
 fieldset.checks { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; margin: 0 0 12px; }
 fieldset.checks legend { padding: 0 4px; font-weight: 600; }
+
+/* ---------- demo workspace ---------- */
+.demo-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 16px; background: var(--warn-soft); color: var(--warn); border-bottom: 2px solid var(--warn); font-size: .9rem; }
+.demo-banner .demo-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+body.locked .demo-banner { border-radius: var(--radius); margin: 16px auto 0; max-width: 460px; border: 1px solid var(--warn); }
+.rolebar .demo-banner { flex-basis: 100%; margin: -8px -16px 8px; }
+.welcome { max-width: 560px; }
+.ws-choice { display: grid; gap: 12px; margin: 16px 0; }
+.ws-btn { display: flex; flex-direction: column; gap: 4px; text-align: left; font: inherit; padding: 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.ws-btn strong { font-size: 1.05rem; color: var(--primary); }
+.ws-btn span { color: var(--muted); font-size: .9rem; }
+.ws-btn:hover, .ws-btn:focus-visible { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px var(--primary-soft); }
+.notice-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.new-patients h2 { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- consent ---------- */
+.consent-form .card h3 { margin: 18px 0 6px; }
+fieldset.purpose { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0 0 10px; }
+fieldset.purpose legend { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 0 4px; }
+fieldset.purpose p { margin: 4px 0 8px; }
+.yesno { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.choice { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--surface); }
+.choice:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.choice.no:has(input:checked) { border-color: var(--muted); background: var(--fam-other-soft); }
+.method-pick { display: grid; gap: 8px; margin-bottom: 12px; }
+.method-panel { margin: 8px 0 12px; }
+#sig { display: block; width: 100%; max-width: 600px; height: auto; aspect-ratio: 600 / 180; border: 2px dashed var(--border); border-radius: 8px; background: var(--surface); touch-action: none; margin-bottom: 6px; }
+.scan-preview { max-width: 280px; max-height: 280px; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
+.picto { width: 40px; height: 40px; flex: none; fill: none; stroke: var(--primary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.consent-form.accessible { font-size: 1.15rem; line-height: 1.6; }
+.consent-form.accessible .picto { width: 56px; height: 56px; }
+.consent-form.accessible .choice { min-height: 56px; font-size: 1.15rem; padding: 10px 20px; }
+.receipt .kv { margin-bottom: 12px; }
+.sig-img { max-width: 300px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+code.hash { word-break: break-all; font-size: .75rem; }
+
+@media print {
+  .sidebar, .rolebar, .demo-banner, .no-print, .nav, #toast, .back, .head-actions, button, .btn { display: none !important; }
+  body, .card { background: #fff !important; color: #000 !important; box-shadow: none !important; }
+  .main-col, .layout { display: block !important; margin: 0 !important; padding: 0 !important; }
+  .card { border: 1px solid #999 !important; break-inside: avoid; }
+  .choice { border: 1px solid #000 !important; background: #fff !important; }
+}

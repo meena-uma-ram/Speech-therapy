@@ -1,6 +1,6 @@
 {
-  "name": "Therapy Planner",
-  "short_name": "Therapy",
+  "name": "TJS",
+  "short_name": "TJS",
   "description": "Speech diagnostics and therapy: timetable, SMART goals, materials, session logs, coursework, reminders and reports.",
   "start_url": "./index.html",
   "scope": "./",

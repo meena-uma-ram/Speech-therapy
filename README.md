@@ -1,4 +1,4 @@
-# Speech Therapy Planner
+# Speech TJS
 
 A workspace for a speech **diagnostics** department, a speech **therapy** department, and university clinics where supervisors allot cases to students. It also covers the daily work: a timetable, SMART goals, materials, session logging, progress and family reports.
 
@@ -112,7 +112,9 @@ Try it with demo data: `npm run server:demo`, then open http://localhost:8080.
 
 ## Licence
 
-**GNU Affero General Public License v3.0 or later** ([LICENSE](LICENSE)), a strong copyleft licence. Anyone may use, study, change and share Therapy Planner, but changed versions must stay under the same licence with their source code, **including when they are only offered over a network** (section 13), so nobody can turn it into a closed product or a closed hosted service. The licence covers the software, not your clinic's records. What this means for clinics, contributors and anyone who hosts or sells it, plus the data protection law for this setup (DPDP Act 2023 and Rules 2025, IT Act, CERT-In, GDPR), is in [docs/LEGAL.md](docs/LEGAL.md).
+Copyright (C) 2026 Meenakshi Ramesh.
+
+**GNU Affero General Public License v3.0 or later** ([LICENSE](LICENSE)), a strong copyleft licence. Anyone may use, study, change and share TJS, but changed versions must stay under the same licence with their source code, **including when they are only offered over a network** (section 13), so nobody can turn it into a closed product or a closed hosted service. The licence covers the software, not your clinic's records. What this means for clinics, contributors and anyone who hosts or sells it, plus the data protection law for this setup (DPDP Act 2023 and Rules 2025, IT Act, CERT-In, GDPR), is in [docs/LEGAL.md](docs/LEGAL.md).
 
 ## Daily work
 
@@ -127,7 +129,7 @@ Try it with demo data: `npm run server:demo`, then open http://localhost:8080.
 
 No install or build step. Either:
 
-- open **`therapy-planner.html`** (everything in one file; easy to email, put on a USB stick or desktop), or
+- open **`tjs.html`** (everything in one file; easy to email, put on a USB stick or desktop), or
 - open `index.html` directly in a browser, or
 - serve the folder: `npm start` (then visit http://localhost:8080), or any static host (GitHub Pages works).
 
@@ -135,13 +137,13 @@ It loads demo data the first time: five people (supervisor, therapist, diagnosti
 
 ## Install it as an app
 
-Therapy Planner is an installable web app (PWA). Once it is served from a website address (for example GitHub Pages, Netlify or the clinic's own server):
+TJS is an installable web app (PWA). Once it is served from a website address (for example GitHub Pages, Netlify or the clinic's own server):
 
 - **Android (Chrome):** open the address → menu ⋮ → **Install app** (or *Add to Home screen*).
 - **iPhone / iPad (Safari):** Share → **Add to Home Screen**.
 - **Windows / Mac (Chrome or Edge):** the **Install** icon in the address bar.
 
-It then opens in its own window with its own icon, and **works offline**. The offline worker caches only the app's own files. Patient data stays in the device's local storage, exactly as before. The single `therapy-planner.html` file still works by double-clicking, but it can't be installed (browsers only install apps served from a web address).
+It then opens in its own window with its own icon, and **works offline**. The offline worker caches only the app's own files. Patient data stays in the device's local storage, exactly as before. The single `tjs.html` file still works by double-clicking, but it can't be installed (browsers only install apps served from a web address).
 
 To try it locally: `npm start`, then open http://localhost:8080.
 

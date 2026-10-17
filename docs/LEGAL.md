@@ -17,7 +17,7 @@ Contents
 
 ## 1. The software licence (AGPL-3.0)
 
-Therapy Planner is licensed under the **GNU Affero General Public License, version 3 or (at your option) any later version** (`AGPL-3.0-or-later`). The full text is in [LICENSE](../LICENSE).
+TJS is licensed under the **GNU Affero General Public License, version 3 or (at your option) any later version** (`AGPL-3.0-or-later`). The full text is in [LICENSE](../LICENSE).
 
 ### Why this licence
 
@@ -32,7 +32,7 @@ Among the common open-source licences, the AGPL is the strongest copyleft:
 | GPL-3.0 | Strong | **No**: a company could change it and run it as a hosted service without ever sharing the code, because it never "distributes" it |
 | **AGPL-3.0** | Strong | **Yes**: section 13 requires anyone who lets users interact with a modified version over a network to offer those users the source |
 
-Therapy Planner is now network software (the clinic server), so the GPL would have left exactly that gap. The AGPL closes it.
+TJS is now network software (the clinic server), so the GPL would have left exactly that gap. The AGPL closes it.
 
 ### What it means in practice
 
@@ -43,7 +43,7 @@ Therapy Planner is now network software (the clinic server), so the GPL would ha
 | Give or sell copies to other clinics | Yes | Under AGPL-3.0, with source code, licence text and notices. You may charge for copies, setup, hosting and support |
 | Run it as a paid hosted service for clinics | Yes | Offer every user the source of the version you run, including your changes |
 | Make a closed, proprietary version | **No** | Unless you own all the copyright (see dual licensing below) |
-| Use the name "Therapy Planner" or your logo for someone else's version | Not granted | The licence covers copyright, not trademarks. Register a trademark if the name matters |
+| Use the name "TJS" or your logo for someone else's version | Not granted | The licence covers copyright, not trademarks. Register a trademark if the name matters |
 
 **Your clinic's records are not covered by the licence.** Patient data entered in the app stays the clinic's (and the patients'). The AGPL never requires anyone to publish data, only source code.
 
@@ -53,7 +53,7 @@ Therapy Planner is now network software (the clinic server), so the GPL would ha
 
 ### Copyright notice and contributors
 
-- Add a line such as `Copyright (C) 2026 <your name or company>` to the README and source headers. Currently the headers say *the Therapy Planner contributors*. Replace that with the legal owner.
+- The copyright owner is **Meenakshi Ramesh**: `Copyright (C) 2026 Meenakshi Ramesh` is in the README, the server and every source file header. If you later form a company and assign the copyright to it, update these lines.
 - **Accept outside contributions with a Developer Certificate of Origin (DCO):** contributors add `Signed-off-by:` to each commit, confirming they have the right to contribute it under the project's licence. They keep their copyright; the project gets clear permission.
 - **Dual licensing.** Only someone who owns *all* the copyright can also sell the code under another licence. If you might want that later, ask contributors to sign a Contributor Licence Agreement (CLA) instead of a DCO. Most strong-copyleft projects don't, precisely so no one can close the code later.
 - Keep `AGPL-3.0-or-later` in `package.json` and an SPDX line (`SPDX-License-Identifier: AGPL-3.0-or-later`) in new files.
@@ -89,7 +89,7 @@ The **Digital Personal Data Protection Act, 2023** applies to digital personal d
 
 ### What the law asks, and what the app and this setup do
 
-| Duty | Where in the law | What Therapy Planner does | What the clinic must still do |
+| Duty | Where in the law | What TJS does | What the clinic must still do |
 |---|---|---|---|
 | **Lawful ground**: consent, or a "legitimate use" | ss. 4, 6, 7 | Records consent per patient (therapy, students, sharing reports, teaching) with date and who gave it | Decide the ground for each purpose. Treatment is often consent-based; medical emergencies and some employment uses are legitimate uses (s. 7) |
 | **Notice** before or at consent, in clear language, in English or a scheduled language on request | s. 5, Rule 3 | – | Write a privacy notice: what is collected, why, who sees it (including students), how to withdraw consent and complain |
@@ -115,7 +115,7 @@ The **Digital Personal Data Protection Act, 2023** applies to digital personal d
 | **CERT-In Directions, 28 April 2022** (IT Act s. 70B) | Apply to service providers, intermediaries, data centres and **bodies corporate**. Report listed cyber incidents (e.g. ransomware, unauthorised access to systems or data) to CERT-In **within 6 hours** of noticing them; keep ICT system logs for **180 days** in India; synchronise system clocks with Indian NTP servers (NIC or NPL). VPN *service providers* must keep subscriber records for 5 years; CERT-In's FAQs indicate this does not cover an organisation's own internal VPN for its staff. Using a VPN is legal in India |
 | **Rehabilitation Council of India Act 1992** | Speech-language pathologists and audiologists register with the RCI and follow its code of conduct, including confidentiality. Students practise under supervision |
 | **Clinical establishments rules** (Clinical Establishments Act 2010 where a state has adopted it, or the state's own nursing-home/establishment law) | May set how long records are kept and require registration. The retention period in the app should follow them |
-| **Medical device rules** (Medical Devices Rules 2017, CDSCO) | Software meant to diagnose or decide treatment can be a medical device. Keep Therapy Planner a planning and documentation tool: no automated diagnosis or treatment recommendations |
+| **Medical device rules** (Medical Devices Rules 2017, CDSCO) | Software meant to diagnose or decide treatment can be a medical device. Keep TJS a planning and documentation tool: no automated diagnosis or treatment recommendations |
 | **Consumer Protection Act 2019** | If you sell the software or hosting to clinics, your terms and the AGPL warranty disclaimer should be clear and fair |
 | **Telecom / messaging (TRAI DLT)** | SMS reminders need DLT registration and approved templates (see SECURITY-PLAN.md §5) |
 
@@ -173,7 +173,7 @@ The team calendar shows colleagues' working schedules. Staff and students are Da
 ## 9. Checklists
 
 **Before real patient data goes in**
-- [ ] Copyright line in README and headers names the legal owner
+- [x] Copyright line in README and headers names the legal owner (Meenakshi Ramesh)
 - [ ] Independent security review of the code (AI-assisted, so essential)
 - [ ] Server on a clinic-owned, always-on computer with full-disk encryption and `THERAPY_DATA_PASSPHRASE`
 - [ ] Access through a VPN with HTTPS; no ports opened on the router

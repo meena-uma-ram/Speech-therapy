@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /*
  * Data store. Two modes:
  * - On its own (a file, or any website): everything lives in this browser's localStorage; nothing is sent anywhere.
@@ -10,8 +11,13 @@
   'use strict';
   const L = window.Logic;
   const Sync = window.Sync;
+  const C = window.Consent;
   const REMOTE = !!(window.document && document.querySelector('meta[name="therapy-server"]'));
-  const KEY = 'speech-therapy-planner-v1';
+  // Two workspaces per device, kept apart: the demo (fake data, for showing people) and the clinic (real data, starts empty).
+  const BASE_KEY = 'speech-therapy-planner-v1';
+  const WS_KEY = 'tjs-workspace';
+  const WORKSPACE = REMOTE ? '' : pickWorkspace();
+  const KEY = WORKSPACE === 'demo' ? BASE_KEY + '-demo' : BASE_KEY;
   const ENC_KEY = KEY + '-encrypted';
   // Per-patient keys live apart from the data and are never written into a backup.
   const KEYRING_KEY = KEY + '-patient-keys';
@@ -20,6 +26,9 @@
   const PREFS_KEY = KEY + '-device-prefs';
   const PW_ITERATIONS = 100000;
   const DEMO_PW = { pwSalt: 'dGhlcmFweS1wbGFubmVyLWRlbW8tc2FsdA==', pwHash: 'dDoovX6na8XDoauJ0apDiDsLUMsVSr79pyCCuUXcDK4=' }; // "demo1234"
+
+  const GIVEN_BY = { Patient: 'self', Parent: 'parent', 'Legal guardian': 'legal-guardian', 'Carer with legal authority': 'legal-guardian' };
+  const FLAG_PURPOSE = { therapy: 'treatment', students: 'students', shareReports: 'reports', teaching: 'teaching' };
 
   const EMPTY = {
     settings: {
@@ -34,7 +43,7 @@
       }
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], consents: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -47,20 +56,42 @@
 
   function blank() { return JSON.parse(JSON.stringify(EMPTY)); }
 
+  /* Which workspace this device last used. Data from before workspaces existed: demo data becomes the demo, anything else the clinic. */
+  function pickWorkspace() {
+    try {
+      const ws = localStorage.getItem(WS_KEY);
+      if (ws === 'demo' || ws === 'clinic') return ws;
+      const raw = localStorage.getItem(BASE_KEY);
+      if (localStorage.getItem(BASE_KEY + '-encrypted')) { localStorage.setItem(WS_KEY, 'clinic'); return 'clinic'; }
+      if (!raw) return '';
+      if (JSON.parse(raw).seeded) {
+        [['', ''], ['-patient-keys', '-patient-keys']].forEach(function (k) {
+          const v = localStorage.getItem(BASE_KEY + k[0]);
+          if (v != null) { localStorage.setItem(BASE_KEY + '-demo' + k[1], v); localStorage.removeItem(BASE_KEY + k[0]); }
+        });
+        localStorage.setItem(WS_KEY, 'demo');
+        return 'demo';
+      }
+      localStorage.setItem(WS_KEY, 'clinic');
+      return 'clinic';
+    } catch (e) { return 'demo'; }
+  }
+
   function load() {
     try {
       if (localStorage.getItem(ENC_KEY)) { locked = true; return blank(); }
       const raw = localStorage.getItem(KEY);
       if (raw) return migrate(Object.assign(blank(), JSON.parse(raw)));
-    } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
-    return seed();
+    } catch (e) { /* storage blocked or corrupt */ }
+    // The demo starts full; the clinic starts empty and asks for its first supervisor.
+    return WORKSPACE === 'demo' ? migrate(seed()) : migrate(blank());
   }
 
   /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
     s.settings.messaging = Object.assign({}, EMPTY.settings.messaging, s.settings.messaging);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events', 'consents'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     Sync.ensureIds(s);
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
@@ -75,10 +106,6 @@
       s.settings.currentUserId = s.users.some(function (u) { return u.id === session; }) ? session : '';
     } else s.settings.currentUserId = remoteMe;
     const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
-    if (!s.users.length && !REMOTE) {
-      s.users.push({ id: 'u_me', name: s.settings.therapistName || 'Me', role: 'supervisor' });
-      s.settings.currentUserId = 'u_me';
-    }
     const me = s.settings.currentUserId || (s.users[0] || {}).id || '';
     s.patients.forEach(function (p) {
       if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
@@ -86,11 +113,56 @@
       if (!p.caseCode) p.caseCode = L.caseCode(new Date().getFullYear(), s.settings.nextCaseNo++);
       if (!p.status) p.status = 'active';
       if (!p.assignedTo && p.status === 'active') p.assignedTo = me;
-      if (!p.consent) p.consent = { therapy: true, students: false, shareReports: false, teaching: false, recordedOn: '', givenBy: '' };
+      if (!p.consent) p.consent = {};
+      // Consent now lives in the ledger. Older yes/no answers become a 'legacy' entry, flagged for asking again.
+      if (!REMOTE && !p.consent.ledger && !s.consents.some(function (e) { return e.patientId === p.id; })) ledgerFromFlags(s, p, 'legacy');
+      if (s.consents.some(function (e) { return e.patientId === p.id; })) p.consent = Object.assign({}, p.consent, C.flags(s.consents, p.id));
       if (p.sessionsAllotted == null) p.sessionsAllotted = p.status === 'active' ? 12 : 0;
       if (!p.reminders) p.reminders = { channel: 'default', phone: '', optIn: false, optInAt: '', optInBy: '' };
     });
     return s;
+  }
+
+  function ledgerFromFlags(s, p, method, demo) {
+    const c = p.consent || {};
+    const decisions = Object.keys(FLAG_PURPOSE).filter(function (k) { return c[k]; }).map(function (k) { return { purpose: FLAG_PURPOSE[k], action: 'grant' }; });
+    if (demo) {
+      decisions.push({ purpose: 'records', action: 'grant' });
+      if (!c.teaching) decisions.push({ purpose: 'teaching', action: 'refuse' });
+      if (!c.students) decisions.push({ purpose: 'students', action: 'refuse' });
+      if (!c.shareReports) decisions.push({ purpose: 'reports', action: 'refuse' });
+      decisions.push({ purpose: 'reminders', action: p.reminders && p.reminders.optIn ? 'grant' : 'refuse' });
+    }
+    if (!decisions.length) return;
+    const rel = GIVEN_BY[c.givenBy] || (p.guardian ? 'parent' : 'self');
+    const e = C.makeEntry(s.consents, {
+      patientId: p.id, decisions: decisions, at: (c.recordedOn || L.todayISO()) + 'T10:00:00.000Z',
+      giver: { name: rel === 'self' ? p.name : (p.guardian || '').replace(/^.*?:\s*/, '') || 'Not recorded', relationship: rel },
+      recordedBy: '', method: method, demo: !!demo, note: demo ? 'Demo data' : 'Converted from the earlier yes/no consent fields'
+    });
+    s.consents.push(e);
+    p.consent = Object.assign({}, c, C.flags(s.consents, p.id));
+  }
+
+  /*
+   * Append to the consent ledger and apply it: the patient's consent flags, reminder opt-in. Entries are never edited;
+   * a change of mind is a new entry. Returns the sealed entry.
+   */
+  function recordConsent(f) {
+    const p = state.patients.find(function (x) { return x.id === f.patientId; });
+    const u = currentUser();
+    const e = C.makeEntry(state.consents, Object.assign({ recordedBy: u ? u.id : '', demo: WORKSPACE === 'demo' || !!serverInfo.demo }, f));
+    state.consents.push(e);
+    p.consent = Object.assign({}, p.consent, C.flags(state.consents, p.id));
+    const rem = e.decisions.find(function (d) { return d.purpose === 'reminders'; });
+    if (rem) {
+      p.reminders = Object.assign({ channel: 'default', phone: '' }, p.reminders, rem.action === 'grant'
+        ? { optIn: true, optInAt: e.at, optInBy: C.RELATIONSHIPS[e.giver.relationship] || '' } : { optIn: false, optInAt: '', optInBy: '' });
+    }
+    audit(e.decisions.some(function (d) { return d.action === 'withdraw'; }) ? 'Consent withdrawn' : 'Consent recorded', p.id,
+      e.decisions.map(function (d) { return d.purpose + ' ' + d.action; }).join(', ') + ' · ' + e.receiptId);
+    save();
+    return e;
   }
 
   /* ---------- persistence & encryption ---------- */
@@ -229,13 +301,45 @@
     const u = findUser(login);
     const fail = function () { audit('Failed sign-in', null, login); throw new Error('Email or password not recognised.'); };
     if (!u) return Promise.resolve().then(fail);
-    if (!u.pwHash && u.hasPassword) return Promise.reject(new Error('This account\u2019s password is kept on the clinic server. Ask a supervisor to set a new one here.'));
-    if (!u.pwHash) { setSession(u.id); audit('Signed in (first time)'); return Promise.resolve(u); }
+    // Every account needs a password: a supervisor sets a temporary one, and the person chooses their own at first sign-in.
+    if (!u.pwHash) { audit('Refused sign-in: no password set', null, u.name); return Promise.reject(new Error('This account has no password yet. Ask a supervisor to set a temporary one.')); }
     return hashPassword(pass, u.pwSalt).then(function (h) {
       if (h.pwHash !== u.pwHash) fail();
       setSession(u.id);
       audit('Signed in');
       return u;
+    });
+  }
+
+  /* Clinic workspace, first run or after a clean start: the first supervisor chooses their own password. */
+  function createFirstSupervisor(name, email, pass, clinicName) {
+    if (state.users.length) return Promise.reject(new Error('This clinic already has accounts.'));
+    return hashPassword(pass).then(function (h) {
+      const u = Object.assign({ id: L.uid('use'), name: name, email: email, role: 'supervisor', mustChange: false }, h);
+      state.users.push(u);
+      if (clinicName) state.settings.messaging.clinicName = clinicName;
+      setSession(u.id);
+      audit('Created the clinic\u2019s first supervisor account', null, name);
+      return u;
+    });
+  }
+
+  /*
+   * Clean start (clinic workspace): everything goes, including every account. Deletion receipts are kept as proof.
+   * The next screen asks for a new first supervisor.
+   */
+  function cleanStart() {
+    const receipts = state.deletionReceipts, n = state.patients.length, by = (currentUser() || {}).name || 'System';
+    const p = cryptoKey ? removePassphrase() : Promise.resolve();
+    return p.then(function () {
+      state = blank();
+      keyring = {};
+      state.deletionReceipts = receipts.concat(n ? [{ id: 'DR-' + L.todayISO().replace(/-/g, '') + '-CLEAN', recordId: '*', caseCode: 'All ' + n + ' patients and all accounts',
+        erasedAt: new Date().toISOString(), erasedBy: by, reason: 'Clean start', destroyed: ['All patient records', 'All accounts'],
+        keyDestroyed: 'All patient keys destroyed on this device. Old backups stay readable to anyone who still has an older key file and the backup password: destroy those too.' }] : []);
+      setSession('');
+      save();
+      return persistKeyring();
     });
   }
 
@@ -423,13 +527,20 @@
   }
 
   function remove(collection, id) {
+    const gone = collection === 'patients' && state.patients.find(function (x) { return x.id === id; });
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
-      // Erasure covers every record linked to the person, including messages about them.
-      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
+      // Erasure covers every record linked to the person, including messages and consent records about them.
+      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'consents'].forEach(function (k) {
         state[k] = state[k].filter(function (x) { return x.patientId !== id; });
       });
-      state.audit.forEach(function (e) { if (e.patientId === id) { e.patientId = null; e.target = '(erased record)'; } });
+      // The access log keeps a pseudonymised trail (case code only), so what happened stays accountable after erasure.
+      const code = gone && gone.caseCode || 'erased record';
+      state.audit.forEach(function (e) {
+        if (e.patientId !== id) return;
+        e.patientId = null; e.target = code; e.erased = true;
+        if (gone && gone.name && e.detail) e.detail = e.detail.split(gone.name).join(code);
+      });
     }
     if (collection === 'goals') {
       state.appointments.forEach(function (a) { a.goalIds = (a.goalIds || []).filter(function (g) { return g !== id; }); });
@@ -471,10 +582,39 @@
   function aesKey(rawB64) { return crypto.subtle.importKey('raw', unb64(rawB64), 'AES-GCM', false, ['encrypt', 'decrypt']); }
 
   /*
-   * Backup format v2: people, materials and settings in the clear; each patient's records encrypted with
-   * that patient's own key (AES-256-GCM, patient id bound as associated data). The keys are NOT included.
+   * Backup format v3: the whole file is encrypted with a backup password (AES-256-GCM, PBKDF2 key), so people,
+   * messages and settings are not readable either. Inside, each patient's records are encrypted again with that
+   * patient's own key (patient id bound as associated data). The patient keys are NOT included.
    */
-  function exportBackup() {
+  const BACKUP_ITERATIONS = 310000;
+  function exportBackup(password) {
+    if (!password || password.length < 10) return Promise.reject(new Error('Choose a backup password of at least 10 characters.'));
+    return exportInner().then(function (inner) {
+      const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+      return passwordKey(password, salt).then(function (k) {
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode('tjs-backup') }, k, enc.encode(inner));
+      }).then(function (ct) {
+        return JSON.stringify({ format: 'tjs-backup', v: 3, createdAt: new Date().toISOString(),
+          note: 'Encrypted backup. Opening it needs the backup password; each patient also needs their key from the key file or this device.',
+          kdf: { name: 'PBKDF2-SHA256', iterations: BACKUP_ITERATIONS, salt: b64(salt) }, iv: b64(iv), ct: b64(new Uint8Array(ct)) });
+      });
+    });
+  }
+  function passwordKey(password, salt) {
+    return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: BACKUP_ITERATIONS, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+  }
+  /* The inside of a backup, for restoring and for the deletion test. */
+  function openBackup(text, password) {
+    const data = typeof text === 'string' ? JSON.parse(text) : text;
+    if (data.format !== 'tjs-backup') return Promise.resolve(data);
+    if (!password) return Promise.reject(Object.assign(new Error('This backup needs its backup password.'), { needsPassword: true }));
+    return passwordKey(password, unb64(data.kdf.salt)).then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(data.iv), additionalData: enc.encode('tjs-backup') }, k, unb64(data.ct));
+    }).then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { throw Object.assign(new Error('That backup password is not correct.'), { needsPassword: true }); });
+  }
+  function exportInner() {
     const split = L.splitForBackup(state);
     const ids = Object.keys(split.bundles);
     let added = false;
@@ -490,7 +630,7 @@
     }).then(function (patients) {
       const shared = Object.assign({}, split.shared, { settings: Object.assign({}, split.shared.settings, { currentUserId: '' }) });
       return JSON.stringify({ format: 'therapy-planner-backup', v: 2, createdAt: new Date().toISOString(),
-        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients });
+        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients, erased: erasedIds() });
     });
   }
 
@@ -502,25 +642,35 @@
     }).then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { return null; });
   }
 
-  function importBackup(text) {
-    const data = JSON.parse(text);
-    if (data.format === 'therapy-planner-keys') return importKeyFile(data);
+  function importBackup(text, password) {
+    const outer = JSON.parse(text);
+    if (outer.format === 'therapy-planner-keys') return importKeyFile(outer);
+    return openBackup(outer, password).then(restoreInner);
+  }
+  function restoreInner(data) {
+    // Never bring back someone who was erased, whichever backup or key file is used.
+    const erased = {};
+    erasedIds().concat(data.erased || []).forEach(function (id) { erased[id] = true; });
     if (data.format !== 'therapy-planner-backup') {
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      const receipts = state.deletionReceipts;
+      const receipts = state.deletionReceipts, session = state.settings.currentUserId;
+      const skipped = data.patients.filter(function (p) { return erased[p.id]; }).map(function (p) { return p.caseCode; });
       state = migrate(Object.assign(blank(), data));
+      Object.keys(erased).forEach(function (id) { if (state.patients.some(function (p) { return p.id === id; })) remove('patients', id); });
       state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
+      state.settings.currentUserId = session;
       save();
-      return Promise.resolve({ restored: state.patients.length, shredded: [], legacy: true });
+      return { restored: state.patients.length, shredded: skipped, legacy: true };
     }
-    return Promise.all(data.patients.map(openBundle)).then(function (opened) {
+    const bundles = data.patients.filter(function (b) { return !erased[b.pid]; });
+    return Promise.all(bundles.map(openBundle)).then(function (opened) {
       const receipts = state.deletionReceipts, session = state.settings.currentUserId;
       const ok = opened.filter(Boolean);
       state = migrate(Object.assign(blank(), L.mergeBundles(data.shared, ok)));
       state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
       state.settings.currentUserId = session;
       save();
-      return { restored: ok.length, shredded: data.patients.filter(function (b, i) { return !opened[i]; }).map(function (b) { return b.caseCode; }) };
+      return { restored: ok.length, shredded: data.patients.filter(function (b) { return erased[b.pid] || !opened[bundles.indexOf(b)]; }).map(function (b) { return b.caseCode; }) };
     });
   }
 
@@ -531,11 +681,19 @@
 
   /* The key file is the disaster-recovery copy of the key ring. Keep it apart from backups. */
   function exportKeyFile() {
-    return JSON.stringify({ format: 'therapy-planner-keys', v: 1, exportedAt: new Date().toISOString(), keys: keyring });
+    const at = new Date().toISOString(), version = state.settings.keysetVersion || 0;
+    state.settings.keyFileExports = (state.settings.keyFileExports || []).concat([{ at: at, version: version, pids: Object.keys(keyring) }]);
+    save();
+    return JSON.stringify({ format: 'therapy-planner-keys', v: 2, exportedAt: at, keysetVersion: version, erased: erasedIds(), keys: keyring });
   }
+  function erasedIds() { return state.deletionReceipts.map(function (r) { return r.recordId; }).filter(function (x) { return x && x !== '*'; }); }
   function importKeyFile(data) {
+    // A key file made before the latest erasure may still hold erased patients' keys.
+    if ((data.keysetVersion || 0) < (state.settings.keysetVersion || 0)) {
+      return Promise.reject(new Error('This key file is older than the latest erasure, so it may hold keys of erased patients. Use the newest key file.'));
+    }
     const erased = {};
-    state.deletionReceipts.forEach(function (r) { erased[r.recordId] = true; });
+    erasedIds().concat(data.erased || []).forEach(function (id) { erased[id] = true; });
     let n = 0;
     Object.keys(data.keys || {}).forEach(function (pid) { if (!erased[pid] && !keyring[pid]) { keyring[pid] = data.keys[pid]; n++; } });
     return persistKeyring().then(function () { return { keysAdded: n, keysRefused: Object.keys(data.keys || {}).filter(function (pid) { return erased[pid]; }).length }; });
@@ -548,6 +706,7 @@
     const counted = {};
     L.PATIENT_COLLECTIONS.forEach(function (k) { counted[k] = state[k].filter(function (x) { return x.patientId === pid; }).length; });
     const hadKey = !!keyring[pid];
+    const inKeyFiles = (state.settings.keyFileExports || []).filter(function (x) { return (x.pids || []).indexOf(pid) >= 0; });
     remove('patients', pid);
     delete keyring[pid];
     persistKeyring();
@@ -558,9 +717,15 @@
       recordId: pid, caseCode: p.caseCode, erasedAt: now.toISOString(), erasedBy: by || (u ? u.name : 'System'), reason: reason,
       destroyed: ['Patient record', counted.goals + ' goals', counted.appointments + ' sessions', counted.logs + ' session logs',
         counted.assessments + ' assessments', counted.documents + ' documents', counted.messages + ' messages'],
-      keyDestroyed: hadKey ? 'Key destroyed – this patient is unreadable in every backup' : 'No backup had been made, so no key existed',
+      keyDestroyed: !hadKey ? 'No backup had been made, so no key existed'
+        : inKeyFiles.length ? 'Key destroyed on this device. ' + inKeyFiles.length + ' key file' + (inKeyFiles.length === 1 ? '' : 's') + ' made before this erasure (' +
+          inKeyFiles.map(function (x) { return x.at.slice(0, 10); }).join(', ') + ') still hold the key: destroy them and make a new key file, or old backups stay readable'
+        : 'Key destroyed. No key file held it, so earlier backups can no longer be read for this patient',
+      keyFilesToDestroy: inKeyFiles.map(function (x) { return x.at; }),
       test: !!isTest
     };
+    // Key files made before now may hold this key; a key file older than the latest erasure is refused on restore.
+    state.settings.keysetVersion = (state.settings.keysetVersion || 0) + 1;
     state.deletionReceipts.push(receipt);
     audit(isTest ? 'Deletion test' : 'Erased record', null, p.caseCode + ' · receipt ' + receipt.id);
     return receipt;
@@ -803,8 +968,93 @@
     s.appointments.find(function (a) { return a.id === 'a_3'; }).observers.push({ userId: 'u_ther', role: 'Observe', status: 'invited', by: 'u_stu2' });
     msg('u_ther', 'u_stu2', 0, 'Invitation to observe – ' + code('p_leo') + ', today 10:30', 'Would you observe my session? I would value feedback on modelling.', '#/session/a_3', 'invite', { apptId: 'a_3', patientId: 'p_leo' });
 
+    s.patients.forEach(function (p) { ledgerFromFlags(s, p, 'paper', true); });
     s.audit.push({ at: new Date().toISOString(), userId: '', user: 'System', action: 'Loaded demo data', patientId: null, target: '', detail: '' });
     return s;
+  }
+
+  /* ---------- demo: fake patients ---------- */
+
+  const FAKE = {
+    child: ['Aarav', 'Ananya', 'Kavin', 'Diya', 'Ishaan', 'Meera', 'Arjun', 'Saanvi', 'Vihaan', 'Nila', 'Rohan', 'Tara', 'Advik', 'Lakshana', 'Kabir', 'Aditi', 'Nikhil', 'Keerthana'],
+    adult: ['Ramesh', 'Lakshmi', 'Suresh', 'Kamala', 'Venkatesh', 'Fatima', 'Joseph', 'Parvathi', 'Rajesh', 'Shanthi', 'Mohan', 'Gita', 'Abdul', 'Usha'],
+    surname: ['Iyer', 'Nair', 'Reddy', 'Sharma', 'Menon', 'Pillai', 'Rao', 'Gowda', 'Patel', 'Das', 'Khan', 'Fernandes', 'Krishnan', 'Joshi', 'Banerjee', 'Kurian', 'Hegde', 'Subramanian'],
+    parent: ['Mrs.', 'Mr.'],
+    childCases: [['DLD', 'Expressive and receptive language delay'], ['Speech sound disorder', 'Fronting of /k g/, cluster reduction'], ['Autism', 'Limited joint attention; few spontaneous words'],
+      ['Stammering', 'Repetitions and blocks for 8 months'], ['CLP', 'Repaired cleft palate; hypernasality'], ['Hearing loss', 'Bilateral hearing aids since age 2'], ['Childhood apraxia of speech', 'Inconsistent errors, groping']],
+    adultCases: [['Stroke – aphasia', 'Left MCA stroke; word-finding difficulty'], ['Stroke – dysarthria', 'Slurred speech after brainstem stroke'], ['Dysphagia', 'Coughing on thin fluids'],
+      ["Parkinson's", 'Reduced loudness; monotone'], ['Head & neck cancer', 'After partial glossectomy'], ['Voice', 'Hoarseness; vocal nodules'], ['Dementia', 'Word-finding and conversation difficulties']],
+    sources: ['Paediatrician', 'School teacher', 'ENT', 'Neurology ward', 'Parent', 'Anganwadi worker', 'Physician']
+  };
+
+  /*
+   * Demo only: add fake patients at every stage, spread across everyone so each role has something new to see:
+   * waiting for assessment (diagnosticians), referred and waiting to be allotted (supervisors), in therapy with each
+   * therapist and student (with goals, sessions and logs), and discharged.
+   */
+  function generateFake(n) {
+    if (WORKSPACE !== 'demo' && !serverInfo.demo) throw new Error('Fake patients can only be added to the demo.');
+    const t = L.todayISO(), made = [];
+    const pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
+    const staff = function (role) { return state.users.filter(function (u) { return u.role === role; }); };
+    const sups = staff('supervisor'), ther = staff('therapist'), stus = staff('student'), diags = staff('diagnostician');
+    const clinicians = ther.concat(stus);
+    const diag = function () { return (pick(diags.length ? diags : sups) || {}).id || ''; };
+    const stages = ['waiting', 'referred', 'active', 'active', 'active', 'discharged'];
+    let clinicianTurn = 0;
+    for (let i = 0; i < (n || 6); i++) {
+      const child = Math.random() < 0.6, cases = pick(child ? FAKE.childCases : FAKE.adultCases);
+      const first = pick(child ? FAKE.child : FAKE.adult), last = pick(FAKE.surname);
+      const years = child ? 3 + Math.floor(Math.random() * 10) : 25 + Math.floor(Math.random() * 55);
+      const status = stages[i % stages.length];
+      const who = status === 'active' || status === 'discharged' ? clinicians[clinicianTurn++ % Math.max(clinicians.length, 1)] : null;
+      const toStudent = who && who.role === 'student';
+      const p = {
+        id: L.uid('pat'), name: first + ' ' + last, dob: L.addDays(t, -365 * years - Math.floor(Math.random() * 300)), ageGroup: child ? 'Child' : 'Adult',
+        condition: cases[0], diagnosis: cases[1], guardian: child ? pick(FAKE.parent) + ' ' + last : '', contact: 'fake.' + last.toLowerCase() + '@example.com',
+        notes: 'Fake demo patient', caseCode: L.caseCode(new Date().getFullYear(), state.settings.nextCaseNo++), status: status,
+        assignedTo: who ? who.id : '', supervisorId: toStudent && sups[0] ? sups[0].id : '', assessedBy: status === 'waiting' ? null : diag(),
+        referredAt: status === 'waiting' ? null : L.addDays(t, status === 'referred' ? -1 : -40), sessionsAllotted: who ? 10 : 0,
+        dischargedAt: status === 'discharged' ? L.addDays(t, -5) : '', registeredAt: new Date().toISOString(), allottedAt: who ? t : '', fake: true,
+        reminders: { channel: 'default', phone: '+91 9' + String(Math.floor(1e8 + Math.random() * 9e8)), optIn: false, optInAt: '', optInBy: '' },
+        consent: {}
+      };
+      state.patients.push(p);
+      // Consent as a parent or the patient would give it; students only if this case went to a student.
+      const decisions = [{ purpose: 'treatment', action: 'grant' }, { purpose: 'records', action: 'grant' },
+        { purpose: 'students', action: toStudent || Math.random() < 0.5 ? 'grant' : 'refuse' }, { purpose: 'reports', action: 'grant' },
+        { purpose: 'reminders', action: Math.random() < 0.7 ? 'grant' : 'refuse' }, { purpose: 'teaching', action: Math.random() < 0.4 ? 'grant' : 'refuse' }];
+      if (status !== 'waiting' || Math.random() < 0.5) {
+        recordConsent({ patientId: p.id, decisions: decisions, giver: { name: child ? p.guardian : p.name, relationship: child ? 'parent' : 'self' },
+          method: 'signature', language: pick(['en', 'ta', 'hi', 'ml', 'kn']), note: 'Fake demo consent' });
+      }
+      const assessor = p.assessedBy || diag();
+      state.assessments.push({ id: L.uid('ass'), patientId: p.id, assessorId: assessor, date: status === 'waiting' ? t : L.addDays(t, -42), status: status === 'waiting' ? 'draft' : 'completed',
+        source: pick(FAKE.sources), reason: cases[1].toLowerCase(), history: '', tests: status === 'waiting' ? '' : 'Standardised assessment; observation',
+        findings: status === 'waiting' ? '' : cases[1] + '.', diagnosis: status === 'waiting' ? '' : cases[0], severity: status === 'waiting' ? '' : pick(['Mild', 'Moderate', 'Severe']),
+        recommendations: status === 'waiting' ? '' : 'Weekly therapy', frequency: status === 'waiting' ? '' : 'Weekly, 30 min' });
+      if (status !== 'waiting') {
+        state.referrals.push({ id: L.uid('ref'), patientId: p.id, fromId: assessor, at: p.referredAt, priority: pick(['Routine', 'Routine', 'Soon', 'Urgent']), notes: 'Fake demo referral',
+          status: who ? 'allotted' : 'pending', allottedTo: who ? who.id : undefined, allottedBy: who && sups[0] ? sups[0].id : undefined, allottedAt: who ? t : undefined });
+      }
+      if (who && status === 'active') {
+        const gid = L.uid('goa');
+        state.goals.push({ id: gid, patientId: p.id, area: child ? 'Expressive language' : 'Expressive language', title: 'Name everyday objects', specific: first + ' will name everyday objects',
+          measurable: 'with 80% accuracy', achievable: 'Currently about 40%', relevant: 'Needed at home', timeBound: L.addDays(t, 84), targetAccuracy: 80, status: 'active',
+          materialIds: state.materials.slice(0, 2).map(function (m) { return m.id; }), createdAt: L.addDays(t, -14) });
+        [-7, 0, 7].forEach(function (d, k) {
+          const a = { id: L.uid('app'), patientId: p.id, date: L.addDays(t, d), time: ['09:00', '11:30', '14:00', '15:30'][(i + k) % 4], duration: 30, goalIds: [gid], room: 'Room ' + (1 + i % 3),
+            status: d < 0 ? 'attended' : 'scheduled', reschedules: [], observers: [], extraMaterialIds: [] };
+          state.appointments.push(a);
+          if (d < 0) state.logs.push({ id: L.uid('log'), appointmentId: a.id, patientId: p.id, date: a.date, entries: [{ goalId: gid, trials: 10, correct: 5, accuracy: 50, cueing: 'Moderate', progress: 'emerging' }], notes: 'Fake demo session', homework: '' });
+        });
+        send([who.id], { kind: 'allotted', patientId: p.id, link: '#/cases/' + p.id, subject: 'New case – ' + p.caseCode + ' (' + L.initials(p.name) + ')', body: 'Fake demo patient allotted to you.' });
+      }
+      made.push(p);
+    }
+    audit('Generated fake demo patients', null, made.length + ' patients');
+    save();
+    return made;
   }
 
   if (!locked && !REMOTE) keyring = readKeyringPlain();
@@ -866,7 +1116,18 @@
     },
     exportJSON: function () { return JSON.stringify(state, null, 2); },
     exportBackup: exportBackup,
-    importBackup: function (text) { return Promise.resolve().then(function () { return importBackup(text); }); },
+    importBackup: function (text, password) { return Promise.resolve().then(function () { return importBackup(text, password); }); },
+    openBackup: openBackup,
+    workspace: function () { return REMOTE ? (serverInfo.demo ? 'demo' : 'clinic') : WORKSPACE; },
+    isDemo: function () { return REMOTE ? !!serverInfo.demo : WORKSPACE === 'demo'; },
+    chooseWorkspace: function (ws) {
+      try { localStorage.setItem(WS_KEY, ws); sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked */ }
+      location.reload();
+    },
+    createFirstSupervisor: createFirstSupervisor,
+    recordConsent: recordConsent,
+    cleanStart: cleanStart,
+    generateFake: generateFake,
     exportKeyFile: exportKeyFile,
     openBundle: openBundle,
     erasePatient: erasePatient,
@@ -899,12 +1160,7 @@
       try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf(KEY) === 0) out.push(localStorage.getItem(k)); } } catch (e) { /* blocked */ }
       return out.join('\n');
     },
-    importJSON: function (text) {
-      const data = JSON.parse(text);
-      if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      state = migrate(Object.assign(blank(), data));
-      save();
-    },
+    importJSON: function (text) { return restoreInner(JSON.parse(text)); },
     clearAll: function () {
       const users = state.users, me = state.settings.currentUserId, receipts = state.deletionReceipts, n = state.patients.length;
       state = blank();

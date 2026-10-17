@@ -135,3 +135,22 @@ test('with a passphrase the data files on disk are encrypted, and erasure remove
     assert.match(fs.readFileSync(path.join(s.dir, 'patient-keys.json'), 'utf8'), /"enc":true/);
   } finally { await s.stop(); }
 });
+
+test('a real clinic server: no sign-in without a password, no patients until the data is encrypted', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-server-'));
+  delete process.env.THERAPY_DATA_PASSPHRASE;
+  const { hashPassword } = require('../server/server.js');
+  const server = createServer({ data: dir, demo: false });
+  server.state().state.users.push(Object.assign({ id: 'u_a', name: 'Meenakshi', email: 'm@clinic.in', role: 'supervisor' }, hashPassword('a-good-password')),
+    { id: 'u_b', name: 'No Password', email: 'np@clinic.in', role: 'therapist' });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const c = client('http://127.0.0.1:' + server.address().port + '/');
+  try {
+    assert.strictEqual((await c('POST', 'api/login', { login: 'np@clinic.in', password: '' })).status, 401);
+    assert.strictEqual((await c('GET', 'api/info')).body.demo, false);
+    assert.strictEqual((await c('POST', 'api/login', { login: 'm@clinic.in', password: 'a-good-password' })).status, 200);
+    const r = await c('POST', 'api/changes', { ops: [{ c: 'patients', id: 'p1', v: { id: 'p1', name: 'Real Person', status: 'waiting' } }, { c: 'materials', id: 'm1', v: { id: 'm1', name: 'Mirror' } }] });
+    assert.strictEqual(r.body.applied, 1);
+    assert.match(r.body.rejected[0].reason, /THERAPY_DATA_PASSPHRASE/);
+  } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); }
+});

@@ -53,7 +53,7 @@ With `THERAPY_DATA_PASSPHRASE` set as above. `--host 127.0.0.1` means only this 
 ```
 # /etc/systemd/system/therapy-planner.service
 [Unit]
-Description=Therapy Planner clinic server
+Description=TJS clinic server
 After=network-online.target
 
 [Service]

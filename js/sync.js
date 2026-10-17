@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /*
  * Sync rules shared by the browser and the clinic server: record-level changes, who sees what, who may change what.
  * Pure functions with no DOM or storage access, so they can be unit-tested in Node.
@@ -13,7 +14,7 @@
   const SHARED_SETTINGS = ['nextCaseNo', 'lastRetentionRun'];
   const MAPS = ['settings', 'packed'];
   const SECRET = ['pwHash', 'pwSalt'];
-  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders'];
+  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders', 'consents'];
   const AUDIT_MAX = 5000;
 
   function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
@@ -159,6 +160,9 @@
       if (old && old.busy) return 'Placeholder record';
       if (!op.del && op.v && op.v.busy) return 'Placeholder record';
       if (!op.del && (!op.v || op.v.id !== op.id)) return 'Malformed change';
+      // The consent ledger is append-only: entries are added, never changed. Only erasure (a supervisor) removes them.
+      if (op.c === 'consents' && old && !op.del) return 'Consent records cannot be changed; record a new decision instead';
+      if (op.c === 'consents' && op.del && !lead) return 'Only a supervisor can erase consent records';
       if (op.c === 'users') {
         if (!lead) return 'Only a supervisor can change accounts';
         if (op.del && op.id === user.id) return 'You cannot delete your own account';

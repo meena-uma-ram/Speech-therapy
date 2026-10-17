@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>Therapy Planner</title>
+  <title>TJS</title>
   <meta name="description" content="Speech diagnostics and therapy: referrals, case allotment, student coursework, timetable, SMART goals, materials, session logs and reports.">
   <meta name="referrer" content="no-referrer">
   <meta name="theme-color" content="#0e6b6b">
   <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExMiIgZmlsbD0iIzBlNmI2YiIvPgogIDxwYXRoIGQ9Ik0xMjAgMTQwaDI3MmEyNCAyNCAwIDAgMSAyNCAyNHYxNjhhMjQgMjQgMCAwIDEtMjQgMjRIMjIwbC04NCA2NHYtNjRoLTE2YTI0IDI0IDAgMCAxLTI0LTI0VjE2NGEyNCAyNCAwIDAgMSAyNC0yNHoiIGZpbGw9IiNmZmZmZmYiLz4KICA8Y2lyY2xlIGN4PSIxOTAiIGN5PSIyNDgiIHI9IjIyIiBmaWxsPSIjMGU2YjZiIi8+CiAgPGNpcmNsZSBjeD0iMjU2IiBjeT0iMjQ4IiByPSIyMiIgZmlsbD0iIzBlNmI2YiIvPgogIDxjaXJjbGUgY3g9IjMyMiIgY3k9IjI0OCIgcj0iMjIiIGZpbGw9IiMwZTZiNmIiLz4KPC9zdmc+Cg==" type="image/svg+xml">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Therapy">
+  <meta name="apple-mobile-web-app-title" content="TJS">
   <style>
 /* Layout: fixed left rail (bottom bar on phones) + one working column; the day's schedule is the spine. */
 :root {
@@ -573,13 +573,56 @@ button.tw-chip { cursor: pointer; }
 fieldset.checks { border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 4px 12px; margin: 0 0 12px; }
 fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
+/* ---------- demo workspace ---------- */
+.demo-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 16px; background: var(--warn-soft); color: var(--warn); border-bottom: 2px solid var(--warn); font-size: .9rem; }
+.demo-banner .demo-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+body.locked .demo-banner { border-radius: var(--radius); margin: 16px auto 0; max-width: 460px; border: 1px solid var(--warn); }
+.rolebar .demo-banner { flex-basis: 100%; margin: -8px -16px 8px; }
+.welcome { max-width: 560px; }
+.ws-choice { display: grid; gap: 12px; margin: 16px 0; }
+.ws-btn { display: flex; flex-direction: column; gap: 4px; text-align: left; font: inherit; padding: 16px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); color: var(--text); cursor: pointer; }
+.ws-btn strong { font-size: 1.05rem; color: var(--primary); }
+.ws-btn span { color: var(--muted); font-size: .9rem; }
+.ws-btn:hover, .ws-btn:focus-visible { border-color: var(--primary); outline: none; box-shadow: 0 0 0 2px var(--primary-soft); }
+.notice-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.new-patients h2 { display: flex; align-items: center; gap: 8px; }
+
+/* ---------- consent ---------- */
+.consent-form .card h3 { margin: 18px 0 6px; }
+fieldset.purpose { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px 12px; margin: 0 0 10px; }
+fieldset.purpose legend { display: flex; align-items: center; gap: 8px; font-weight: 600; padding: 0 4px; }
+fieldset.purpose p { margin: 4px 0 8px; }
+.yesno { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.choice { display: inline-flex; flex-direction: row; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; background: var(--surface); }
+.choice:has(input:checked) { border-color: var(--primary); background: var(--primary-soft); }
+.choice.no:has(input:checked) { border-color: var(--muted); background: var(--fam-other-soft); }
+.method-pick { display: grid; gap: 8px; margin-bottom: 12px; }
+.method-panel { margin: 8px 0 12px; }
+#sig { display: block; width: 100%; max-width: 600px; height: auto; aspect-ratio: 600 / 180; border: 2px dashed var(--border); border-radius: 8px; background: var(--surface); touch-action: none; margin-bottom: 6px; }
+.scan-preview { max-width: 280px; max-height: 280px; border: 1px solid var(--border); border-radius: 8px; margin-top: 8px; }
+.picto { width: 40px; height: 40px; flex: none; fill: none; stroke: var(--primary); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.consent-form.accessible { font-size: 1.15rem; line-height: 1.6; }
+.consent-form.accessible .picto { width: 56px; height: 56px; }
+.consent-form.accessible .choice { min-height: 56px; font-size: 1.15rem; padding: 10px 20px; }
+.receipt .kv { margin-bottom: 12px; }
+.sig-img { max-width: 300px; border: 1px solid var(--border); border-radius: 6px; background: #fff; }
+code.hash { word-break: break-all; font-size: .75rem; }
+
+@media print {
+  .sidebar, .rolebar, .demo-banner, .no-print, .nav, #toast, .back, .head-actions, button, .btn { display: none !important; }
+  body, .card { background: #fff !important; color: #000 !important; box-shadow: none !important; }
+  .main-col, .layout { display: block !important; margin: 0 !important; padding: 0 !important; }
+  .card { border: 1px solid #999 !important; break-inside: avoid; }
+  .choice { border: 1px solid #000 !important; background: #fff !important; }
+}
+
 </style>
 </head>
 <body>
   <a class="skip" href="#view">Skip to content</a>
   <div class="layout">
     <aside class="sidebar">
-      <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></svg> Therapy Planner</div>
+      <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></svg> TJS</div>
       <nav class="nav" aria-label="Main">
         <a href="#/inbox" data-nav="inbox"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 2h6l1-2h5"/></svg> Inbox <span class="nav-count" hidden></span></a>
         <a href="#/schedule" data-nav="schedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg> Schedule</a>
@@ -606,6 +649,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   <script>
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /* Pure helpers with no DOM or storage access, so they can be unit-tested in Node. */
 (function (root) {
   'use strict';
@@ -1052,7 +1096,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
 
-  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders'];
+  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders', 'consents'];
 
   /*
    * Split app data into what is shared (people, materials, settings, receipts) and one bundle per patient,
@@ -1206,6 +1250,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /*
  * Sync rules shared by the browser and the clinic server: record-level changes, who sees what, who may change what.
  * Pure functions with no DOM or storage access, so they can be unit-tested in Node.
@@ -1220,7 +1265,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   const SHARED_SETTINGS = ['nextCaseNo', 'lastRetentionRun'];
   const MAPS = ['settings', 'packed'];
   const SECRET = ['pwHash', 'pwSalt'];
-  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders'];
+  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders', 'consents'];
   const AUDIT_MAX = 5000;
 
   function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
@@ -1366,6 +1411,9 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       if (old && old.busy) return 'Placeholder record';
       if (!op.del && op.v && op.v.busy) return 'Placeholder record';
       if (!op.del && (!op.v || op.v.id !== op.id)) return 'Malformed change';
+      // The consent ledger is append-only: entries are added, never changed. Only erasure (a supervisor) removes them.
+      if (op.c === 'consents' && old && !op.del) return 'Consent records cannot be changed; record a new decision instead';
+      if (op.c === 'consents' && op.del && !lead) return 'Only a supervisor can erase consent records';
       if (op.c === 'users') {
         if (!lead) return 'Only a supervisor can change accounts';
         if (op.del && op.id === user.id) return 'You cannot delete your own account';
@@ -1428,6 +1476,361 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
+/*
+ * Consent: purposes, versioned notices, and an append-only ledger sealed with a hash chain.
+ * Clinical consent to treatment is kept apart from consent to uses of personal data.
+ * Pure functions with no DOM or storage access, so they can be unit-tested in Node.
+ */
+(function (root) {
+  'use strict';
+
+  /* ---------- SHA-256 (synchronous, so a seal can be checked anywhere) ---------- */
+
+  const K = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+    0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+    0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+    0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2];
+
+  function utf8(str) {
+    const out = [];
+    for (let i = 0; i < str.length; i++) {
+      let c = str.charCodeAt(i);
+      if (c >= 0xd800 && c < 0xdc00 && i + 1 < str.length) { c = 0x10000 + ((c - 0xd800) << 10) + (str.charCodeAt(++i) - 0xdc00); }
+      if (c < 0x80) out.push(c);
+      else if (c < 0x800) out.push(0xc0 | c >> 6, 0x80 | c & 63);
+      else if (c < 0x10000) out.push(0xe0 | c >> 12, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+      else out.push(0xf0 | c >> 18, 0x80 | c >> 12 & 63, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+    }
+    return out;
+  }
+
+  function sha256(str) {
+    const bytes = utf8(str), len = bytes.length;
+    bytes.push(0x80);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    const bits = len * 8;
+    for (let i = 7; i >= 0; i--) bytes.push(i > 3 ? Math.floor(bits / Math.pow(2, i * 8)) & 255 : (bits >>> (i * 8)) & 255);
+    const h = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
+    const w = new Array(64);
+    const rot = function (x, n) { return (x >>> n) | (x << (32 - n)); };
+    for (let off = 0; off < bytes.length; off += 64) {
+      for (let i = 0; i < 16; i++) w[i] = (bytes[off + i * 4] << 24) | (bytes[off + i * 4 + 1] << 16) | (bytes[off + i * 4 + 2] << 8) | bytes[off + i * 4 + 3];
+      for (let i = 16; i < 64; i++) {
+        const s0 = rot(w[i - 15], 7) ^ rot(w[i - 15], 18) ^ (w[i - 15] >>> 3), s1 = rot(w[i - 2], 17) ^ rot(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+        w[i] = (w[i - 16] + s0 + w[i - 7] + s1) | 0;
+      }
+      let a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], k = h[7];
+      for (let i = 0; i < 64; i++) {
+        const t1 = (k + (rot(e, 6) ^ rot(e, 11) ^ rot(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0;
+        const t2 = ((rot(a, 2) ^ rot(a, 13) ^ rot(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0;
+        k = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0;
+      }
+      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
+      h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0; h[6] = (h[6] + g) | 0; h[7] = (h[7] + k) | 0;
+    }
+    return h.map(function (x) { return ('00000000' + (x >>> 0).toString(16)).slice(-8); }).join('');
+  }
+
+  /* ---------- purposes ---------- */
+
+  // `flag` is the field in patient.consent that the rest of the app checks.
+  const PURPOSES = [
+    { id: 'treatment', kind: 'clinical', flag: 'therapy', icon: 'treatment' },
+    { id: 'records', kind: 'data', flag: 'records', icon: 'records' },
+    { id: 'students', kind: 'data', flag: 'students', icon: 'students' },
+    { id: 'reports', kind: 'data', flag: 'shareReports', icon: 'reports' },
+    { id: 'reminders', kind: 'data', flag: 'reminders', icon: 'reminders' },
+    { id: 'teaching', kind: 'data', flag: 'teaching', icon: 'teaching' }
+  ];
+
+  const RELATIONSHIPS = {
+    self: 'The patient',
+    parent: 'Parent',
+    guardian: 'Guardian of a child (not a parent)',
+    'legal-guardian': 'Legal guardian of an adult',
+    'nominated-rep': 'Nominated representative'
+  };
+  const ON_BEHALF = ['parent', 'guardian', 'legal-guardian', 'nominated-rep'];
+
+  // For adults who cannot decide for themselves: what gives this person the authority. Confirm the list with the lawyer.
+  const GUARDIAN_BASIS = [
+    'Court order appointing a guardian',
+    'Limited guardianship under the Rights of Persons with Disabilities Act 2016',
+    'Legal guardian under the National Trust Act 1999',
+    'Nominated representative under the Mental Healthcare Act 2017',
+    'Other (describe in the reference)'
+  ];
+
+  const METHODS = {
+    signature: 'Signed on screen',
+    otp: 'Confirmed with a one-time code sent to their phone',
+    paper: 'Signed paper form (scan attached)',
+    thumbprint: 'Thumbprint on a paper form, with a witness',
+    witness: 'Accessible consent explained and witnessed',
+    'in-person': 'Told the clinician in person',
+    phone: 'Said so by phone',
+    written: 'In writing (letter, email or message)',
+    legacy: 'Recorded before the consent ledger (no evidence kept)'
+  };
+
+  const ACTIONS = { grant: 'Agreed', refuse: 'Declined', withdraw: 'Withdrawn' };
+
+  /* ---------- versioned notices ---------- */
+
+  const LANGUAGES = {
+    en: { name: 'English', voice: 'en-IN' },
+    ta: { name: 'தமிழ் (Tamil)', voice: 'ta-IN' },
+    hi: { name: 'हिन्दी (Hindi)', voice: 'hi-IN' },
+    ml: { name: 'മലയാളം (Malayalam)', voice: 'ml-IN' },
+    kn: { name: 'ಕನ್ನಡ (Kannada)', voice: 'kn-IN' }
+  };
+
+  /*
+   * Notice text. Status per language: 'draft' = clinical and legal wording still to be reviewed; 'draft-translation' = machine-assisted,
+   * not yet checked by a qualified translator; 'approved' = reviewed and in use. Only approved text should be relied on with real patients.
+   * Each purpose has `text` (standard) and `simple` (short sentences for the accessible mode).
+   */
+  const NOTICES = {
+    current: '1.0',
+    versions: {
+      '1.0': {
+        effective: '2026-11-01',
+        languages: {
+          en: {
+            status: 'draft',
+            title: 'How we care for you and use your information',
+            intro: '{clinic} provides speech and language assessment and therapy. Before we start, we ask what you agree to. You can say yes to some things and no to others. Saying no to the optional uses below does not change your care.',
+            clinicalHead: 'Consent to assessment and therapy',
+            dataHead: 'How we use your information',
+            purposes: {
+              treatment: { label: 'Assessment and therapy', text: 'A speech and language therapist assesses and treats the patient. They will explain each step, and you can ask questions or stop at any time.', simple: 'We will check speech and language and help with therapy. You can stop any time.' },
+              records: { label: 'Keeping records to provide care', text: 'We keep notes, goals, session records and reports so that care is safe and continuous. Only the people caring for the patient can see them. We keep them for {years} years after therapy ends, or longer only if a law requires it.', simple: 'We write notes about therapy. Only your therapists see them.' },
+              students: { label: 'Student clinicians, supervised', text: 'Student speech and language therapists may assess or treat the patient under the supervision of a qualified therapist, and see the notes they need.', simple: 'A student may help, with a teacher watching.' },
+              reports: { label: 'Progress reports to the family', text: 'We may send short session summaries and progress reports to the contact you give us, through a secure link.', simple: 'We may send you short reports.' },
+              reminders: { label: 'Appointment reminders', text: 'We may send appointment reminders by SMS or WhatsApp Business. They contain only the clinic name, date, time and a link, never health details.', simple: 'We may send a message to remind you of the time.' },
+              teaching: { label: 'Pseudonymised use in teaching', text: 'Students may use the case in coursework and teaching, with the name replaced by a case code and initials. Others could sometimes still recognise a case, so we ask separately.', simple: 'Students may learn from this case. We hide the name.' }
+            },
+            rights: 'You can see your information, ask us to correct it, and withdraw any agreement at any time by telling us. Withdrawing does not undo what was done before. To ask a question or complain, contact {contact}. You can also complain to the Data Protection Board of India.',
+            signHere: 'I have read or been told this information, and my answers above are my choice.'
+          },
+          ta: {
+            status: 'draft-translation',
+            title: 'உங்களுக்கான சிகிச்சையும் உங்கள் தகவல் பயன்பாடும்',
+            intro: '{clinic} பேச்சு மற்றும் மொழி மதிப்பீடு, சிகிச்சை வழங்குகிறது. தொடங்கும் முன் நீங்கள் எதற்கு ஒப்புக்கொள்கிறீர்கள் என்று கேட்கிறோம். சிலவற்றுக்கு ஆம், சிலவற்றுக்கு இல்லை என்று சொல்லலாம். விருப்பப் பயன்பாடுகளுக்கு இல்லை என்று சொன்னாலும் உங்கள் சிகிச்சை மாறாது.',
+            clinicalHead: 'மதிப்பீடு மற்றும் சிகிச்சைக்கான ஒப்புதல்',
+            dataHead: 'உங்கள் தகவலை எப்படிப் பயன்படுத்துகிறோம்',
+            purposes: {
+              treatment: { label: 'மதிப்பீடு மற்றும் சிகிச்சை', text: 'பேச்சு மற்றும் மொழி சிகிச்சையாளர் மதிப்பீடு செய்து சிகிச்சை அளிப்பார். ஒவ்வொரு படியையும் விளக்குவார்; எப்போது வேண்டுமானாலும் கேள்வி கேட்கலாம் அல்லது நிறுத்தலாம்.', simple: 'பேச்சையும் மொழியையும் பார்த்து சிகிச்சை தருவோம். எப்போது வேண்டுமானாலும் நிறுத்தலாம்.' },
+              records: { label: 'சிகிச்சைக்காகப் பதிவுகளை வைத்திருத்தல்', text: 'பாதுகாப்பான, தொடர்ச்சியான சிகிச்சைக்காகக் குறிப்புகள், இலக்குகள், அமர்வுப் பதிவுகள், அறிக்கைகளை வைத்திருக்கிறோம். சிகிச்சை அளிப்பவர்கள் மட்டுமே பார்க்க முடியும். சிகிச்சை முடிந்த பின் {years} ஆண்டுகள் வைத்திருப்போம்.', simple: 'சிகிச்சை பற்றிக் குறிப்பு எழுதுவோம். உங்கள் சிகிச்சையாளர்கள் மட்டுமே பார்ப்பார்கள்.' },
+              students: { label: 'மேற்பார்வையில் மாணவர் சிகிச்சையாளர்கள்', text: 'தகுதி பெற்ற சிகிச்சையாளரின் மேற்பார்வையில் மாணவர்கள் மதிப்பீடு அல்லது சிகிச்சை செய்யலாம், தேவையான குறிப்புகளைப் பார்க்கலாம்.', simple: 'ஆசிரியர் பார்த்துக்கொண்டிருக்க, ஒரு மாணவர் உதவலாம்.' },
+              reports: { label: 'குடும்பத்திற்கு முன்னேற்ற அறிக்கைகள்', text: 'நீங்கள் தரும் தொடர்புக்குப் பாதுகாப்பான இணைப்பு மூலம் சுருக்கமான அறிக்கைகளை அனுப்பலாம்.', simple: 'உங்களுக்குச் சிறிய அறிக்கைகள் அனுப்பலாம்.' },
+              reminders: { label: 'சந்திப்பு நினைவூட்டல்கள்', text: 'SMS அல்லது WhatsApp Business மூலம் நினைவூட்டல் அனுப்பலாம். அதில் மருத்துவமனைப் பெயர், தேதி, நேரம், இணைப்பு மட்டுமே இருக்கும்; உடல்நலத் தகவல் இருக்காது.', simple: 'நேரத்தை நினைவூட்டச் செய்தி அனுப்பலாம்.' },
+              teaching: { label: 'பெயர் மறைத்துக் கற்பித்தலில் பயன்பாடு', text: 'பெயருக்குப் பதிலாக வழக்குக் குறியீடும் முதலெழுத்துகளும் கொண்டு மாணவர்கள் பாடப்பணியிலும் கற்பித்தலிலும் பயன்படுத்தலாம். சில நேரம் மற்றவர்கள் அடையாளம் காணக்கூடும் என்பதால் தனியாகக் கேட்கிறோம்.', simple: 'மாணவர்கள் இந்த வழக்கிலிருந்து கற்கலாம். பெயரை மறைப்போம்.' }
+            },
+            rights: 'உங்கள் தகவலைப் பார்க்கலாம், திருத்தக் கேட்கலாம், எந்த ஒப்புதலையும் எப்போது வேண்டுமானாலும் திரும்பப் பெறலாம். கேள்வி அல்லது புகாருக்கு {contact} ஐத் தொடர்புகொள்ளுங்கள். இந்தியத் தரவுப் பாதுகாப்பு வாரியத்திடமும் புகார் செய்யலாம்.',
+            signHere: 'இந்தத் தகவலைப் படித்தேன் அல்லது எனக்கு விளக்கப்பட்டது; மேலே உள்ள பதில்கள் என் விருப்பம்.'
+          },
+          hi: {
+            status: 'draft-translation',
+            title: 'आपका इलाज और आपकी जानकारी का उपयोग',
+            intro: '{clinic} बोलने और भाषा की जाँच और थेरेपी देता है। शुरू करने से पहले हम पूछते हैं कि आप किन बातों के लिए सहमत हैं। आप कुछ के लिए हाँ और कुछ के लिए ना कह सकते हैं। नीचे दिए वैकल्पिक उपयोगों के लिए ना कहने से आपके इलाज पर कोई असर नहीं पड़ता।',
+            clinicalHead: 'जाँच और थेरेपी के लिए सहमति',
+            dataHead: 'हम आपकी जानकारी का उपयोग कैसे करते हैं',
+            purposes: {
+              treatment: { label: 'जाँच और थेरेपी', text: 'स्पीच और लैंग्वेज थेरेपिस्ट जाँच करेंगे और थेरेपी देंगे। वे हर कदम समझाएँगे; आप कभी भी सवाल पूछ सकते हैं या रोक सकते हैं।', simple: 'हम बोलने और भाषा की जाँच करेंगे और थेरेपी देंगे। आप कभी भी रोक सकते हैं।' },
+              records: { label: 'इलाज के लिए रिकॉर्ड रखना', text: 'सुरक्षित और लगातार इलाज के लिए हम नोट्स, लक्ष्य, सत्र रिकॉर्ड और रिपोर्ट रखते हैं। सिर्फ़ इलाज करने वाले लोग इन्हें देख सकते हैं। थेरेपी खत्म होने के बाद हम इन्हें {years} साल तक रखते हैं।', simple: 'हम थेरेपी के नोट्स लिखते हैं। सिर्फ़ आपके थेरेपिस्ट देखते हैं।' },
+              students: { label: 'निगरानी में छात्र थेरेपिस्ट', text: 'योग्य थेरेपिस्ट की निगरानी में छात्र जाँच या थेरेपी कर सकते हैं और ज़रूरी नोट्स देख सकते हैं।', simple: 'शिक्षक की निगरानी में एक छात्र मदद कर सकता है।' },
+              reports: { label: 'परिवार को प्रगति रिपोर्ट', text: 'आपके दिए संपर्क पर हम सुरक्षित लिंक से छोटी रिपोर्ट भेज सकते हैं।', simple: 'हम आपको छोटी रिपोर्ट भेज सकते हैं।' },
+              reminders: { label: 'अपॉइंटमेंट रिमाइंडर', text: 'हम SMS या WhatsApp Business से रिमाइंडर भेज सकते हैं। उनमें सिर्फ़ क्लिनिक का नाम, तारीख, समय और लिंक होगा, स्वास्थ्य की कोई जानकारी नहीं।', simple: 'समय याद दिलाने के लिए हम संदेश भेज सकते हैं।' },
+              teaching: { label: 'नाम छिपाकर पढ़ाई में उपयोग', text: 'नाम की जगह केस कोड और आद्याक्षर लिखकर छात्र इस केस को कोर्सवर्क और पढ़ाई में उपयोग कर सकते हैं। कभी-कभी फिर भी कोई पहचान सकता है, इसलिए हम अलग से पूछते हैं।', simple: 'छात्र इस केस से सीख सकते हैं। हम नाम छिपाएँगे।' }
+            },
+            rights: 'आप अपनी जानकारी देख सकते हैं, उसे ठीक करवा सकते हैं, और कोई भी सहमति कभी भी वापस ले सकते हैं। सवाल या शिकायत के लिए {contact} से संपर्क करें। आप भारत के डेटा संरक्षण बोर्ड से भी शिकायत कर सकते हैं।',
+            signHere: 'मैंने यह जानकारी पढ़ी है या मुझे समझाई गई है, और ऊपर दिए उत्तर मेरी अपनी पसंद हैं।'
+          },
+          ml: {
+            status: 'draft-translation',
+            title: 'നിങ്ങളുടെ ചികിത്സയും നിങ്ങളുടെ വിവരങ്ങളുടെ ഉപയോഗവും',
+            intro: '{clinic} സംസാര-ഭാഷാ പരിശോധനയും തെറാപ്പിയും നൽകുന്നു. തുടങ്ങുന്നതിനു മുൻപ് നിങ്ങൾ എന്തിനൊക്കെ സമ്മതിക്കുന്നു എന്ന് ഞങ്ങൾ ചോദിക്കുന്നു. ചിലതിന് അതെ എന്നും ചിലതിന് ഇല്ല എന്നും പറയാം. ഐച്ഛിക ഉപയോഗങ്ങൾക്ക് ഇല്ല എന്നു പറഞ്ഞാലും ചികിത്സ മാറില്ല.',
+            clinicalHead: 'പരിശോധനയ്ക്കും തെറാപ്പിക്കുമുള്ള സമ്മതം',
+            dataHead: 'നിങ്ങളുടെ വിവരങ്ങൾ ഞങ്ങൾ എങ്ങനെ ഉപയോഗിക്കുന്നു',
+            purposes: {
+              treatment: { label: 'പരിശോധനയും തെറാപ്പിയും', text: 'സ്പീച്ച്-ലാംഗ്വേജ് തെറാപ്പിസ്റ്റ് പരിശോധിക്കുകയും ചികിത്സിക്കുകയും ചെയ്യും. ഓരോ ഘട്ടവും വിശദീകരിക്കും; എപ്പോൾ വേണമെങ്കിലും ചോദിക്കാം, നിർത്താം.', simple: 'സംസാരവും ഭാഷയും പരിശോധിച്ച് തെറാപ്പി നൽകും. എപ്പോൾ വേണമെങ്കിലും നിർത്താം.' },
+              records: { label: 'ചികിത്സയ്ക്കായി രേഖകൾ സൂക്ഷിക്കൽ', text: 'സുരക്ഷിതവും തുടർച്ചയുള്ളതുമായ ചികിത്സയ്ക്കായി കുറിപ്പുകളും ലക്ഷ്യങ്ങളും റിപ്പോർട്ടുകളും സൂക്ഷിക്കുന്നു. ചികിത്സിക്കുന്നവർക്കു മാത്രമേ കാണാൻ കഴിയൂ. തെറാപ്പി കഴിഞ്ഞ് {years} വർഷം സൂക്ഷിക്കും.', simple: 'തെറാപ്പിയെക്കുറിച്ച് കുറിപ്പുകൾ എഴുതും. നിങ്ങളുടെ തെറാപ്പിസ്റ്റുകൾ മാത്രം കാണും.' },
+              students: { label: 'മേൽനോട്ടത്തിൽ വിദ്യാർത്ഥി തെറാപ്പിസ്റ്റുകൾ', text: 'യോഗ്യതയുള്ള തെറാപ്പിസ്റ്റിന്റെ മേൽനോട്ടത്തിൽ വിദ്യാർത്ഥികൾ പരിശോധനയോ തെറാപ്പിയോ ചെയ്യുകയും ആവശ്യമായ കുറിപ്പുകൾ കാണുകയും ചെയ്യാം.', simple: 'അധ്യാപകൻ നോക്കിനിൽക്കെ ഒരു വിദ്യാർത്ഥി സഹായിച്ചേക്കാം.' },
+              reports: { label: 'കുടുംബത്തിന് പുരോഗതി റിപ്പോർട്ടുകൾ', text: 'നിങ്ങൾ തരുന്ന വിലാസത്തിലേക്ക് സുരക്ഷിത ലിങ്ക് വഴി ചെറിയ റിപ്പോർട്ടുകൾ അയച്ചേക്കാം.', simple: 'നിങ്ങൾക്ക് ചെറിയ റിപ്പോർട്ടുകൾ അയച്ചേക്കാം.' },
+              reminders: { label: 'അപ്പോയിന്റ്മെന്റ് ഓർമ്മപ്പെടുത്തലുകൾ', text: 'SMS അല്ലെങ്കിൽ WhatsApp Business വഴി ഓർമ്മപ്പെടുത്തൽ അയച്ചേക്കാം. അതിൽ ക്ലിനിക്കിന്റെ പേര്, തീയതി, സമയം, ലിങ്ക് മാത്രം; ആരോഗ്യ വിവരങ്ങൾ ഇല്ല.', simple: 'സമയം ഓർമ്മിപ്പിക്കാൻ സന്ദേശം അയച്ചേക്കാം.' },
+              teaching: { label: 'പേര് മറച്ച് പഠനത്തിൽ ഉപയോഗം', text: 'പേരിനു പകരം കേസ് കോഡും ഇനിഷ്യലുകളും ഉപയോഗിച്ച് വിദ്യാർത്ഥികൾ ഈ കേസ് പഠനത്തിൽ ഉപയോഗിച്ചേക്കാം. ചിലപ്പോൾ മറ്റുള്ളവർ തിരിച്ചറിഞ്ഞേക്കാം, അതിനാൽ വേറെ ചോദിക്കുന്നു.', simple: 'വിദ്യാർത്ഥികൾ ഈ കേസിൽ നിന്ന് പഠിച്ചേക്കാം. പേര് മറയ്ക്കും.' }
+            },
+            rights: 'നിങ്ങളുടെ വിവരങ്ങൾ കാണാനും തിരുത്താൻ ആവശ്യപ്പെടാനും ഏതു സമ്മതവും എപ്പോൾ വേണമെങ്കിലും പിൻവലിക്കാനും കഴിയും. ചോദ്യങ്ങൾക്കും പരാതികൾക്കും {contact} നെ ബന്ധപ്പെടുക. ഇന്ത്യയിലെ ഡാറ്റ പ്രൊട്ടക്ഷൻ ബോർഡിനും പരാതി നൽകാം.',
+            signHere: 'ഈ വിവരം ഞാൻ വായിച്ചു അല്ലെങ്കിൽ എനിക്ക് വിശദീകരിച്ചു തന്നു; മുകളിലെ ഉത്തരങ്ങൾ എന്റെ തീരുമാനമാണ്.'
+          },
+          kn: {
+            status: 'draft-translation',
+            title: 'ನಿಮ್ಮ ಚಿಕಿತ್ಸೆ ಮತ್ತು ನಿಮ್ಮ ಮಾಹಿತಿಯ ಬಳಕೆ',
+            intro: '{clinic} ಮಾತು ಮತ್ತು ಭಾಷೆಯ ಪರೀಕ್ಷೆ ಮತ್ತು ಥೆರಪಿ ನೀಡುತ್ತದೆ. ಪ್ರಾರಂಭಿಸುವ ಮೊದಲು ನೀವು ಯಾವುದಕ್ಕೆ ಒಪ್ಪುತ್ತೀರಿ ಎಂದು ಕೇಳುತ್ತೇವೆ. ಕೆಲವಕ್ಕೆ ಹೌದು, ಕೆಲವಕ್ಕೆ ಇಲ್ಲ ಎನ್ನಬಹುದು. ಐಚ್ಛಿಕ ಬಳಕೆಗಳಿಗೆ ಇಲ್ಲ ಎಂದರೂ ನಿಮ್ಮ ಚಿಕಿತ್ಸೆ ಬದಲಾಗುವುದಿಲ್ಲ.',
+            clinicalHead: 'ಪರೀಕ್ಷೆ ಮತ್ತು ಥೆರಪಿಗೆ ಒಪ್ಪಿಗೆ',
+            dataHead: 'ನಿಮ್ಮ ಮಾಹಿತಿಯನ್ನು ನಾವು ಹೇಗೆ ಬಳಸುತ್ತೇವೆ',
+            purposes: {
+              treatment: { label: 'ಪರೀಕ್ಷೆ ಮತ್ತು ಥೆರಪಿ', text: 'ಸ್ಪೀಚ್ ಮತ್ತು ಲ್ಯಾಂಗ್ವೇಜ್ ಥೆರಪಿಸ್ಟ್ ಪರೀಕ್ಷಿಸಿ ಚಿಕಿತ್ಸೆ ನೀಡುತ್ತಾರೆ. ಪ್ರತಿ ಹಂತವನ್ನು ವಿವರಿಸುತ್ತಾರೆ; ಯಾವಾಗ ಬೇಕಾದರೂ ಪ್ರಶ್ನೆ ಕೇಳಬಹುದು ಅಥವಾ ನಿಲ್ಲಿಸಬಹುದು.', simple: 'ಮಾತು ಮತ್ತು ಭಾಷೆಯನ್ನು ಪರೀಕ್ಷಿಸಿ ಥೆರಪಿ ನೀಡುತ್ತೇವೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ನಿಲ್ಲಿಸಬಹುದು.' },
+              records: { label: 'ಚಿಕಿತ್ಸೆಗಾಗಿ ದಾಖಲೆಗಳನ್ನು ಇಡುವುದು', text: 'ಸುರಕ್ಷಿತ ಮತ್ತು ನಿರಂತರ ಚಿಕಿತ್ಸೆಗಾಗಿ ಟಿಪ್ಪಣಿಗಳು, ಗುರಿಗಳು, ವರದಿಗಳನ್ನು ಇಡುತ್ತೇವೆ. ಚಿಕಿತ್ಸೆ ನೀಡುವವರು ಮಾತ್ರ ನೋಡಬಹುದು. ಥೆರಪಿ ಮುಗಿದ ನಂತರ {years} ವರ್ಷ ಇಡುತ್ತೇವೆ.', simple: 'ಥೆರಪಿಯ ಬಗ್ಗೆ ಟಿಪ್ಪಣಿ ಬರೆಯುತ್ತೇವೆ. ನಿಮ್ಮ ಥೆರಪಿಸ್ಟ್‌ಗಳು ಮಾತ್ರ ನೋಡುತ್ತಾರೆ.' },
+              students: { label: 'ಮೇಲ್ವಿಚಾರಣೆಯಲ್ಲಿ ವಿದ್ಯಾರ್ಥಿ ಥೆರಪಿಸ್ಟ್‌ಗಳು', text: 'ಅರ್ಹ ಥೆರಪಿಸ್ಟ್‌ರ ಮೇಲ್ವಿಚಾರಣೆಯಲ್ಲಿ ವಿದ್ಯಾರ್ಥಿಗಳು ಪರೀಕ್ಷೆ ಅಥವಾ ಥೆರಪಿ ಮಾಡಬಹುದು ಮತ್ತು ಅಗತ್ಯ ಟಿಪ್ಪಣಿಗಳನ್ನು ನೋಡಬಹುದು.', simple: 'ಶಿಕ್ಷಕರು ನೋಡುತ್ತಿರುವಾಗ ಒಬ್ಬ ವಿದ್ಯಾರ್ಥಿ ಸಹಾಯ ಮಾಡಬಹುದು.' },
+              reports: { label: 'ಕುಟುಂಬಕ್ಕೆ ಪ್ರಗತಿ ವರದಿಗಳು', text: 'ನೀವು ನೀಡುವ ಸಂಪರ್ಕಕ್ಕೆ ಸುರಕ್ಷಿತ ಲಿಂಕ್ ಮೂಲಕ ಸಣ್ಣ ವರದಿಗಳನ್ನು ಕಳುಹಿಸಬಹುದು.', simple: 'ನಿಮಗೆ ಸಣ್ಣ ವರದಿಗಳನ್ನು ಕಳುಹಿಸಬಹುದು.' },
+              reminders: { label: 'ಅಪಾಯಿಂಟ್‌ಮೆಂಟ್ ಜ್ಞಾಪನೆಗಳು', text: 'SMS ಅಥವಾ WhatsApp Business ಮೂಲಕ ಜ್ಞಾಪನೆ ಕಳುಹಿಸಬಹುದು. ಅದರಲ್ಲಿ ಕ್ಲಿನಿಕ್ ಹೆಸರು, ದಿನಾಂಕ, ಸಮಯ ಮತ್ತು ಲಿಂಕ್ ಮಾತ್ರ; ಆರೋಗ್ಯ ಮಾಹಿತಿ ಇರುವುದಿಲ್ಲ.', simple: 'ಸಮಯ ನೆನಪಿಸಲು ಸಂದೇಶ ಕಳುಹಿಸಬಹುದು.' },
+              teaching: { label: 'ಹೆಸರು ಮರೆಮಾಡಿ ಬೋಧನೆಯಲ್ಲಿ ಬಳಕೆ', text: 'ಹೆಸರಿನ ಬದಲು ಕೇಸ್ ಕೋಡ್ ಮತ್ತು ಇನಿಷಿಯಲ್‌ಗಳನ್ನು ಬಳಸಿ ವಿದ್ಯಾರ್ಥಿಗಳು ಈ ಕೇಸನ್ನು ಕಲಿಕೆಯಲ್ಲಿ ಬಳಸಬಹುದು. ಕೆಲವೊಮ್ಮೆ ಇತರರು ಗುರುತಿಸಬಹುದು, ಆದ್ದರಿಂದ ಪ್ರತ್ಯೇಕವಾಗಿ ಕೇಳುತ್ತೇವೆ.', simple: 'ವಿದ್ಯಾರ್ಥಿಗಳು ಈ ಕೇಸಿನಿಂದ ಕಲಿಯಬಹುದು. ಹೆಸರನ್ನು ಮರೆಮಾಡುತ್ತೇವೆ.' }
+            },
+            rights: 'ನಿಮ್ಮ ಮಾಹಿತಿಯನ್ನು ನೋಡಬಹುದು, ತಿದ್ದಲು ಕೇಳಬಹುದು, ಯಾವುದೇ ಒಪ್ಪಿಗೆಯನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂಪಡೆಯಬಹುದು. ಪ್ರಶ್ನೆ ಅಥವಾ ದೂರಿಗೆ {contact} ಅವರನ್ನು ಸಂಪರ್ಕಿಸಿ. ಭಾರತದ ಡೇಟಾ ಸಂರಕ್ಷಣಾ ಮಂಡಳಿಗೂ ದೂರು ನೀಡಬಹುದು.',
+            signHere: 'ಈ ಮಾಹಿತಿಯನ್ನು ನಾನು ಓದಿದ್ದೇನೆ ಅಥವಾ ನನಗೆ ವಿವರಿಸಲಾಗಿದೆ; ಮೇಲಿನ ಉತ್ತರಗಳು ನನ್ನ ಆಯ್ಕೆ.'
+          }
+        }
+      }
+    }
+  };
+
+  const STATUS_LABEL = { approved: 'Approved', draft: 'Draft: clinical and legal wording to be reviewed', 'draft-translation': 'Draft translation: not yet checked by a qualified translator' };
+
+  function fill(str, vars) { return String(str || '').replace(/\{(\w+)\}/g, function (m, k) { return vars && vars[k] != null ? vars[k] : m; }); }
+
+  /* The notice in one language, falling back to English for anything missing. */
+  function notice(lang, version, vars) {
+    const v = NOTICES.versions[version || NOTICES.current];
+    const en = v.languages.en, t = v.languages[lang] || en;
+    const purposes = {};
+    PURPOSES.forEach(function (p) {
+      const a = (t.purposes || {})[p.id] || en.purposes[p.id];
+      purposes[p.id] = { label: fill(a.label, vars), text: fill(a.text, vars), simple: fill(a.simple, vars) };
+    });
+    const pick = function (k) { return fill(t[k] || en[k], vars); };
+    return { version: version || NOTICES.current, effective: v.effective, lang: v.languages[lang] ? lang : 'en', status: t.status, statusLabel: STATUS_LABEL[t.status] || t.status,
+      title: pick('title'), intro: pick('intro'), clinicalHead: pick('clinicalHead'), dataHead: pick('dataHead'), rights: pick('rights'), signHere: pick('signHere'), purposes: purposes };
+  }
+
+  /* ---------- the ledger ---------- */
+
+  // What the seal covers: everything except the seal itself.
+  function body(e) {
+    const o = {};
+    Object.keys(e).sort().forEach(function (k) { if (k !== 'hash') o[k] = e[k]; });
+    return JSON.stringify(o);
+  }
+  // Pictures (signature, scan) are sealed by their own hash so the chain can be checked without them.
+  function evidenceDigest(ev) {
+    const o = {};
+    Object.keys(ev || {}).sort().forEach(function (k) {
+      const v = ev[k];
+      o[k] = typeof v === 'string' && v.indexOf('data:') === 0 ? 'sha256:' + sha256(v) : v;
+    });
+    return o;
+  }
+
+  function forPatient(entries, pid) {
+    return entries.filter(function (e) { return e.patientId === pid; }).sort(function (a, b) { return a.seq - b.seq || a.at.localeCompare(b.at); });
+  }
+
+  /*
+   * A new ledger entry, sealed onto the end of this patient's chain.
+   * decisions: [{ purpose, action: grant | refuse | withdraw }]
+   */
+  function makeEntry(entries, f) {
+    const chain = forPatient(entries, f.patientId), last = chain[chain.length - 1];
+    const e = {
+      id: f.id || 'con_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7),
+      patientId: f.patientId, seq: last ? last.seq + 1 : 1, at: f.at || new Date().toISOString(),
+      decisions: f.decisions.map(function (d) { return { purpose: d.purpose, action: d.action }; }),
+      giver: { name: f.giver.name, relationship: f.giver.relationship, basis: f.giver.basis || '', basisRef: f.giver.basisRef || '' },
+      recordedBy: f.recordedBy, notice: { version: f.noticeVersion || NOTICES.current }, language: f.language || 'en',
+      method: f.method, accessible: !!f.accessible, note: f.note || '',
+      evidence: f.evidence || {}, evidenceDigest: evidenceDigest(f.evidence),
+      receiptId: f.receiptId || 'CR-' + (f.at || new Date().toISOString()).slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 7).toUpperCase(),
+      prev: last ? last.hash : ''
+    };
+    if (f.demo) e.demo = true;
+    // Evidence pictures are not hashed twice: the seal covers their digest.
+    const sealed = Object.assign({}, e, { evidence: undefined });
+    delete sealed.evidence;
+    e.hash = sha256(body(sealed));
+    return e;
+  }
+
+  /* Recompute every seal. Returns { ok, problems:[...] }. */
+  function verify(entries, pid) {
+    const chain = forPatient(entries, pid), problems = [];
+    let prev = '';
+    chain.forEach(function (e, i) {
+      const sealed = Object.assign({}, e);
+      delete sealed.evidence;
+      if (sha256(body(sealed)) !== e.hash) problems.push('Entry ' + (i + 1) + ' (' + e.receiptId + ') was changed after it was sealed');
+      if (e.prev !== prev) problems.push('Entry ' + (i + 1) + ' does not follow the one before it');
+      const now = evidenceDigest(e.evidence);
+      Object.keys(now).forEach(function (k) { if (JSON.stringify(now[k]) !== JSON.stringify((e.evidenceDigest || {})[k])) problems.push('Evidence "' + k + '" in entry ' + (i + 1) + ' was changed'); });
+      prev = e.hash;
+    });
+    return { ok: !problems.length, problems: problems, count: chain.length };
+  }
+
+  /* Where each purpose stands now: { purpose: { action, at, entry } }. */
+  function current(entries, pid) {
+    const out = {};
+    forPatient(entries, pid).forEach(function (e) {
+      e.decisions.forEach(function (d) { out[d.purpose] = { action: d.action, at: e.at, entry: e }; });
+    });
+    return out;
+  }
+
+  /* The yes/no flags the rest of the app checks (patient.consent). */
+  function flags(entries, pid) {
+    const cur = current(entries, pid), chain = forPatient(entries, pid), last = chain[chain.length - 1];
+    const f = { recordedOn: last ? last.at.slice(0, 10) : '', givenBy: last ? RELATIONSHIPS[last.giver.relationship] || '' : '', ledger: true };
+    PURPOSES.forEach(function (p) { f[p.flag] = !!cur[p.id] && cur[p.id].action === 'grant'; });
+    return f;
+  }
+
+  function ageOn(dob, iso) {
+    if (!dob) return null;
+    const b = new Date(dob + 'T00:00:00'), d = new Date((iso || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
+    let a = d.getFullYear() - b.getFullYear();
+    if (d.getMonth() < b.getMonth() || (d.getMonth() === b.getMonth() && d.getDate() < b.getDate())) a--;
+    return a;
+  }
+
+  /* Reasons to ask again: turned 18, guardian changed, a new purpose, a new notice version, or nothing in the ledger. */
+  function reviewNeeded(p, entries, today) {
+    const chain = forPatient(entries, p.id), last = chain[chain.length - 1], cur = current(entries, p.id), out = [];
+    if (!last) return [{ code: 'none', text: 'No consent recorded in the ledger yet' }];
+    if (chain.every(function (e) { return e.method === 'legacy'; })) out.push({ code: 'legacy', text: 'Recorded before the consent ledger: ask again with a notice' });
+    const giverForChild = last.giver.relationship === 'parent' || last.giver.relationship === 'guardian';
+    const age = ageOn(p.dob, today);
+    if (giverForChild && age != null && age >= 18) out.push({ code: 'adult', text: 'Turned 18: ask the patient themselves' });
+    if (giverForChild && p.guardian && last.giver.name && p.guardian.trim().toLowerCase() !== last.giver.name.trim().toLowerCase()) out.push({ code: 'guardian', text: 'Guardian changed (consent was given by ' + last.giver.name + ')' });
+    PURPOSES.forEach(function (pp) { if (!cur[pp.id]) out.push({ code: 'purpose', purpose: pp.id, text: 'Not asked yet: ' + notice('en').purposes[pp.id].label }); });
+    const major = function (v) { return Number(String(v || '0').split('.')[0]); };
+    if (major(last.notice && last.notice.version) < major(NOTICES.current)) out.push({ code: 'notice', text: 'Privacy notice updated (v' + last.notice.version + ' → v' + NOTICES.current + ')' });
+    return out;
+  }
+
+  /* Plain-text receipt for the person who gave consent. */
+  function receiptText(e, n, ctx) {
+    const lines = [ctx.clinic + ' – consent receipt ' + e.receiptId, '',
+      'Patient: ' + ctx.patient, 'Given by: ' + e.giver.name + ' (' + (RELATIONSHIPS[e.giver.relationship] || e.giver.relationship) + ')' + (e.giver.basis ? ', ' + e.giver.basis + (e.giver.basisRef ? ' ' + e.giver.basisRef : '') : ''),
+      'Date: ' + new Date(e.at).toLocaleString(), 'Notice: version ' + e.notice.version + ', ' + (LANGUAGES[e.language] || LANGUAGES.en).name, 'How: ' + (METHODS[e.method] || e.method), ''];
+    e.decisions.forEach(function (d) { lines.push((ACTIONS[d.action] || d.action) + ': ' + n.purposes[d.purpose].label); });
+    lines.push('', n.rights, '', 'Seal: ' + e.hash);
+    return lines.join('\n');
+  }
+
+  const api = {
+    sha256: sha256, PURPOSES: PURPOSES, RELATIONSHIPS: RELATIONSHIPS, ON_BEHALF: ON_BEHALF, GUARDIAN_BASIS: GUARDIAN_BASIS, METHODS: METHODS, ACTIONS: ACTIONS,
+    LANGUAGES: LANGUAGES, NOTICES: NOTICES, notice: notice, makeEntry: makeEntry, verify: verify, current: current, flags: flags, forPatient: forPatient,
+    reviewNeeded: reviewNeeded, receiptText: receiptText, ageOn: ageOn
+  };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Consent = api;
+})(typeof window !== 'undefined' ? window : this);
+
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /*
  * Data store. Two modes:
  * - On its own (a file, or any website): everything lives in this browser's localStorage; nothing is sent anywhere.
@@ -1439,8 +1842,13 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   'use strict';
   const L = window.Logic;
   const Sync = window.Sync;
+  const C = window.Consent;
   const REMOTE = !!(window.document && document.querySelector('meta[name="therapy-server"]'));
-  const KEY = 'speech-therapy-planner-v1';
+  // Two workspaces per device, kept apart: the demo (fake data, for showing people) and the clinic (real data, starts empty).
+  const BASE_KEY = 'speech-therapy-planner-v1';
+  const WS_KEY = 'tjs-workspace';
+  const WORKSPACE = REMOTE ? '' : pickWorkspace();
+  const KEY = WORKSPACE === 'demo' ? BASE_KEY + '-demo' : BASE_KEY;
   const ENC_KEY = KEY + '-encrypted';
   // Per-patient keys live apart from the data and are never written into a backup.
   const KEYRING_KEY = KEY + '-patient-keys';
@@ -1449,6 +1857,9 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   const PREFS_KEY = KEY + '-device-prefs';
   const PW_ITERATIONS = 100000;
   const DEMO_PW = { pwSalt: 'dGhlcmFweS1wbGFubmVyLWRlbW8tc2FsdA==', pwHash: 'dDoovX6na8XDoauJ0apDiDsLUMsVSr79pyCCuUXcDK4=' }; // "demo1234"
+
+  const GIVEN_BY = { Patient: 'self', Parent: 'parent', 'Legal guardian': 'legal-guardian', 'Carer with legal authority': 'legal-guardian' };
+  const FLAG_PURPOSE = { therapy: 'treatment', students: 'students', shareReports: 'reports', teaching: 'teaching' };
 
   const EMPTY = {
     settings: {
@@ -1463,7 +1874,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       }
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], consents: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -1476,20 +1887,42 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   function blank() { return JSON.parse(JSON.stringify(EMPTY)); }
 
+  /* Which workspace this device last used. Data from before workspaces existed: demo data becomes the demo, anything else the clinic. */
+  function pickWorkspace() {
+    try {
+      const ws = localStorage.getItem(WS_KEY);
+      if (ws === 'demo' || ws === 'clinic') return ws;
+      const raw = localStorage.getItem(BASE_KEY);
+      if (localStorage.getItem(BASE_KEY + '-encrypted')) { localStorage.setItem(WS_KEY, 'clinic'); return 'clinic'; }
+      if (!raw) return '';
+      if (JSON.parse(raw).seeded) {
+        [['', ''], ['-patient-keys', '-patient-keys']].forEach(function (k) {
+          const v = localStorage.getItem(BASE_KEY + k[0]);
+          if (v != null) { localStorage.setItem(BASE_KEY + '-demo' + k[1], v); localStorage.removeItem(BASE_KEY + k[0]); }
+        });
+        localStorage.setItem(WS_KEY, 'demo');
+        return 'demo';
+      }
+      localStorage.setItem(WS_KEY, 'clinic');
+      return 'clinic';
+    } catch (e) { return 'demo'; }
+  }
+
   function load() {
     try {
       if (localStorage.getItem(ENC_KEY)) { locked = true; return blank(); }
       const raw = localStorage.getItem(KEY);
       if (raw) return migrate(Object.assign(blank(), JSON.parse(raw)));
-    } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
-    return seed();
+    } catch (e) { /* storage blocked or corrupt */ }
+    // The demo starts full; the clinic starts empty and asks for its first supervisor.
+    return WORKSPACE === 'demo' ? migrate(seed()) : migrate(blank());
   }
 
   /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
     s.settings.messaging = Object.assign({}, EMPTY.settings.messaging, s.settings.messaging);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events', 'consents'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     Sync.ensureIds(s);
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
@@ -1504,10 +1937,6 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       s.settings.currentUserId = s.users.some(function (u) { return u.id === session; }) ? session : '';
     } else s.settings.currentUserId = remoteMe;
     const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
-    if (!s.users.length && !REMOTE) {
-      s.users.push({ id: 'u_me', name: s.settings.therapistName || 'Me', role: 'supervisor' });
-      s.settings.currentUserId = 'u_me';
-    }
     const me = s.settings.currentUserId || (s.users[0] || {}).id || '';
     s.patients.forEach(function (p) {
       if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
@@ -1515,11 +1944,56 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       if (!p.caseCode) p.caseCode = L.caseCode(new Date().getFullYear(), s.settings.nextCaseNo++);
       if (!p.status) p.status = 'active';
       if (!p.assignedTo && p.status === 'active') p.assignedTo = me;
-      if (!p.consent) p.consent = { therapy: true, students: false, shareReports: false, teaching: false, recordedOn: '', givenBy: '' };
+      if (!p.consent) p.consent = {};
+      // Consent now lives in the ledger. Older yes/no answers become a 'legacy' entry, flagged for asking again.
+      if (!REMOTE && !p.consent.ledger && !s.consents.some(function (e) { return e.patientId === p.id; })) ledgerFromFlags(s, p, 'legacy');
+      if (s.consents.some(function (e) { return e.patientId === p.id; })) p.consent = Object.assign({}, p.consent, C.flags(s.consents, p.id));
       if (p.sessionsAllotted == null) p.sessionsAllotted = p.status === 'active' ? 12 : 0;
       if (!p.reminders) p.reminders = { channel: 'default', phone: '', optIn: false, optInAt: '', optInBy: '' };
     });
     return s;
+  }
+
+  function ledgerFromFlags(s, p, method, demo) {
+    const c = p.consent || {};
+    const decisions = Object.keys(FLAG_PURPOSE).filter(function (k) { return c[k]; }).map(function (k) { return { purpose: FLAG_PURPOSE[k], action: 'grant' }; });
+    if (demo) {
+      decisions.push({ purpose: 'records', action: 'grant' });
+      if (!c.teaching) decisions.push({ purpose: 'teaching', action: 'refuse' });
+      if (!c.students) decisions.push({ purpose: 'students', action: 'refuse' });
+      if (!c.shareReports) decisions.push({ purpose: 'reports', action: 'refuse' });
+      decisions.push({ purpose: 'reminders', action: p.reminders && p.reminders.optIn ? 'grant' : 'refuse' });
+    }
+    if (!decisions.length) return;
+    const rel = GIVEN_BY[c.givenBy] || (p.guardian ? 'parent' : 'self');
+    const e = C.makeEntry(s.consents, {
+      patientId: p.id, decisions: decisions, at: (c.recordedOn || L.todayISO()) + 'T10:00:00.000Z',
+      giver: { name: rel === 'self' ? p.name : (p.guardian || '').replace(/^.*?:\s*/, '') || 'Not recorded', relationship: rel },
+      recordedBy: '', method: method, demo: !!demo, note: demo ? 'Demo data' : 'Converted from the earlier yes/no consent fields'
+    });
+    s.consents.push(e);
+    p.consent = Object.assign({}, c, C.flags(s.consents, p.id));
+  }
+
+  /*
+   * Append to the consent ledger and apply it: the patient's consent flags, reminder opt-in. Entries are never edited;
+   * a change of mind is a new entry. Returns the sealed entry.
+   */
+  function recordConsent(f) {
+    const p = state.patients.find(function (x) { return x.id === f.patientId; });
+    const u = currentUser();
+    const e = C.makeEntry(state.consents, Object.assign({ recordedBy: u ? u.id : '', demo: WORKSPACE === 'demo' || !!serverInfo.demo }, f));
+    state.consents.push(e);
+    p.consent = Object.assign({}, p.consent, C.flags(state.consents, p.id));
+    const rem = e.decisions.find(function (d) { return d.purpose === 'reminders'; });
+    if (rem) {
+      p.reminders = Object.assign({ channel: 'default', phone: '' }, p.reminders, rem.action === 'grant'
+        ? { optIn: true, optInAt: e.at, optInBy: C.RELATIONSHIPS[e.giver.relationship] || '' } : { optIn: false, optInAt: '', optInBy: '' });
+    }
+    audit(e.decisions.some(function (d) { return d.action === 'withdraw'; }) ? 'Consent withdrawn' : 'Consent recorded', p.id,
+      e.decisions.map(function (d) { return d.purpose + ' ' + d.action; }).join(', ') + ' · ' + e.receiptId);
+    save();
+    return e;
   }
 
   /* ---------- persistence & encryption ---------- */
@@ -1658,13 +2132,45 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const u = findUser(login);
     const fail = function () { audit('Failed sign-in', null, login); throw new Error('Email or password not recognised.'); };
     if (!u) return Promise.resolve().then(fail);
-    if (!u.pwHash && u.hasPassword) return Promise.reject(new Error('This account\u2019s password is kept on the clinic server. Ask a supervisor to set a new one here.'));
-    if (!u.pwHash) { setSession(u.id); audit('Signed in (first time)'); return Promise.resolve(u); }
+    // Every account needs a password: a supervisor sets a temporary one, and the person chooses their own at first sign-in.
+    if (!u.pwHash) { audit('Refused sign-in: no password set', null, u.name); return Promise.reject(new Error('This account has no password yet. Ask a supervisor to set a temporary one.')); }
     return hashPassword(pass, u.pwSalt).then(function (h) {
       if (h.pwHash !== u.pwHash) fail();
       setSession(u.id);
       audit('Signed in');
       return u;
+    });
+  }
+
+  /* Clinic workspace, first run or after a clean start: the first supervisor chooses their own password. */
+  function createFirstSupervisor(name, email, pass, clinicName) {
+    if (state.users.length) return Promise.reject(new Error('This clinic already has accounts.'));
+    return hashPassword(pass).then(function (h) {
+      const u = Object.assign({ id: L.uid('use'), name: name, email: email, role: 'supervisor', mustChange: false }, h);
+      state.users.push(u);
+      if (clinicName) state.settings.messaging.clinicName = clinicName;
+      setSession(u.id);
+      audit('Created the clinic\u2019s first supervisor account', null, name);
+      return u;
+    });
+  }
+
+  /*
+   * Clean start (clinic workspace): everything goes, including every account. Deletion receipts are kept as proof.
+   * The next screen asks for a new first supervisor.
+   */
+  function cleanStart() {
+    const receipts = state.deletionReceipts, n = state.patients.length, by = (currentUser() || {}).name || 'System';
+    const p = cryptoKey ? removePassphrase() : Promise.resolve();
+    return p.then(function () {
+      state = blank();
+      keyring = {};
+      state.deletionReceipts = receipts.concat(n ? [{ id: 'DR-' + L.todayISO().replace(/-/g, '') + '-CLEAN', recordId: '*', caseCode: 'All ' + n + ' patients and all accounts',
+        erasedAt: new Date().toISOString(), erasedBy: by, reason: 'Clean start', destroyed: ['All patient records', 'All accounts'],
+        keyDestroyed: 'All patient keys destroyed on this device. Old backups stay readable to anyone who still has an older key file and the backup password: destroy those too.' }] : []);
+      setSession('');
+      save();
+      return persistKeyring();
     });
   }
 
@@ -1852,13 +2358,20 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   }
 
   function remove(collection, id) {
+    const gone = collection === 'patients' && state.patients.find(function (x) { return x.id === id; });
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
-      // Erasure covers every record linked to the person, including messages about them.
-      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
+      // Erasure covers every record linked to the person, including messages and consent records about them.
+      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'consents'].forEach(function (k) {
         state[k] = state[k].filter(function (x) { return x.patientId !== id; });
       });
-      state.audit.forEach(function (e) { if (e.patientId === id) { e.patientId = null; e.target = '(erased record)'; } });
+      // The access log keeps a pseudonymised trail (case code only), so what happened stays accountable after erasure.
+      const code = gone && gone.caseCode || 'erased record';
+      state.audit.forEach(function (e) {
+        if (e.patientId !== id) return;
+        e.patientId = null; e.target = code; e.erased = true;
+        if (gone && gone.name && e.detail) e.detail = e.detail.split(gone.name).join(code);
+      });
     }
     if (collection === 'goals') {
       state.appointments.forEach(function (a) { a.goalIds = (a.goalIds || []).filter(function (g) { return g !== id; }); });
@@ -1900,10 +2413,39 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   function aesKey(rawB64) { return crypto.subtle.importKey('raw', unb64(rawB64), 'AES-GCM', false, ['encrypt', 'decrypt']); }
 
   /*
-   * Backup format v2: people, materials and settings in the clear; each patient's records encrypted with
-   * that patient's own key (AES-256-GCM, patient id bound as associated data). The keys are NOT included.
+   * Backup format v3: the whole file is encrypted with a backup password (AES-256-GCM, PBKDF2 key), so people,
+   * messages and settings are not readable either. Inside, each patient's records are encrypted again with that
+   * patient's own key (patient id bound as associated data). The patient keys are NOT included.
    */
-  function exportBackup() {
+  const BACKUP_ITERATIONS = 310000;
+  function exportBackup(password) {
+    if (!password || password.length < 10) return Promise.reject(new Error('Choose a backup password of at least 10 characters.'));
+    return exportInner().then(function (inner) {
+      const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+      return passwordKey(password, salt).then(function (k) {
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode('tjs-backup') }, k, enc.encode(inner));
+      }).then(function (ct) {
+        return JSON.stringify({ format: 'tjs-backup', v: 3, createdAt: new Date().toISOString(),
+          note: 'Encrypted backup. Opening it needs the backup password; each patient also needs their key from the key file or this device.',
+          kdf: { name: 'PBKDF2-SHA256', iterations: BACKUP_ITERATIONS, salt: b64(salt) }, iv: b64(iv), ct: b64(new Uint8Array(ct)) });
+      });
+    });
+  }
+  function passwordKey(password, salt) {
+    return crypto.subtle.importKey('raw', enc.encode(password), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: BACKUP_ITERATIONS, hash: 'SHA-256' }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+  }
+  /* The inside of a backup, for restoring and for the deletion test. */
+  function openBackup(text, password) {
+    const data = typeof text === 'string' ? JSON.parse(text) : text;
+    if (data.format !== 'tjs-backup') return Promise.resolve(data);
+    if (!password) return Promise.reject(Object.assign(new Error('This backup needs its backup password.'), { needsPassword: true }));
+    return passwordKey(password, unb64(data.kdf.salt)).then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(data.iv), additionalData: enc.encode('tjs-backup') }, k, unb64(data.ct));
+    }).then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { throw Object.assign(new Error('That backup password is not correct.'), { needsPassword: true }); });
+  }
+  function exportInner() {
     const split = L.splitForBackup(state);
     const ids = Object.keys(split.bundles);
     let added = false;
@@ -1919,7 +2461,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     }).then(function (patients) {
       const shared = Object.assign({}, split.shared, { settings: Object.assign({}, split.shared.settings, { currentUserId: '' }) });
       return JSON.stringify({ format: 'therapy-planner-backup', v: 2, createdAt: new Date().toISOString(),
-        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients });
+        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients, erased: erasedIds() });
     });
   }
 
@@ -1931,25 +2473,35 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     }).then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { return null; });
   }
 
-  function importBackup(text) {
-    const data = JSON.parse(text);
-    if (data.format === 'therapy-planner-keys') return importKeyFile(data);
+  function importBackup(text, password) {
+    const outer = JSON.parse(text);
+    if (outer.format === 'therapy-planner-keys') return importKeyFile(outer);
+    return openBackup(outer, password).then(restoreInner);
+  }
+  function restoreInner(data) {
+    // Never bring back someone who was erased, whichever backup or key file is used.
+    const erased = {};
+    erasedIds().concat(data.erased || []).forEach(function (id) { erased[id] = true; });
     if (data.format !== 'therapy-planner-backup') {
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      const receipts = state.deletionReceipts;
+      const receipts = state.deletionReceipts, session = state.settings.currentUserId;
+      const skipped = data.patients.filter(function (p) { return erased[p.id]; }).map(function (p) { return p.caseCode; });
       state = migrate(Object.assign(blank(), data));
+      Object.keys(erased).forEach(function (id) { if (state.patients.some(function (p) { return p.id === id; })) remove('patients', id); });
       state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
+      state.settings.currentUserId = session;
       save();
-      return Promise.resolve({ restored: state.patients.length, shredded: [], legacy: true });
+      return { restored: state.patients.length, shredded: skipped, legacy: true };
     }
-    return Promise.all(data.patients.map(openBundle)).then(function (opened) {
+    const bundles = data.patients.filter(function (b) { return !erased[b.pid]; });
+    return Promise.all(bundles.map(openBundle)).then(function (opened) {
       const receipts = state.deletionReceipts, session = state.settings.currentUserId;
       const ok = opened.filter(Boolean);
       state = migrate(Object.assign(blank(), L.mergeBundles(data.shared, ok)));
       state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
       state.settings.currentUserId = session;
       save();
-      return { restored: ok.length, shredded: data.patients.filter(function (b, i) { return !opened[i]; }).map(function (b) { return b.caseCode; }) };
+      return { restored: ok.length, shredded: data.patients.filter(function (b) { return erased[b.pid] || !opened[bundles.indexOf(b)]; }).map(function (b) { return b.caseCode; }) };
     });
   }
 
@@ -1960,11 +2512,19 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   /* The key file is the disaster-recovery copy of the key ring. Keep it apart from backups. */
   function exportKeyFile() {
-    return JSON.stringify({ format: 'therapy-planner-keys', v: 1, exportedAt: new Date().toISOString(), keys: keyring });
+    const at = new Date().toISOString(), version = state.settings.keysetVersion || 0;
+    state.settings.keyFileExports = (state.settings.keyFileExports || []).concat([{ at: at, version: version, pids: Object.keys(keyring) }]);
+    save();
+    return JSON.stringify({ format: 'therapy-planner-keys', v: 2, exportedAt: at, keysetVersion: version, erased: erasedIds(), keys: keyring });
   }
+  function erasedIds() { return state.deletionReceipts.map(function (r) { return r.recordId; }).filter(function (x) { return x && x !== '*'; }); }
   function importKeyFile(data) {
+    // A key file made before the latest erasure may still hold erased patients' keys.
+    if ((data.keysetVersion || 0) < (state.settings.keysetVersion || 0)) {
+      return Promise.reject(new Error('This key file is older than the latest erasure, so it may hold keys of erased patients. Use the newest key file.'));
+    }
     const erased = {};
-    state.deletionReceipts.forEach(function (r) { erased[r.recordId] = true; });
+    erasedIds().concat(data.erased || []).forEach(function (id) { erased[id] = true; });
     let n = 0;
     Object.keys(data.keys || {}).forEach(function (pid) { if (!erased[pid] && !keyring[pid]) { keyring[pid] = data.keys[pid]; n++; } });
     return persistKeyring().then(function () { return { keysAdded: n, keysRefused: Object.keys(data.keys || {}).filter(function (pid) { return erased[pid]; }).length }; });
@@ -1977,6 +2537,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const counted = {};
     L.PATIENT_COLLECTIONS.forEach(function (k) { counted[k] = state[k].filter(function (x) { return x.patientId === pid; }).length; });
     const hadKey = !!keyring[pid];
+    const inKeyFiles = (state.settings.keyFileExports || []).filter(function (x) { return (x.pids || []).indexOf(pid) >= 0; });
     remove('patients', pid);
     delete keyring[pid];
     persistKeyring();
@@ -1987,9 +2548,15 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       recordId: pid, caseCode: p.caseCode, erasedAt: now.toISOString(), erasedBy: by || (u ? u.name : 'System'), reason: reason,
       destroyed: ['Patient record', counted.goals + ' goals', counted.appointments + ' sessions', counted.logs + ' session logs',
         counted.assessments + ' assessments', counted.documents + ' documents', counted.messages + ' messages'],
-      keyDestroyed: hadKey ? 'Key destroyed – this patient is unreadable in every backup' : 'No backup had been made, so no key existed',
+      keyDestroyed: !hadKey ? 'No backup had been made, so no key existed'
+        : inKeyFiles.length ? 'Key destroyed on this device. ' + inKeyFiles.length + ' key file' + (inKeyFiles.length === 1 ? '' : 's') + ' made before this erasure (' +
+          inKeyFiles.map(function (x) { return x.at.slice(0, 10); }).join(', ') + ') still hold the key: destroy them and make a new key file, or old backups stay readable'
+        : 'Key destroyed. No key file held it, so earlier backups can no longer be read for this patient',
+      keyFilesToDestroy: inKeyFiles.map(function (x) { return x.at; }),
       test: !!isTest
     };
+    // Key files made before now may hold this key; a key file older than the latest erasure is refused on restore.
+    state.settings.keysetVersion = (state.settings.keysetVersion || 0) + 1;
     state.deletionReceipts.push(receipt);
     audit(isTest ? 'Deletion test' : 'Erased record', null, p.caseCode + ' · receipt ' + receipt.id);
     return receipt;
@@ -2232,8 +2799,93 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     s.appointments.find(function (a) { return a.id === 'a_3'; }).observers.push({ userId: 'u_ther', role: 'Observe', status: 'invited', by: 'u_stu2' });
     msg('u_ther', 'u_stu2', 0, 'Invitation to observe – ' + code('p_leo') + ', today 10:30', 'Would you observe my session? I would value feedback on modelling.', '#/session/a_3', 'invite', { apptId: 'a_3', patientId: 'p_leo' });
 
+    s.patients.forEach(function (p) { ledgerFromFlags(s, p, 'paper', true); });
     s.audit.push({ at: new Date().toISOString(), userId: '', user: 'System', action: 'Loaded demo data', patientId: null, target: '', detail: '' });
     return s;
+  }
+
+  /* ---------- demo: fake patients ---------- */
+
+  const FAKE = {
+    child: ['Aarav', 'Ananya', 'Kavin', 'Diya', 'Ishaan', 'Meera', 'Arjun', 'Saanvi', 'Vihaan', 'Nila', 'Rohan', 'Tara', 'Advik', 'Lakshana', 'Kabir', 'Aditi', 'Nikhil', 'Keerthana'],
+    adult: ['Ramesh', 'Lakshmi', 'Suresh', 'Kamala', 'Venkatesh', 'Fatima', 'Joseph', 'Parvathi', 'Rajesh', 'Shanthi', 'Mohan', 'Gita', 'Abdul', 'Usha'],
+    surname: ['Iyer', 'Nair', 'Reddy', 'Sharma', 'Menon', 'Pillai', 'Rao', 'Gowda', 'Patel', 'Das', 'Khan', 'Fernandes', 'Krishnan', 'Joshi', 'Banerjee', 'Kurian', 'Hegde', 'Subramanian'],
+    parent: ['Mrs.', 'Mr.'],
+    childCases: [['DLD', 'Expressive and receptive language delay'], ['Speech sound disorder', 'Fronting of /k g/, cluster reduction'], ['Autism', 'Limited joint attention; few spontaneous words'],
+      ['Stammering', 'Repetitions and blocks for 8 months'], ['CLP', 'Repaired cleft palate; hypernasality'], ['Hearing loss', 'Bilateral hearing aids since age 2'], ['Childhood apraxia of speech', 'Inconsistent errors, groping']],
+    adultCases: [['Stroke – aphasia', 'Left MCA stroke; word-finding difficulty'], ['Stroke – dysarthria', 'Slurred speech after brainstem stroke'], ['Dysphagia', 'Coughing on thin fluids'],
+      ["Parkinson's", 'Reduced loudness; monotone'], ['Head & neck cancer', 'After partial glossectomy'], ['Voice', 'Hoarseness; vocal nodules'], ['Dementia', 'Word-finding and conversation difficulties']],
+    sources: ['Paediatrician', 'School teacher', 'ENT', 'Neurology ward', 'Parent', 'Anganwadi worker', 'Physician']
+  };
+
+  /*
+   * Demo only: add fake patients at every stage, spread across everyone so each role has something new to see:
+   * waiting for assessment (diagnosticians), referred and waiting to be allotted (supervisors), in therapy with each
+   * therapist and student (with goals, sessions and logs), and discharged.
+   */
+  function generateFake(n) {
+    if (WORKSPACE !== 'demo' && !serverInfo.demo) throw new Error('Fake patients can only be added to the demo.');
+    const t = L.todayISO(), made = [];
+    const pick = function (a) { return a[Math.floor(Math.random() * a.length)]; };
+    const staff = function (role) { return state.users.filter(function (u) { return u.role === role; }); };
+    const sups = staff('supervisor'), ther = staff('therapist'), stus = staff('student'), diags = staff('diagnostician');
+    const clinicians = ther.concat(stus);
+    const diag = function () { return (pick(diags.length ? diags : sups) || {}).id || ''; };
+    const stages = ['waiting', 'referred', 'active', 'active', 'active', 'discharged'];
+    let clinicianTurn = 0;
+    for (let i = 0; i < (n || 6); i++) {
+      const child = Math.random() < 0.6, cases = pick(child ? FAKE.childCases : FAKE.adultCases);
+      const first = pick(child ? FAKE.child : FAKE.adult), last = pick(FAKE.surname);
+      const years = child ? 3 + Math.floor(Math.random() * 10) : 25 + Math.floor(Math.random() * 55);
+      const status = stages[i % stages.length];
+      const who = status === 'active' || status === 'discharged' ? clinicians[clinicianTurn++ % Math.max(clinicians.length, 1)] : null;
+      const toStudent = who && who.role === 'student';
+      const p = {
+        id: L.uid('pat'), name: first + ' ' + last, dob: L.addDays(t, -365 * years - Math.floor(Math.random() * 300)), ageGroup: child ? 'Child' : 'Adult',
+        condition: cases[0], diagnosis: cases[1], guardian: child ? pick(FAKE.parent) + ' ' + last : '', contact: 'fake.' + last.toLowerCase() + '@example.com',
+        notes: 'Fake demo patient', caseCode: L.caseCode(new Date().getFullYear(), state.settings.nextCaseNo++), status: status,
+        assignedTo: who ? who.id : '', supervisorId: toStudent && sups[0] ? sups[0].id : '', assessedBy: status === 'waiting' ? null : diag(),
+        referredAt: status === 'waiting' ? null : L.addDays(t, status === 'referred' ? -1 : -40), sessionsAllotted: who ? 10 : 0,
+        dischargedAt: status === 'discharged' ? L.addDays(t, -5) : '', registeredAt: new Date().toISOString(), allottedAt: who ? t : '', fake: true,
+        reminders: { channel: 'default', phone: '+91 9' + String(Math.floor(1e8 + Math.random() * 9e8)), optIn: false, optInAt: '', optInBy: '' },
+        consent: {}
+      };
+      state.patients.push(p);
+      // Consent as a parent or the patient would give it; students only if this case went to a student.
+      const decisions = [{ purpose: 'treatment', action: 'grant' }, { purpose: 'records', action: 'grant' },
+        { purpose: 'students', action: toStudent || Math.random() < 0.5 ? 'grant' : 'refuse' }, { purpose: 'reports', action: 'grant' },
+        { purpose: 'reminders', action: Math.random() < 0.7 ? 'grant' : 'refuse' }, { purpose: 'teaching', action: Math.random() < 0.4 ? 'grant' : 'refuse' }];
+      if (status !== 'waiting' || Math.random() < 0.5) {
+        recordConsent({ patientId: p.id, decisions: decisions, giver: { name: child ? p.guardian : p.name, relationship: child ? 'parent' : 'self' },
+          method: 'signature', language: pick(['en', 'ta', 'hi', 'ml', 'kn']), note: 'Fake demo consent' });
+      }
+      const assessor = p.assessedBy || diag();
+      state.assessments.push({ id: L.uid('ass'), patientId: p.id, assessorId: assessor, date: status === 'waiting' ? t : L.addDays(t, -42), status: status === 'waiting' ? 'draft' : 'completed',
+        source: pick(FAKE.sources), reason: cases[1].toLowerCase(), history: '', tests: status === 'waiting' ? '' : 'Standardised assessment; observation',
+        findings: status === 'waiting' ? '' : cases[1] + '.', diagnosis: status === 'waiting' ? '' : cases[0], severity: status === 'waiting' ? '' : pick(['Mild', 'Moderate', 'Severe']),
+        recommendations: status === 'waiting' ? '' : 'Weekly therapy', frequency: status === 'waiting' ? '' : 'Weekly, 30 min' });
+      if (status !== 'waiting') {
+        state.referrals.push({ id: L.uid('ref'), patientId: p.id, fromId: assessor, at: p.referredAt, priority: pick(['Routine', 'Routine', 'Soon', 'Urgent']), notes: 'Fake demo referral',
+          status: who ? 'allotted' : 'pending', allottedTo: who ? who.id : undefined, allottedBy: who && sups[0] ? sups[0].id : undefined, allottedAt: who ? t : undefined });
+      }
+      if (who && status === 'active') {
+        const gid = L.uid('goa');
+        state.goals.push({ id: gid, patientId: p.id, area: child ? 'Expressive language' : 'Expressive language', title: 'Name everyday objects', specific: first + ' will name everyday objects',
+          measurable: 'with 80% accuracy', achievable: 'Currently about 40%', relevant: 'Needed at home', timeBound: L.addDays(t, 84), targetAccuracy: 80, status: 'active',
+          materialIds: state.materials.slice(0, 2).map(function (m) { return m.id; }), createdAt: L.addDays(t, -14) });
+        [-7, 0, 7].forEach(function (d, k) {
+          const a = { id: L.uid('app'), patientId: p.id, date: L.addDays(t, d), time: ['09:00', '11:30', '14:00', '15:30'][(i + k) % 4], duration: 30, goalIds: [gid], room: 'Room ' + (1 + i % 3),
+            status: d < 0 ? 'attended' : 'scheduled', reschedules: [], observers: [], extraMaterialIds: [] };
+          state.appointments.push(a);
+          if (d < 0) state.logs.push({ id: L.uid('log'), appointmentId: a.id, patientId: p.id, date: a.date, entries: [{ goalId: gid, trials: 10, correct: 5, accuracy: 50, cueing: 'Moderate', progress: 'emerging' }], notes: 'Fake demo session', homework: '' });
+        });
+        send([who.id], { kind: 'allotted', patientId: p.id, link: '#/cases/' + p.id, subject: 'New case – ' + p.caseCode + ' (' + L.initials(p.name) + ')', body: 'Fake demo patient allotted to you.' });
+      }
+      made.push(p);
+    }
+    audit('Generated fake demo patients', null, made.length + ' patients');
+    save();
+    return made;
   }
 
   if (!locked && !REMOTE) keyring = readKeyringPlain();
@@ -2295,7 +2947,18 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     },
     exportJSON: function () { return JSON.stringify(state, null, 2); },
     exportBackup: exportBackup,
-    importBackup: function (text) { return Promise.resolve().then(function () { return importBackup(text); }); },
+    importBackup: function (text, password) { return Promise.resolve().then(function () { return importBackup(text, password); }); },
+    openBackup: openBackup,
+    workspace: function () { return REMOTE ? (serverInfo.demo ? 'demo' : 'clinic') : WORKSPACE; },
+    isDemo: function () { return REMOTE ? !!serverInfo.demo : WORKSPACE === 'demo'; },
+    chooseWorkspace: function (ws) {
+      try { localStorage.setItem(WS_KEY, ws); sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked */ }
+      location.reload();
+    },
+    createFirstSupervisor: createFirstSupervisor,
+    recordConsent: recordConsent,
+    cleanStart: cleanStart,
+    generateFake: generateFake,
     exportKeyFile: exportKeyFile,
     openBundle: openBundle,
     erasePatient: erasePatient,
@@ -2328,12 +2991,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf(KEY) === 0) out.push(localStorage.getItem(k)); } } catch (e) { /* blocked */ }
       return out.join('\n');
     },
-    importJSON: function (text) {
-      const data = JSON.parse(text);
-      if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      state = migrate(Object.assign(blank(), data));
-      save();
-    },
+    importJSON: function (text) { return restoreInner(JSON.parse(text)); },
     clearAll: function () {
       const users = state.users, me = state.settings.currentUserId, receipts = state.deletionReceipts, n = state.patients.length;
       state = blank();
@@ -2361,12 +3019,14 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 })();
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
 /* UI: hash router, views and forms. */
 (function () {
   'use strict';
   const L = window.Logic;
   const S = window.Store;
   const Sync = window.Sync;
+  const C = window.Consent;
   const view = document.getElementById('view');
   const modal = document.getElementById('modal');
 
@@ -2542,6 +3202,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<a href="#/materials?date=' + date + '"><span class="stat">' + common.length + '</span><span class="muted small">Shared materials →</span></a>' +
       '</div>';
 
+    if (date === L.todayISO()) html += newPatientsCard();
     html += mode === 'list' ? scheduleList(appts, m, st) : timetable(appts, m, st, date);
     return html;
   }
@@ -2928,7 +3589,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   function patientForm(id) {
     const p = id ? S.patient(id) : {};
-    const c = p.consent || { therapy: true };
+    const blocked = !id && patientsAllowed();
+    if (blocked) { toast(blocked); go('#/privacy'); return; }
     openModal(id ? 'Edit patient' : 'New patient',
       '<label>Full name<input name="name" required value="' + esc(nm(p)) + '"></label>' +
       '<div class="grid-3"><label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', (p.ageGroup || 'Child') === 'Child') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label>' +
@@ -2939,31 +3601,23 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<div class="grid-2"><label>Parent / guardian / carer<input name="guardian" placeholder="Blank = address adult directly" value="' + esc(p.guardian) + '"></label>' +
       '<label>Email or phone<input name="contact" value="' + esc(p.contact) + '"></label></div>' +
       '<label>Notes<textarea name="notes" rows="2">' + esc(p.notes) + '</textarea></label>' +
-      '<fieldset class="pick consent"><legend>Consent &amp; permissions</legend>' +
-      '<div class="grid-2"><label>Recorded on<input type="date" name="consentOn" value="' + esc(c.recordedOn || L.todayISO()) + '"></label>' +
-      '<label>Given by<select name="consentBy">' + ['Patient', 'Parent', 'Legal guardian', 'Carer with legal authority'].map(function (x) { return opt(x, x, c.givenBy === x); }).join('') + '</select></label></div>' +
-      [['therapy', 'Assessment and therapy'], ['students', 'Supervised student clinicians may be involved'], ['shareReports', 'Session summaries may be sent to the family'], ['teaching', 'Anonymised use in teaching']].map(function (k) {
-        return '<label class="check"><input type="checkbox" name="c_' + k[0] + '"' + (c[k[0]] ? ' checked' : '') + '> ' + k[1] + '</label>';
-      }).join('') + '</fieldset>' + reminderFields(p),
+      '<p class="small muted">' + (id ? 'Consent is recorded on its own page, with the notice, the person\u2019s answers and their signature: <strong>Details &amp; consent → Record consent</strong>.' : 'Next, you record consent with the notice, their answers and their signature.') + '</p>' +
+      reminderFields(p),
       function (fd) {
-        const consent = { therapy: !!fd.get('c_therapy'), students: !!fd.get('c_students'), shareReports: !!fd.get('c_shareReports'), teaching: !!fd.get('c_teaching'),
-          recordedOn: fd.get('consentOn'), givenBy: fd.get('consentBy') };
         const u = me();
         const fresh = !id;
         const saved = S.upsert('patients', Object.assign({}, p, {
           name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
           ageGroup: fd.get('ageGroup'), condition: fd.get('condition').trim(),
-          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes'), consent: consent,
-          reminders: readReminderFields(fd, p, consent.givenBy)
-        }, fresh ? { caseCode: S.nextCaseCode(), status: u.role === 'therapist' ? 'active' : 'waiting', assignedTo: u.role === 'therapist' ? u.id : '' } : {}));
+          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes'), consent: p.consent || {},
+          reminders: readReminderFields(fd, p)
+        }, fresh ? { caseCode: S.nextCaseCode(), status: u.role === 'therapist' ? 'active' : 'waiting', assignedTo: u.role === 'therapist' ? u.id : '', registeredAt: new Date().toISOString(), allottedAt: u.role === 'therapist' ? L.todayISO() : '' } : {}));
         if (fresh) {
           S.audit('Registered patient', saved.id);
-          if (saved.status === 'waiting') {
-            const a = S.upsert('assessments', { patientId: saved.id, assessorId: u.role === 'diagnostician' ? u.id : '', date: L.todayISO(), status: 'draft' });
-            go('#/assessment/' + a.id);
-          } else go('#/patients/' + saved.id);
-        } else if (JSON.stringify(p.consent || {}) !== JSON.stringify(consent)) S.audit('Updated consent', saved.id);
-        else S.audit('Edited patient details', saved.id);
+          let next = '#/patients/' + saved.id + '?tab=record';
+          if (saved.status === 'waiting') next = '#/assessment/' + S.upsert('assessments', { patientId: saved.id, assessorId: u.role === 'diagnostician' ? u.id : '', date: L.todayISO(), status: 'draft' }).id;
+          go('#/consent/' + saved.id + '?next=' + encodeURIComponent(next));
+        } else S.audit('Edited patient details', saved.id);
       },
       id && me().role === 'supervisor' ? function () { const r = S.erasePatient(id, 'Erasure request'); toast('Erased · receipt ' + r.id); go('#/patients'); } : null);
   }
@@ -3181,14 +3835,14 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   function serverScreen(kind) {
     if (kind === 'connecting') return '<div class="lock"><div class="card lock-card"><h1>Connecting to the clinic server…</h1></div></div>';
     return '<div class="lock"><div class="card lock-card"><h1>Can\u2019t reach the clinic server</h1>' +
-      '<p class="muted">Therapy Planner keeps your clinic\u2019s records on one computer. This device can\u2019t reach it right now.</p>' +
+      '<p class="muted">TJS keeps your clinic\u2019s records on one computer. This device can\u2019t reach it right now.</p>' +
       '<ul class="small plain"><li>Check that the clinic computer is switched on and the server is running.</li><li>Away from the clinic, connect to the clinic VPN (for example Tailscale) first.</li></ul>' +
       '<div class="actions"><button class="btn btn-primary" data-action="reconnect">Try again</button></div></div></div>';
   }
 
   function lockScreen() {
     return '<div class="lock"><form id="unlock-form" class="card lock-card">' +
-      '<h1>Therapy Planner is locked</h1><p class="muted">Patient data on this device is encrypted. Enter the passphrase to continue.</p>' +
+      '<h1>TJS is locked</h1><p class="muted">Patient data on this device is encrypted. Enter the passphrase to continue.</p>' +
       '<label>Passphrase<input type="password" name="pass" id="unlock-pass" autocomplete="current-password" required></label>' +
       '<p class="form-error" id="unlock-error" hidden></p>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Unlock</button></div>' +
@@ -3204,7 +3858,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const done = st.assessments.filter(function (a) { return a.status === 'completed' && (me().role === 'supervisor' || a.assessorId === me().id); }).sort(function (a, b) { return b.date.localeCompare(a.date); });
     let html = '<header class="page-head"><div><h1>Diagnostics</h1><p class="muted">Assess new patients and refer them to the therapy department</p></div>' +
       '<button class="btn btn-primary" data-action="new-patient">+ Register patient</button></header>' +
-      tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')']]);
+      tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')']]) + (tab === 'waiting' ? newPatientsCard() : '');
 
     if (tab === 'waiting') {
       if (!waiting.length) return html + '<div class="empty"><p>No one is waiting for assessment.</p></div>';
@@ -3317,9 +3971,17 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const moves = [];
     st.appointments.forEach(function (a) { (a.reschedules || []).forEach(function (r) { moves.push({ a: a, r: r }); }); });
     const t = u.role === 'therapist' ? [['allotted', 'My cases (' + allotted.length + ')']]
-      : [['allot', 'To allot (' + pending.length + ')'], ['allotted', 'Allotted cases (' + allotted.length + ')'], ['review', 'To review (' + review.length + ')'], ['reschedules', 'Reschedules (' + moves.length + ')']];
+      : [['allot', 'To allot (' + pending.length + ')'], ['allotted', 'Allotted cases (' + allotted.length + ')'], ['review', 'To review (' + review.length + ')'], ['reschedules', 'Reschedules (' + moves.length + ')'], ['consent', 'Consent to ask again (' + consentDue().length + ')']];
     let html = '<header class="page-head"><div><h1>' + (u.role === 'therapist' ? 'My cases' : 'Cases') + '</h1><p class="muted">' +
       (u.role === 'therapist' ? 'Patients allotted to you' : 'Referrals from diagnostics, allotment, coursework and reschedules') + '</p></div></header>' + tabs('#/cases', tab, t);
+
+    if (tab === 'consent') {
+      const due = consentDue();
+      if (!due.length) return html + '<div class="empty"><p>No one needs to be asked for consent again.</p></div>';
+      return html + '<ul class="list">' + due.map(function (x) {
+        return '<li><a class="row" href="#/patients/' + x.p.id + '?tab=record"><div><strong>' + esc(nm(x.p)) + '</strong> · ' + esc(x.p.caseCode) + '<div class="muted small">' + x.reasons.map(function (r) { return esc(r.text); }).join(' · ') + '</div></div><span class="btn btn-sm">Open</span></a></li>';
+      }).join('') + '</ul>';
+    }
 
     if (tab === 'reschedules') {
       if (!moves.length) return html + '<div class="empty"><p>No sessions have been rescheduled.</p></div>';
@@ -3347,7 +4009,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
           '<p><strong>' + esc(a.diagnosis || '') + '</strong>' + (a.severity ? ' · ' + esc(a.severity) : '') + '</p>' +
           (a.recommendations ? '<p class="small">' + esc(a.recommendations) + (a.frequency ? ' <span class="muted">(' + esc(a.frequency) + ')</span>' : '') + '</p>' : '') +
           (r.notes ? '<p class="small note">' + esc(r.notes) + '</p>' : '') +
-          '<p class="small consent-line">Therapy ' + tick(c.therapy) + ' · Student clinicians ' + tick(c.students) + ' · Reports to family ' + tick(c.shareReports) + '</p>' +
+          '<p class="small consent-line">Therapy ' + tick(c.therapy) + ' · Student clinicians ' + tick(c.students) + ' · Reports to family ' + tick(c.shareReports) +
+          (C.reviewNeeded(p, S.state.consents, L.todayISO()).length ? ' <a class="badge badge-warn" href="#/patients/' + p.id + '?tab=record">Consent: ask again</a>' : '') + '</p>' +
           '<div class="actions wrap"><a class="btn btn-sm" href="#/assessment/' + a.id + '">Assessment</a>' +
           (u.role === 'supervisor' ? '<button class="btn btn-sm btn-primary" data-action="allot" data-patient="' + p.id + '">Allot</button>'
             : '<button class="btn btn-sm btn-primary" data-action="take-case" data-patient="' + p.id + '">Take on this case</button>') +
@@ -3383,6 +4046,13 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
           cell('pre-assessment') + cell('lesson-plan') + cell('session-report') + cell('conclusion') +
           '<td class="small">' + (student ? esc(prog.next) : '<span class="muted">Qualified clinician</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+
+  /* Patients whose consent should be asked for again (turned 18, guardian changed, new purpose, new notice, nothing recorded). */
+  function consentDue() {
+    return visiblePatients().filter(function (p) { return p.status !== 'discharged'; }).map(function (p) {
+      return { p: p, reasons: C.reviewNeeded(p, S.state.consents, L.todayISO()) };
+    }).filter(function (x) { return x.reasons.length; });
   }
 
   function sessionsCell(p) {
@@ -3500,8 +4170,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<p class="muted">' + esc(pseud(p)) + ' · ' + caseTag(p) + (a ? ' · Session ' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) : '') +
       ' <span class="doc-chip st-' + d.status + '">' + esc(L.DOC_STATUS[d.status]) + '</span></p>' +
       '<p class="small muted">By ' + esc(userName(d.authorId)) + ' · Reviewer: ' + esc(userName(d.reviewerId)) + '</p></div>' +
-      '<div class="head-actions"><button class="btn btn-ghost" data-action="copy-doc" data-id="' + d.id + '">Copy as text</button></div></header>' +
-      '<p class="small muted privacy-note">Coursework uses the case code and initials only. Don\'t add names, addresses or other identifiers.</p>';
+      '<div class="head-actions">' + (p.consent && p.consent.teaching ? '<button class="btn btn-ghost" data-action="copy-doc" data-id="' + d.id + '">Copy for coursework</button>' : '<span class="small muted">No teaching consent: can\u2019t be copied out</span>') + '</div></header>' +
+      '<p class="small muted privacy-note">Coursework is pseudonymised: the case code and initials only. Someone who knows the case could still recognise it, so don\'t add names, addresses or other identifiers.</p>';
 
     if (d.status === 'returned' && lastReturn) html += '<div class="callout warn"><strong>Changes requested by ' + esc(userName(lastReturn.by)) + '</strong><span>' + esc(lastReturn.note) + '</span></div>';
 
@@ -3609,7 +4279,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   function licenceSection() {
     const src = S.serverInfo().source || SOURCE_URL;
     return '<section class="card"><h2>Licence &amp; source code</h2>' +
-      '<p class="small">Therapy Planner is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later). You may use, study, change and share it. ' +
+      '<p class="small">TJS is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later). You may use, study, change and share it. ' +
       'If you change it and let others use it, including over a network, you must offer them your changed source code under the same licence.</p>' +
       '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a></p>' +
       '<p class="small muted">It comes with no warranty. The licence covers the software, not your clinic\u2019s records: those stay yours, and your obligations for them are set by data protection law.</p></section>';
@@ -3632,9 +4302,10 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
         '<li>' + tick(true) + '<div><strong>Checked on the server.</strong> The server sends each person only the records their role may see and refuses changes they may not make.</div></li>'
       : '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
         '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>') +
-      '<li>' + tick(true) + '<div><strong>Individual sign-in and need-to-know access.</strong> Supervisors see all diagnostics and therapy patients; each clinician sees only their own patients, plus sessions they cover or are invited to.</div></li>' +
+      (srv ? '<li>' + tick(true) + '<div><strong>Individual sign-in and need-to-know access, enforced by the server.</strong> Supervisors see all diagnostics and therapy patients; each clinician receives only their own patients, plus sessions they cover or are invited to.</div></li>'
+        : '<li>' + tick(false) + '<div><strong>Individual sign-in and need-to-know screens – not a security barrier.</strong> Each person\u2019s screens show only their own patients. But on one device all records are stored together, and anyone who can unlock this browser, or use its developer tools, can read them. For real separation between staff, run the clinic server.</div></li>') +
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
-      '<li>' + tick(true) + '<div><strong>Consent recorded</strong> per patient; allotment to students and family reports check it.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Consent ledger.</strong> Each answer per purpose, who gave it, in which language and notice version, how they confirmed it. Entries are sealed and never edited; withdrawal takes effect straight away.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
       '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records ' + (set.autoErase ? 'are erased automatically' : 'are flagged for erasure') + ' ' + esc(set.retentionYears) + ' years after therapy ends' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Crypto-shredding.</strong> Each patient has their own key, and backups store each patient encrypted with it. Erasing a patient destroys the key, so every earlier backup becomes unreadable for that patient. Each erasure leaves a deletion receipt.</div></li>' +
@@ -3690,7 +4361,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
     if (!srv || isLead) html += '<section class="card"><h2>Backups &amp; keys</h2>' +
       (srv ? '<p class="small"><strong>On the clinic server</strong>, back up with this button rather than by copying the data folder: copies of the folder hold every patient, and keep erased patients readable.</p>' : '') +
-      '<p class="small">Backups keep people, materials and settings in the clear, and <strong>each patient encrypted with their own key</strong>. The keys stay on this device and are never put in a backup. Erasing a patient destroys their key, so that patient can never be restored from any earlier backup.</p>' +
+      (staleKeyFile() ? '<div class="callout warn"><strong>Replace your key file.</strong><span>A patient was erased after your last key file was made. Make a new key file now and destroy the old ones, or the erased patient can still be opened from old backups.</span></div>' : '') +
+      '<p class="small">The <strong>whole backup is encrypted</strong> with a backup password you choose. Inside, <strong>each patient is encrypted again with their own key</strong>. The keys are never put in a backup: they stay ' + (srv ? 'on the server' : 'on this device') + ', with the key file as the recovery copy. Erasing a patient destroys their key, so later restores can\u2019t read them – as long as no key file made before the erasure is kept.</p>' +
       '<div class="actions wrap"><button class="btn btn-primary" data-action="make-backup">Create backup</button><button class="btn" data-action="export">Download backup</button>' +
       '<label class="btn">Restore backup or key file<input type="file" accept="application/json,.json" id="import-file" hidden></label></div>' +
       '<div id="backup-out"></div>' +
@@ -3716,10 +4388,17 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<li>Where a law requires records to be kept for a set number of years, set the retention period to match. Keep only what the law requires, for as long as it requires, with minimal access. Delete everything else on schedule.</li></ul>' +
       '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
-    if (!srv || isLead) {
-      html += '<section class="card"><h2>Start over</h2>' + (srv ? '<p class="small"><strong>This changes the records for everyone at the clinic.</strong></p>' : '') + '<div class="actions wrap">' +
-        '<button class="btn" data-action="reset-demo">Load demo data</button>' +
-        '<button class="btn btn-danger" data-action="clear-all">Delete all patient data</button></div></section>';
+    if (S.isDemo() && !srv) {
+      html += '<section class="card"><h2>Demo</h2><p class="small">This is the demo workspace: fake data only, kept apart from your clinic\u2019s real records.</p><div class="actions wrap">' +
+        '<button class="btn" data-action="fake-patients">+ Generate fake patients</button><button class="btn" data-action="reset-demo">Reset demo</button>' +
+        '<button class="btn" data-action="choose-workspace" data-ws="clinic">Go to my clinic</button></div></section>';
+    } else if (isLead && !srv) {
+      html += '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
+        '<button class="btn btn-danger" data-action="clear-all">Delete all patient data</button>' +
+        '<button class="btn btn-danger" data-action="clean-start">Clean start: delete everything, including all accounts</button></div>' +
+        '<p class="small muted">To show TJS to someone, use the demo instead: <button class="link" data-action="choose-workspace" data-ws="demo">open the demo</button>. It never touches these records.</p></section>';
+    } else if (isLead && srv && S.isDemo()) {
+      html += '<section class="card"><h2>Demo server</h2><p class="small"><strong>This server runs the demo: fake data only.</strong></p><div class="actions wrap"><button class="btn" data-action="fake-patients">+ Generate fake patients</button></div></section>';
     }
     html += licenceSection();
     return html;
@@ -3740,7 +4419,13 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       assignCase(p, me(), ''); S.save(); render();
     },
     'new-doc': function (el) { newDoc(el.dataset.type, el.dataset.patient, el.dataset.appt); },
-    'copy-doc': function (el) { copyText(docText(S.doc(el.dataset.id))); },
+    'copy-doc': function (el) {
+      const d = S.doc(el.dataset.id), p = S.patient(d.patientId);
+      // Taking coursework out of TJS (portfolio, university submission) is a teaching use, so it needs teaching consent.
+      if (!(p.consent && p.consent.teaching)) { toast('No consent for teaching use: this coursework can be reviewed here but not copied out.'); return; }
+      S.audit('Copied coursework for teaching use', p.id, L.DOC_TYPES[d.type].label);
+      copyText(docText(d));
+    },
     'toggle-names': function () { S.state.settings.hideNames = !S.state.settings.hideNames; S.save(); render(); },
     'lock-now': function () { S.audit('Locked'); S.lock().then(render); },
     'remove-pass': function () {
@@ -3771,14 +4456,15 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
 
   Object.assign(ACTIONS, {
     'make-backup': function () {
-      S.exportBackup().then(function (text) {
-        S.audit('Created backup');
-        const parsed = JSON.parse(text);
-        document.getElementById('backup-out').innerHTML = '<p class="small">Backup created: ' + parsed.patients.length + ' patients, each encrypted with their own key. Copy it into your organisation\'s secure storage.</p>' +
-          '<textarea id="backup-text" rows="5" readonly>' + esc(text) + '</textarea><div class="actions wrap"><button class="btn btn-sm" data-action="copy-backup">Copy backup</button></div>';
+      backupPassword(function (pw) {
+        return S.exportBackup(pw).then(function (text) {
+          S.audit('Created backup');
+          document.getElementById('backup-out').innerHTML = '<p class="small">Backup created and encrypted with your backup password; ' + S.state.patients.length + ' patients inside, each also encrypted with their own key. Copy it into your organisation\'s secure storage.</p>' +
+            '<textarea id="backup-text" rows="5" readonly>' + esc(text) + '</textarea><div class="actions wrap"><button class="btn btn-sm" data-action="copy-backup">Copy backup</button></div>';
+        });
       });
     },
-    'copy-keys': function () { S.audit('Copied key file'); copyText(S.exportKeyFile()); },
+    'copy-keys': function () { S.audit('Copied key file'); copyText(S.exportKeyFile()); render(); },
     'copy-receipts': function () {
       copyText(S.state.deletionReceipts.map(function (r) { return [r.id, r.caseCode, r.erasedAt, r.erasedBy, r.reason, r.keyDestroyed].join('\t'); }).join('\n'));
     },
@@ -3794,6 +4480,25 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
    * Deletion test: create a fake patient, back it up, erase it, then check every place data lives on this device
    * and confirm the earlier backup can no longer be read for that patient.
    */
+  /* Ask for the backup password (twice when making a backup), then run `then(password)`, which returns a promise. */
+  function backupPassword(then, restoring) {
+    openModal(restoring ? 'Open encrypted backup' : 'Backup password',
+      '<p class="small">' + (restoring ? 'Enter the password this backup was made with.' : 'The whole backup file is encrypted with this password. Keep it apart from the backup and from the key file. Without it, the backup cannot be opened.') + '</p>' +
+      '<label>Backup password<input type="password" name="b1" minlength="' + (restoring ? 1 : 10) + '" required autocomplete="' + (restoring ? 'current-password' : 'new-password') + '"></label>' +
+      (restoring ? '' : '<label>Repeat password<input type="password" name="b2" minlength="10" required autocomplete="new-password"></label>'),
+    function (fd) {
+      if (!restoring && fd.get('b1') !== fd.get('b2')) { toast('The passwords don\u2019t match.'); return false; }
+      then(fd.get('b1')).catch(function (e) { toast((restoring ? 'Could not restore: ' : 'Could not make the backup: ') + e.message); });
+    });
+  }
+
+  /* A patient was erased after the last key file was made, so that key file may hold an erased patient's key. */
+  function staleKeyFile() {
+    const ex = S.state.settings.keyFileExports || [];
+    const last = ex[ex.length - 1];
+    return !!last && (last.version || 0) < (S.state.settings.keysetVersion || 0);
+  }
+
   function runDeletionTest() {
     const out = document.getElementById('deletion-test-out');
     out.innerHTML = '<p class="small muted">Running…</p>';
@@ -3806,9 +4511,13 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     S.upsert('logs', { patientId: pid, date: L.todayISO(), entries: [], notes: marker, homework: '' });
     S.send(me().id, { kind: 'note', patientId: pid, subject: 'Test message', body: marker });
     S.audit('Deletion test: created test patient', pid);
-    let backup, receipt;
-    S.exportBackup().then(function (text) {
-      backup = JSON.parse(text);
+    let backup, file, receipt;
+    const pw = 'test-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    S.exportBackup(pw).then(function (text) {
+      file = text;
+      return S.openBackup(text, pw);
+    }).then(function (inner) {
+      backup = inner;
       receipt = S.erasePatient(pid, 'Deletion test', null, true);
       return S.flush();
     }).then(function () {
@@ -3821,7 +4530,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
           ['Not in this device\'s stored data', S.rawStorage().indexOf(marker) < 0],
           ['Patient key destroyed', !S.hasKey(pid)],
           ['The earlier backup can no longer be read for this patient', readable === null],
-          ['Name not readable anywhere in the backup file', JSON.stringify(backup).indexOf(marker) < 0],
+          ['Name not readable anywhere in the backup, even after opening it with the backup password', JSON.stringify(backup).indexOf(marker) < 0],
+          ['The backup file itself is encrypted (no names or case codes readable without the password)', file.indexOf(marker) < 0 && file.indexOf('TEST-') < 0],
           ['Deletion receipt issued (' + receipt.id + ')', S.state.deletionReceipts.some(function (r) { return r.id === receipt.id; })]
         ];
         const pass = checks.every(function (c) { return c[1]; });
@@ -3907,7 +4617,6 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
   }
 
   function recordTab(p) {
-    const c = p.consent || {};
     const a = S.latestAssessment(p.id);
     const r = S.referralFor(p.id);
     const manage = canManage(p) && me().role !== 'diagnostician';
@@ -3919,11 +4628,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<div><dt>Assessment</dt><dd>' + (a ? '<a href="#/assessment/' + a.id + '">' + esc(L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' })) + ' · ' + esc(a.diagnosis || 'draft') + '</a> by ' + esc(userName(a.assessorId)) : '—') + '</dd></div>' +
       '<div><dt>Referral</dt><dd>' + (r ? esc(r.priority) + ', ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + (r.status === 'pending' ? ' – awaiting allotment' : ' – allotted') : '—') + '</dd></div>' +
       '</dl></section>' +
-      '<section class="card"><div class="card-head"><h2>Consent &amp; permissions</h2>' + (canManage(p) ? '<button class="btn btn-sm btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Update</button>' : '') + '</div>' +
-      '<ul class="consent-list"><li>' + tick(c.therapy) + ' Assessment and therapy</li><li>' + tick(c.students) + ' Supervised student clinicians may be involved</li>' +
-      '<li>' + tick(c.shareReports) + ' Session summaries may be sent to the family</li><li>' + tick(c.teaching) + ' Anonymised use in teaching</li></ul>' +
-      '<p class="small">' + reminderLine(p) + '</p>' +
-      '<p class="small muted">' + (c.recordedOn ? 'Recorded ' + esc(L.formatDate(c.recordedOn)) + (c.givenBy ? ', given by ' + esc(c.givenBy) : '') : 'Not recorded yet') + '</p></section>' +
+      consentSection(p) +
       (manage ? '<section class="card"><h2>Data requests</h2><div class="actions wrap"><button class="btn" data-action="copy-record-one" data-id="' + p.id + '">Copy full record</button>' +
         '<button class="btn" data-action="discharge" data-id="' + p.id + '">' + (p.status === 'discharged' ? 'Reopen case' : 'Discharge') + '</button>' +
         (me().role === 'supervisor' ? '<button class="btn btn-danger" data-action="erase" data-id="' + p.id + '">Erase record</button>' : '') + '</div></section>' : '');
@@ -3943,7 +4648,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const accounts = S.isServer() ? info.demoAccounts : S.state.seeded && S.state.users.map(function (u) { return { login: u.email || u.name, name: u.name, role: u.role }; });
     const demo = !!accounts;
     return '<div class="lock"><form id="login-form" class="card lock-card">' +
-      '<h1>Sign in to Therapy Planner</h1><p class="muted">Each person signs in with their own account and sees only the patients they need.</p>' +
+      '<h1>Sign in to TJS</h1><p class="muted">Each person signs in with their own account and sees only the patients they need.</p>' +
       (S.isServer() ? '<p class="small muted">Connected to ' + esc(info.clinic || 'your clinic') + '\u2019s server at ' + esc(location.host) + (info.https ? '' : ' (use only inside the clinic VPN)') + '.</p>' : '') +
       '<label>Email or name<input name="login" id="login-name" autocomplete="username" required></label>' +
       '<label>Password<input type="password" name="pass" autocomplete="current-password"></label>' +
@@ -3953,6 +4658,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
         accounts.map(function (u) {
           return '<li><button type="button" class="link" data-action="demo-login" data-login="' + esc(u.login) + '">' + esc(u.login) + '</button> – ' + esc(u.name) + ', ' + esc(L.ROLES[u.role].label.toLowerCase()) + '</li>';
         }).join('') + '</ul></div>' : '<p class="muted small">Forgotten your password? Ask your clinical supervisor to reset it.</p>') +
+      (S.isServer() ? '' : '<p class="small"><button type="button" class="link" data-action="choose-workspace" data-ws="' + (S.isDemo() ? 'clinic' : 'demo') + '">' + (S.isDemo() ? 'Go to my clinic (real data) ›' : 'Open the demo (fake data) ›') + '</button></p>') +
       '</form></div>';
   }
 
@@ -3972,16 +4678,19 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     const unread = S.inbox(u.id).filter(function (m) { return !m.read; });
     if (!unread.length) return;
     const dlg = document.getElementById('notice');
-    dlg.innerHTML = '<form method="dialog" class="confirm-form"><h2>You have ' + unread.length + ' new message' + (unread.length === 1 ? '' : 's') + '</h2>' +
+    if (dlg.open) return;
+    dlg.innerHTML = '<form method="dialog" class="confirm-form"><header class="notice-head"><h2>You have ' + unread.length + ' new message' + (unread.length === 1 ? '' : 's') + '</h2>' +
+      '<button class="btn btn-ghost" value="later" aria-label="Close">✕</button></header>' +
       '<ul class="notice-list">' + unread.slice(0, 5).map(function (m) {
         return '<li><span class="kind kind-' + esc(m.kind) + '">' + esc(KIND_LABEL[m.kind] || 'Message') + '</span> <strong>' + esc(m.subject) + '</strong><div class="muted small">' + esc(userName(m.from)) + ' · ' + esc(fmtStamp(m.at)) + '</div></li>';
       }).join('') + '</ul><div class="actions"><button class="btn" value="later">Later</button> <button class="btn btn-primary" value="open">Open inbox</button></div></form>';
-    dlg.addEventListener('close', function done() {
-      dlg.removeEventListener('close', done);
-      if (dlg.returnValue === 'open') go('#/inbox');
-    });
+    // One handler at a time; closes with ✕, Later, Escape or a click outside.
+    dlg.onclose = function () { dlg.onclose = null; if (dlg.returnValue === 'open') go('#/inbox'); };
+    dlg.onclick = function (ev) { if (ev.target === dlg) dlg.close('later'); };
     dlg.returnValue = '';
     dlg.showModal();
+    const later = dlg.querySelector('.actions [value=later]');
+    if (later) later.focus();
   }
 
   /* ---------- access for covering and observing ---------- */
@@ -4406,19 +5115,13 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       '<div class="grid-2"><label>Mobile number<input type="tel" name="r_phone" placeholder="+91 98xxx xxxxx" value="' + esc(r.phone || '') + '"></label>' +
       '<label>Send by<select name="r_channel">' + choices.map(function (c) { return opt(c[0], c[1], (r.channel || 'default') === c[0]); }).join('') + '</select></label></div>' +
       (ms.channel !== 'both' ? '<p class="small muted">Your clinic sends reminders by ' + esc(L.CHANNELS[ms.channel]) + ' only. A supervisor can allow both in Privacy &amp; settings.</p>' : '') +
-      '<label class="check"><input type="checkbox" name="r_optIn"' + (r.optIn ? ' checked' : '') + '> They agreed to receive appointment reminders on this number' +
-      (r.optInAt ? ' <span class="muted small">(recorded ' + esc(fmtStamp(r.optInAt)) + ')</span>' : '') + '</label>' +
+      '<p class="small">' + (r.optIn ? '✓ Agreed to reminders ' + esc(fmtStamp(r.optInAt)) : 'No agreement to reminders yet') + ' <span class="muted">– recorded with consent, not here.</span></p>' +
       '<p class="small muted">Reminders contain only the clinic name, date, time and a link – never names or health details.</p></fieldset>';
   }
 
-  function readReminderFields(fd, p, givenBy) {
+  function readReminderFields(fd, p) {
     const old = p.reminders || {};
-    const optIn = !!fd.get('r_optIn');
-    return {
-      phone: (fd.get('r_phone') || '').trim(), channel: fd.get('r_channel') || 'default', optIn: optIn,
-      optInAt: optIn ? (old.optIn ? old.optInAt : new Date().toISOString()) : '',
-      optInBy: optIn ? (old.optIn ? old.optInBy : givenBy || '') : ''
-    };
+    return { phone: (fd.get('r_phone') || '').trim(), channel: fd.get('r_channel') || 'default', optIn: !!old.optIn, optInAt: old.optInAt || '', optInBy: old.optInBy || '' };
   }
 
   function reminderLine(p) {
@@ -4466,7 +5169,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     html += '<div class="actions wrap">' +
       (count('sms') ? '<button class="btn" data-action="copy-reminders" data-channel="sms" data-date="' + date + '">Copy SMS list (' + count('sms') + ')</button>' : '') +
       (count('whatsapp') ? '<button class="btn" data-action="copy-reminders" data-channel="whatsapp" data-date="' + date + '">Copy WhatsApp list (' + count('whatsapp') + ')</button>' : '') +
-      '<button class="btn btn-primary" data-action="mark-reminders" data-date="' + date + '">Mark all as sent</button></div>';
+      '<button class="btn btn-primary" data-action="mark-reminders" data-date="' + date + '">Mark all as sent</button></div>' +
+      '<p class="small callout"><strong>The copied list holds patients\u2019 phone numbers.</strong> Paste it only into your SMS or WhatsApp Business provider. Don\u2019t paste it into chats, email or documents, and copy something else afterwards to clear the clipboard (on some devices the clipboard syncs to other devices or keeps a history).</p>';
     html += '<ul class="list reminders">' + rows.map(function (r) {
       const parts = r.channel === 'sms' ? L.smsParts(r.text) : null;
       return '<li><div class="row"><div class="msg-main"><strong>' + esc(L.formatTime(r.a.time)) + ' · ' + esc(nm(r.p)) + '</strong> ' +
@@ -4782,6 +5486,409 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     'edit-event': function (el) { eventForm(el.dataset.id, {}); }
   });
 
+  /* ---------- consent: notice, per-purpose answers, confirmation, seal, receipt, withdrawal ---------- */
+
+  const PICTO = {
+    treatment: '<path d="M12 21s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 5.6-7 10-7 10z"/>',
+    records: '<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    students: '<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11v5c3 2 9 2 12 0v-5"/>',
+    reports: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 7 8.5-7"/>',
+    reminders: '<circle cx="12" cy="13" r="7"/><path d="M12 9v4l3 2M9 3h6"/>',
+    teaching: '<path d="M4 5h16v10H4z"/><path d="M8 19h8M12 15v4"/>'
+  };
+  function picto(id) { return '<svg class="picto" viewBox="0 0 24 24" aria-hidden="true">' + (PICTO[id] || '') + '</svg>'; }
+
+  function noticeVars() {
+    const set = S.state.settings;
+    return { clinic: set.messaging.clinicName || 'Our clinic', years: set.retentionYears, contact: set.privacyContact || set.messaging.clinicName || 'the clinic' };
+  }
+  function canRecordConsent(p) { const u = me(); return canSee(p) && u.role !== 'student'; }
+  function consentStatus(p) { return C.current(S.state.consents, p.id); }
+
+  function viewConsent(pid, params) {
+    const p = S.patient(pid);
+    if (!p) return '<div class="empty"><p>Patient not found.</p></div>';
+    if (!canRecordConsent(p)) return noAccess();
+    const lang = C.LANGUAGES[params.lang] ? params.lang : 'en';
+    const access = params.access === '1';
+    const n = C.notice(lang, null, noticeVars());
+    const q = function (o) { const x = Object.assign({ lang: lang, access: access ? '1' : '' }, o); return '#/consent/' + p.id + '?' + Object.keys(x).filter(function (k) { return x[k]; }).map(function (k) { return k + '=' + encodeURIComponent(x[k]); }).join('&') + (params.next ? '&next=' + encodeURIComponent(params.next) : ''); };
+    const child = p.ageGroup === 'Child' || (p.dob && C.ageOn(p.dob) < 18);
+    const draft = n.status !== 'approved';
+    const answer = function (pp) {
+      const t = n.purposes[pp.id];
+      return '<fieldset class="purpose' + (access ? ' big' : '') + '"><legend>' + (access ? picto(pp.id) : '') + '<span>' + esc(t.label) + '</span></legend>' +
+        '<p>' + esc(access ? t.simple : t.text) + '</p>' +
+        '<button type="button" class="btn btn-sm btn-ghost" data-action="consent-read" data-lang="' + lang + '" data-text="' + esc(t.label + '. ' + (access ? t.simple : t.text)) + '">▶ Read aloud</button>' +
+        '<div class="yesno" role="radiogroup">' +
+        '<label class="choice yes"><input type="radio" name="p_' + pp.id + '" value="grant" required> ' + (access ? '👍 ' : '') + 'Yes, I agree</label>' +
+        '<label class="choice no"><input type="radio" name="p_' + pp.id + '" value="refuse"> ' + (access ? '👎 ' : '') + 'No</label></div></fieldset>';
+    };
+    let html = '<a class="back no-print" href="#/patients/' + p.id + '?tab=record">‹ ' + esc(pseud(p)) + '</a>' +
+      '<header class="page-head"><div><h1>Consent</h1><p class="muted">' + esc(nm(p)) + ' · ' + esc(p.caseCode) + ' · notice v' + esc(n.version) + '</p></div>' +
+      '<div class="head-actions no-print"><button class="btn btn-ghost" data-action="print">Print this form</button></div></header>';
+    html += '<section class="card no-print"><h2>1. Language and format</h2><div class="pchips">' + Object.keys(C.LANGUAGES).map(function (k) {
+      return '<a class="pchip' + (k === lang ? ' on who-7' : '') + '" href="' + q({ lang: k }) + '" lang="' + k + '">' + esc(C.LANGUAGES[k].name) + '</a>';
+    }).join('') + '</div>' +
+      '<a class="btn btn-sm' + (access ? ' btn-primary' : '') + '" href="' + q({ access: access ? '' : '1' }) + '">' + (access ? '✓ ' : '') + 'Accessible mode: pictures, simple words, read aloud, witness</a>' +
+      '<p class="small muted">Use accessible mode for aphasia, dementia, low literacy or low vision. A witness then confirms that the information was explained.</p></section>';
+    if (draft) html += '<div class="callout warn"><strong>' + esc(n.statusLabel) + '</strong><span>' + (S.isDemo() ? 'Fine for the demo.' : 'Have it reviewed before relying on it with patients.') + (n.status === 'draft-translation' ? ' The clinician must confirm it was explained in this language.' : '') + '</span></div>';
+
+    html += '<form id="consent-form" class="consent-form' + (access ? ' accessible' : '') + '" data-pid="' + p.id + '" data-lang="' + lang + '" data-access="' + (access ? 1 : 0) + '" data-next="' + esc(params.next || '') + '" lang="' + lang + '">';
+    html += '<section class="card"><h2>2. Who is giving consent</h2>' +
+      (child ? '<p class="small muted">' + esc(nm(p)) + ' is a child: a parent or guardian gives consent. Involve the child as far as they can understand.</p>' : '') +
+      '<div class="grid-2"><label>Full name<input name="giverName" required autocomplete="off" placeholder="' + esc(child ? (p.guardian || 'Parent or guardian') : nm(p)) + '"></label>' +
+      '<label>Relationship to the patient<select name="relationship" required>' + opt('', 'Choose…', true) +
+      Object.keys(C.RELATIONSHIPS).map(function (k) { return opt(k, C.RELATIONSHIPS[k]); }).join('') + '</select></label></div>' +
+      '<div class="guardian-basis" hidden><div class="grid-2"><label>Legal basis for deciding for this adult<select name="basis">' + opt('', 'Choose…', true) +
+      C.GUARDIAN_BASIS.map(function (b) { return opt(b, b); }).join('') + '</select></label>' +
+      '<label>Reference (order number, date, issuing court or board)<input name="basisRef"></label></div>' +
+      '<p class="small muted">Keep a copy of the document with the paper records, or attach a photo below.</p></div></section>';
+    html += '<section class="card notice-text"><h2>3. ' + esc(n.title) + '</h2><p>' + esc(n.intro) + '</p>' +
+      '<button type="button" class="btn btn-sm btn-ghost" data-action="consent-read" data-lang="' + lang + '" data-text="' + esc(n.title + '. ' + n.intro) + '">▶ Read aloud</button>' +
+      '<h3>' + esc(n.clinicalHead) + '</h3>' + answer(C.PURPOSES[0]) +
+      '<h3>' + esc(n.dataHead) + '</h3>' + C.PURPOSES.slice(1).map(answer).join('') +
+      '<p class="small">' + esc(n.rights) + '</p></section>';
+    html += '<section class="card"><h2>4. How they confirm</h2><div class="method-pick">' +
+      [['signature', 'Sign on this screen'], ['otp', 'One-time code to their phone'], ['paper', 'Signed paper form (photo)'], ['thumbprint', 'Thumbprint on paper, with a witness']].map(function (m) {
+        const off = m[0] === 'otp' && !S.isDemo();
+        return '<label class="choice"><input type="radio" name="method" value="' + m[0] + '" required' + (off ? ' disabled' : '') + '> ' + esc(m[1]) + (off ? ' <span class="muted small">(needs the online version with an SMS provider)</span>' : '') + '</label>';
+      }).join('') + '</div>' +
+      '<div class="method-panel" data-method="signature" hidden><p class="small">' + esc(n.signHere) + '</p><canvas id="sig" width="600" height="180" aria-label="Signature pad"></canvas>' +
+      '<button type="button" class="btn btn-sm" data-action="sig-clear">Clear</button></div>' +
+      '<div class="method-panel" data-method="otp" hidden><div class="grid-2"><label>Mobile number<input name="otpPhone" type="tel" value="' + esc(p.reminders && p.reminders.phone || '') + '"></label>' +
+      '<div><button type="button" class="btn" data-action="otp-send">Send code</button></div></div><p class="small" id="otp-note"></p>' +
+      '<label>Code they received<input name="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label></div>' +
+      '<div class="method-panel" data-method="paper thumbprint" hidden><label>Photo or scan of the signed form<input type="file" name="scanFile" accept="image/*" capture="environment"></label>' +
+      '<input type="hidden" name="scan"><img class="scan-preview" alt="" hidden></div>' +
+      '<div class="witness"' + (access ? '' : ' hidden') + '><h3>Witness</h3><p class="small muted">Someone independent of the treating clinician, who saw the information explained and the answers given.</p>' +
+      '<div class="grid-2"><label>Witness name<input name="witnessName"></label><label>Witness role or relationship<input name="witnessRole" placeholder="e.g. nurse, family member, interpreter"></label></div></div>' +
+      (draft && n.status === 'draft-translation' ? '<label class="check"><input type="checkbox" name="interpreter"> I explained this in ' + esc(C.LANGUAGES[lang].name) + ' (or an interpreter did) and checked it was understood</label>' : '') +
+      '<p class="form-error" id="consent-error" hidden></p>' +
+      '<div class="actions end"><button class="btn btn-primary" type="submit">Seal consent</button></div></section></form>';
+    return html;
+  }
+
+  /* Wire up the signature pad after the page is drawn. */
+  function initConsentPage() {
+    const c = document.getElementById('sig');
+    if (!c || c.dataset.ready) return;
+    c.dataset.ready = '1';
+    const g = c.getContext('2d');
+    g.lineWidth = 2.5; g.lineCap = 'round'; g.strokeStyle = getComputedStyle(document.body).color;
+    let down = false;
+    const pos = function (e) { const r = c.getBoundingClientRect(); return [(e.clientX - r.left) * c.width / r.width, (e.clientY - r.top) * c.height / r.height]; };
+    c.addEventListener('pointerdown', function (e) { down = true; c.setPointerCapture(e.pointerId); const p = pos(e); g.beginPath(); g.moveTo(p[0], p[1]); });
+    c.addEventListener('pointermove', function (e) { if (!down) return; const p = pos(e); g.lineTo(p[0], p[1]); g.stroke(); c.dataset.signed = '1'; });
+    c.addEventListener('pointerup', function () { down = false; });
+  }
+
+  function consentFormState(form) {
+    const m = (form.querySelector('[name=method]:checked') || {}).value || '';
+    form.querySelectorAll('.method-panel').forEach(function (el) { el.hidden = el.dataset.method.split(' ').indexOf(m) < 0; });
+    const rel = form.querySelector('[name=relationship]').value;
+    form.querySelector('.guardian-basis').hidden = !(rel === 'legal-guardian' || rel === 'nominated-rep');
+    form.querySelector('.witness').hidden = !(form.dataset.access === '1' || m === 'thumbprint');
+    if (m === 'signature') initConsentPage();
+  }
+
+  /* Shrink a photo of a paper form so it fits in the record. */
+  function readScan(file) {
+    return new Promise(function (resolve, reject) {
+      const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = function () {
+        const k = Math.min(1, 1400 / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        resolve(cv.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = function () { reject(new Error('That file is not a picture.')); };
+      img.src = url;
+    });
+  }
+
+  /*
+   * What a decision changes, applied straight away: no students on the case, no new sessions without consent to treatment,
+   * reminders stop (handled in the store). Returns lines for the receipt.
+   */
+  function consentEffects(p, before) {
+    const after = p.consent || {}, out = [], today = L.todayISO();
+    const sups = supervisorsFor(p).filter(function (x) { return x !== me().id; });
+    const future = S.appointmentsFor(p.id).filter(function (a) { return a.date >= today && a.status === 'scheduled'; });
+    if (before.therapy && !after.therapy) {
+      future.forEach(function (a) { a.status = 'cancelled'; a.cancelReason = 'Consent to treatment withdrawn'; });
+      out.push(future.length + ' upcoming session' + (future.length === 1 ? '' : 's') + ' cancelled');
+      S.send(sups.concat(p.assignedTo && p.assignedTo !== me().id ? [p.assignedTo] : []), { kind: 'note', patientId: p.id, link: '#/patients/' + p.id + '?tab=record', subject: 'Consent to treatment withdrawn – ' + pseud(p), body: 'Upcoming sessions were cancelled.' });
+    }
+    if (before.students && !after.students) {
+      const stu = S.user(p.assignedTo);
+      if (stu && stu.role === 'student') {
+        p.assignedTo = ''; p.status = 'referred';
+        future.forEach(function (a) { if (a.status === 'scheduled') a.coverNeeded = true; });
+        S.upsert('referrals', { patientId: p.id, fromId: me().id, at: today, priority: 'Soon', status: 'pending', notes: 'Student consent withdrawn: allot to a qualified therapist.' });
+        S.send([stu.id], { kind: 'note', patientId: p.id, subject: 'Case reassigned – ' + p.caseCode, body: 'The family withdrew consent for student clinicians. Your supervisor will reassign the case.' });
+        S.send(sups, { kind: 'referral', patientId: p.id, link: '#/cases?tab=allot', subject: 'Reallot ' + pseud(p) + ': student consent withdrawn', body: 'Back on the "To allot" list. Upcoming sessions are flagged for cover.' });
+        out.push('Case taken off ' + stu.name + ' and put back on the allotment list');
+      }
+      S.appointmentsFor(p.id).forEach(function (a) {
+        if (a.date < today) return;
+        const n = (a.observers || []).length;
+        a.observers = (a.observers || []).filter(function (o) { const u = S.user(o.userId); return !u || u.role !== 'student'; });
+        if (a.observers.length < n) out.push('Students removed as observers from upcoming sessions');
+      });
+    }
+    if (before.shareReports && !after.shareReports) out.push('Reports to the family are blocked');
+    if (before.reminders && !after.reminders) out.push('Appointment reminders stopped');
+    if (before.teaching && !after.teaching) out.push('Coursework from this case can no longer be copied out of TJS');
+    if (before.records && !after.records) {
+      S.send(sups, { kind: 'note', patientId: p.id, link: '#/patients/' + p.id + '?tab=record', subject: 'Records consent withdrawn – ' + pseud(p), body: 'Review whether the record can be erased, or must be kept for a legal retention period.' });
+      out.push('Supervisor asked to review the record for erasure (legal retention may apply)');
+    }
+    S.save();
+    return out.filter(function (x, i, a) { return a.indexOf(x) === i; });
+  }
+
+  let lastEffects = {};
+
+  function submitConsent(form) {
+    const p = S.patient(form.dataset.pid);
+    const err = form.querySelector('#consent-error');
+    const v = function (n) { const el = form.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
+    const fail = function (m) { err.textContent = m; err.hidden = false; err.scrollIntoView({ block: 'center' }); };
+    const decisions = C.PURPOSES.map(function (pp) { const x = form.querySelector('[name=p_' + pp.id + ']:checked'); return x ? { purpose: pp.id, action: x.value } : null; });
+    if (decisions.some(function (d) { return !d; })) return fail('Answer yes or no for every item.');
+    const rel = v('relationship'), method = (form.querySelector('[name=method]:checked') || {}).value;
+    if ((rel === 'legal-guardian' || rel === 'nominated-rep') && !v('basis')) return fail('Choose the legal basis for deciding for this adult.');
+    const ev = {};
+    if (method === 'signature') {
+      const c = document.getElementById('sig');
+      if (!c.dataset.signed) return fail('Ask them to sign in the box.');
+      ev.signature = c.toDataURL('image/png');
+    }
+    if (method === 'otp') {
+      if (!form.dataset.otpSent) return fail('Send the code first.');
+      if (v('otpCode') !== '123456') return fail('That code is not correct.');
+      ev.otpVerified = true; ev.otpPhone = L.maskPhone(v('otpPhone')); ev.otpSimulated = true;
+    }
+    if (method === 'paper' || method === 'thumbprint') {
+      if (!v('scan')) return fail('Add a photo of the signed form.');
+      ev.scan = v('scan');
+    }
+    const needWitness = form.dataset.access === '1' || method === 'thumbprint';
+    if (needWitness) {
+      if (!v('witnessName') || !v('witnessRole')) return fail('A witness name and role are needed.');
+      ev.witness = { name: v('witnessName'), role: v('witnessRole') };
+    }
+    const interp = form.querySelector('[name=interpreter]');
+    if (interp) { if (!interp.checked) return fail('Confirm that the notice was explained in this language.'); ev.explainedInLanguage = true; }
+    const before = Object.assign({}, p.consent);
+    const e = S.recordConsent({ patientId: p.id, decisions: decisions, giver: { name: v('giverName'), relationship: rel, basis: v('basis'), basisRef: v('basisRef') },
+      noticeVersion: C.NOTICES.current, language: form.dataset.lang, method: form.dataset.access === '1' && method !== 'thumbprint' ? method : method, accessible: form.dataset.access === '1', evidence: ev });
+    lastEffects[e.id] = consentEffects(p, before);
+    go('#/consent-receipt/' + e.id + (form.dataset.next ? '?next=' + encodeURIComponent(form.dataset.next) : ''));
+  }
+
+  function viewConsentReceipt(id, params) {
+    const e = S.state.consents.find(function (x) { return x.id === id; });
+    const p = e && S.patient(e.patientId);
+    if (!e || !p) return '<div class="empty"><p>Receipt not found.</p></div>';
+    if (!canSee(p)) return noAccess();
+    const n = C.notice(e.language, e.notice.version, noticeVars()), en = C.notice('en', e.notice.version, noticeVars());
+    const ver = C.verify(S.state.consents, p.id);
+    const fx = lastEffects[e.id] || [];
+    const text = C.receiptText(e, n, { clinic: noticeVars().clinic, patient: p.caseCode + ' (' + L.initials(p.name) + ')' });
+    return '<div class="no-print"><a class="back" href="#/patients/' + p.id + '?tab=record">‹ ' + esc(pseud(p)) + '</a></div>' +
+      '<article class="card receipt" lang="' + esc(e.language) + '"><header class="card-head"><div><h1>Consent receipt</h1><p class="muted">' + esc(noticeVars().clinic) + ' · <code>' + esc(e.receiptId) + '</code></p></div>' +
+      (e.demo ? '<span class="badge badge-warn">Demo</span>' : '') + '</header>' +
+      '<dl class="kv"><div><dt>Patient</dt><dd>' + esc(p.caseCode + ' (' + L.initials(p.name) + ')') + '</dd></div>' +
+      '<div><dt>Given by</dt><dd>' + esc(e.giver.name || '—') + ' · ' + esc(C.RELATIONSHIPS[e.giver.relationship] || e.giver.relationship) + (e.giver.basis ? '<div class="small">' + esc(e.giver.basis) + (e.giver.basisRef ? ' · ' + esc(e.giver.basisRef) : '') + '</div>' : '') + '</dd></div>' +
+      '<div><dt>When</dt><dd>' + esc(fmtStamp(e.at)) + '</dd></div>' +
+      '<div><dt>Notice</dt><dd>Version ' + esc(e.notice.version) + ' · ' + esc((C.LANGUAGES[e.language] || C.LANGUAGES.en).name) + (e.accessible ? ' · accessible format' : '') + '</dd></div>' +
+      '<div><dt>How</dt><dd>' + esc(C.METHODS[e.method] || e.method) + (e.evidence && e.evidence.witness ? '<div class="small">Witness: ' + esc(e.evidence.witness.name) + ', ' + esc(e.evidence.witness.role) + '</div>' : '') +
+      (e.evidence && e.evidence.otpSimulated ? '<div class="small muted">Demo: simulated code, no SMS sent</div>' : '') + '</dd></div>' +
+      '<div><dt>Recorded by</dt><dd>' + esc(userName(e.recordedBy)) + '</dd></div></dl>' +
+      '<table class="tbl"><tbody>' + e.decisions.map(function (d) {
+        return '<tr><td>' + esc(n.purposes[d.purpose].label) + (e.language !== 'en' ? '<div class="small muted" lang="en">' + esc(en.purposes[d.purpose].label) + '</div>' : '') + '</td>' +
+          '<td class="nowrap"><span class="badge ' + (d.action === 'grant' ? 'badge-good' : 'badge-muted') + '">' + esc(C.ACTIONS[d.action]) + '</span></td></tr>';
+      }).join('') + '</tbody></table>' +
+      (e.evidence && e.evidence.signature ? '<p class="small muted">Signature</p><img class="sig-img" src="' + esc(e.evidence.signature) + '" alt="Signature">' : '') +
+      (fx.length ? '<div class="callout"><strong>Applied straight away</strong><ul class="plain small">' + fx.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>' : '') +
+      '<p class="small">' + esc(n.rights) + '</p>' +
+      '<p class="small muted">Seal <code class="hash">' + esc(e.hash) + '</code> · ledger ' + (ver.ok ? '✓ intact (' + ver.count + ' entries)' : '⚠ ' + esc(ver.problems[0])) + '</p></article>' +
+      '<div class="actions wrap no-print"><button class="btn btn-primary" data-action="print">Print or save as PDF</button>' +
+      '<button class="btn" data-action="copy-consent-receipt" data-id="' + e.id + '" data-text="' + esc(text) + '">Copy as text</button>' +
+      (params.next ? '<a class="btn" href="' + esc(params.next) + '">Continue ›</a>' : '') + '</div>' +
+      '<p class="small muted no-print">Give the family a copy: print it, or copy the text into a message. Sending it to their phone directly comes with the online version.</p>';
+  }
+
+  /* The consent part of a patient's record: where each purpose stands, what needs asking again, and the ledger. */
+  function consentSection(p) {
+    const cur = consentStatus(p), chain = C.forPatient(S.state.consents, p.id), review = C.reviewNeeded(p, S.state.consents, L.todayISO());
+    const ver = C.verify(S.state.consents, p.id), en = C.notice('en', null, noticeVars());
+    const can = canRecordConsent(p);
+    let html = '<section class="card"><div class="card-head"><h2>Consent</h2>' + (can ? '<a class="btn btn-sm btn-primary" href="#/consent/' + p.id + '">Record consent</a>' : '') + '</div>';
+    if (review.length) html += '<div class="callout warn"><strong>Ask again</strong><ul class="plain small">' + review.map(function (r) { return '<li>' + esc(r.text) + '</li>'; }).join('') + '</ul></div>';
+    html += '<div class="table-wrap"><table class="tbl"><thead><tr><th>Purpose</th><th>Now</th><th>Since</th><th></th></tr></thead><tbody>' + C.PURPOSES.map(function (pp) {
+      const c = cur[pp.id];
+      return '<tr><td>' + esc(en.purposes[pp.id].label) + (pp.kind === 'clinical' ? ' <span class="badge">Clinical</span>' : '') + '</td>' +
+        '<td>' + (c ? '<span class="badge ' + (c.action === 'grant' ? 'badge-good' : 'badge-muted') + '">' + esc(C.ACTIONS[c.action]) + '</span>' : '<span class="muted small">Not asked</span>') + '</td>' +
+        '<td class="small nowrap">' + (c ? esc(L.formatDate(c.at.slice(0, 10), { day: 'numeric', month: 'short', year: 'numeric' })) : '') + '</td>' +
+        '<td>' + (can && c && c.action === 'grant' ? '<button class="btn btn-sm btn-ghost" data-action="withdraw-consent" data-id="' + p.id + '" data-purpose="' + pp.id + '">Withdraw</button>' : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    html += '<p class="small">' + reminderLine(p) + '</p>';
+    if (chain.length) {
+      html += '<details><summary class="small">Consent ledger: ' + chain.length + ' entr' + (chain.length === 1 ? 'y' : 'ies') + ' · ' + (ver.ok ? 'seals intact ✓' : '<strong>⚠ ' + esc(ver.problems.join('; ')) + '</strong>') + '</summary><ol class="timeline">' +
+        chain.slice().reverse().map(function (e) {
+          return '<li><span class="muted small">' + esc(fmtStamp(e.at)) + '</span> <a href="#/consent-receipt/' + e.id + '">' + esc(e.receiptId) + '</a> · ' + esc(e.giver.name || '—') + ' (' + esc(C.RELATIONSHIPS[e.giver.relationship] || '') + ') · ' +
+            esc(C.METHODS[e.method] || e.method) + '<div class="small">' + e.decisions.map(function (d) { return esc(en.purposes[d.purpose].label) + ': ' + esc(C.ACTIONS[d.action]); }).join(' · ') + '</div></li>';
+        }).join('') + '</ol><p class="small muted">Entries are never edited. A change of mind is a new entry, and each entry’s seal includes the one before it, so any later change shows up here.</p></details>';
+    }
+    return html + '</section>';
+  }
+
+  function withdrawForm(pid, purpose) {
+    const p = S.patient(pid), label = C.notice('en', null, noticeVars()).purposes[purpose].label;
+    openModal('Withdraw: ' + label, '<p class="small">Withdrawing stops this from now on. It does not undo what was done before.</p>' +
+      '<div class="grid-2"><label>Who is withdrawing<input name="giverName" required></label><label>Relationship<select name="relationship" required>' + opt('', 'Choose…', true) +
+      Object.keys(C.RELATIONSHIPS).map(function (k) { return opt(k, C.RELATIONSHIPS[k]); }).join('') + '</select></label></div>' +
+      '<label>How they told us<select name="method" required>' + opt('', 'Choose…', true) + ['in-person', 'phone', 'written'].map(function (k) { return opt(k, C.METHODS[k]); }).join('') + '</select></label>' +
+      '<label>Note<textarea name="note" rows="2"></textarea></label>' +
+      (purpose === 'treatment' ? '<p class="small"><strong>Upcoming sessions will be cancelled.</strong></p>' : purpose === 'students' ? '<p class="small"><strong>If a student has this case, it goes back on the allotment list.</strong></p>' : ''),
+    function (fd) {
+      const before = Object.assign({}, p.consent);
+      const e = S.recordConsent({ patientId: p.id, decisions: [{ purpose: purpose, action: 'withdraw' }], giver: { name: fd.get('giverName').trim(), relationship: fd.get('relationship') },
+        method: fd.get('method'), note: fd.get('note').trim(), language: 'en' });
+      lastEffects[e.id] = consentEffects(p, before);
+      toast('Withdrawn · ' + (lastEffects[e.id].join('; ') || 'recorded'));
+    });
+  }
+
+  function speak(text, lang) {
+    if (!('speechSynthesis' in window)) { toast('Reading aloud is not available in this browser.'); return; }
+    const code = (C.LANGUAGES[lang] || C.LANGUAGES.en).voice;
+    const voices = speechSynthesis.getVoices();
+    const voice = voices.find(function (v) { return v.lang === code; }) || voices.find(function (v) { return v.lang.indexOf(code.slice(0, 2)) === 0; });
+    if (voices.length && !voice) toast('No ' + C.LANGUAGES[lang].name + ' voice on this device: please read it to them.');
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = code; if (voice) u.voice = voice; u.rate = 0.9;
+    speechSynthesis.speak(u);
+  }
+
+  Object.assign(ACTIONS, {
+    'consent-read': function (el) { speak(el.dataset.text, el.dataset.lang); },
+    'sig-clear': function () { const c = document.getElementById('sig'); c.getContext('2d').clearRect(0, 0, c.width, c.height); delete c.dataset.signed; },
+    'otp-send': function () {
+      const form = document.getElementById('consent-form');
+      if (!S.isDemo()) { toast('Codes need the online version with an SMS provider.'); return; }
+      form.dataset.otpSent = '1';
+      document.getElementById('otp-note').innerHTML = '<strong>Demo code: 123456</strong> <span class="muted">(in the demo no SMS is sent)</span>';
+    },
+    'withdraw-consent': function (el) { withdrawForm(el.dataset.id, el.dataset.purpose); },
+    'copy-consent-receipt': function (el) { copyText(el.dataset.text); },
+    'print': function () { window.print(); }
+  });
+  Object.assign(SUBMITS, { 'consent-form': function (form) { submitConsent(form); } });
+
+  document.addEventListener('change', function (ev) {
+    const form = ev.target.closest('#consent-form');
+    if (!form) return;
+    consentFormState(form);
+    if (ev.target.name === 'scanFile' && ev.target.files[0]) {
+      readScan(ev.target.files[0]).then(function (url) {
+        form.querySelector('[name=scan]').value = url;
+        const img = form.querySelector('.scan-preview'); img.src = url; img.hidden = false;
+      }, function (e) { toast(e.message); });
+    }
+  });
+
+  /* ---------- workspaces: demo (fake data) and clinic (real data) ---------- */
+
+  function welcomeScreen() {
+    return '<div class="lock"><div class="card lock-card welcome"><h1>Welcome to TJS</h1>' +
+      '<p class="muted">Speech diagnostics and therapy: referrals, timetable, goals, sessions, consent and reports.</p>' +
+      '<div class="ws-choice"><button class="ws-btn" data-action="choose-workspace" data-ws="demo"><strong>Try the demo</strong><span>A full fake clinic with demo accounts. Nothing real goes in.</span></button>' +
+      '<button class="ws-btn" data-action="choose-workspace" data-ws="clinic"><strong>Set up my clinic</strong><span>Starts empty. You create the first supervisor account and an encryption passphrase.</span></button></div>' +
+      '<p class="small muted">The two are kept apart on this device. You can switch at any time from the sign-in screen.</p></div></div>';
+  }
+
+  function setupScreen() {
+    return '<div class="lock"><form id="setup-form" class="card lock-card"><h1>Set up your clinic</h1>' +
+      '<p class="muted">You will be the first clinical supervisor. You then create everyone else’s accounts.</p>' +
+      '<label>Clinic name<input name="clinic" required value=""></label>' +
+      '<div class="grid-2"><label>Your name<input name="name" required autocomplete="name"></label><label>Your email<input name="email" type="email" required autocomplete="username"></label></div>' +
+      '<div class="grid-2"><label>Your password<input type="password" name="p1" minlength="10" required autocomplete="new-password"></label><label>Repeat password<input type="password" name="p2" minlength="10" required autocomplete="new-password"></label></div>' +
+      '<h2>Encrypt this device’s data</h2><p class="small">Patients can only be added once the data is encrypted. Choose a passphrase of at least 10 characters, different from your password. <strong>If it is lost, the data cannot be recovered</strong>, so keep it somewhere safe and make backups.</p>' +
+      '<div class="grid-2"><label>Passphrase<input type="password" name="k1" minlength="10" required autocomplete="new-password"></label><label>Repeat passphrase<input type="password" name="k2" minlength="10" required autocomplete="new-password"></label></div>' +
+      '<p class="form-error" id="setup-error" hidden></p>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Create clinic</button></div>' +
+      '<p class="small"><button type="button" class="link" data-action="choose-workspace" data-ws="demo">Open the demo instead</button></p></form></div>';
+  }
+
+  function demoBanner() {
+    return '<div class="demo-banner" role="note"><strong>Demo – fake data only.</strong> <span>Don’t enter real patients here.</span>' +
+      '<span class="demo-actions">' + (me().role === 'supervisor' || !S.isServer() ? '<button class="btn btn-sm" data-action="fake-patients">+ Generate fake patients</button>' : '') +
+      (!S.isServer() ? '<button class="btn btn-sm" data-action="reset-demo">Reset demo</button><button class="btn btn-sm" data-action="choose-workspace" data-ws="clinic">Go to my clinic</button>' : '') + '</span></div>';
+  }
+
+  /* Patients can be added only once the data is encrypted (the demo is fake data). */
+  function patientsAllowed() {
+    if (S.isDemo()) return '';
+    if (S.isServer()) return S.serverInfo().encryptedAtRest ? '' : 'The clinic server is not encrypting its data. Start it with THERAPY_DATA_PASSPHRASE set before adding patients.';
+    return S.hasPassphrase() ? '' : 'Set an encryption passphrase in Privacy & settings before adding patients.';
+  }
+
+  /* Newly registered or newly allotted patients, shown where each role starts its day. */
+  function newPatientsCard() {
+    const u = me(), since = L.addDays(L.todayISO(), -14);
+    const fresh = visiblePatients().filter(function (p) {
+      const at = (p.allottedAt || '').slice(0, 10) || (p.registeredAt || '').slice(0, 10) || (p.referredAt || '');
+      if (!at || at < since) return false;
+      if (u.role === 'therapist' || u.role === 'student') return p.assignedTo === u.id;
+      if (u.role === 'diagnostician') return p.status === 'waiting';
+      return true;
+    }).sort(function (a, b) { return String(b.registeredAt || b.allottedAt || '').localeCompare(String(a.registeredAt || a.allottedAt || '')); });
+    if (!fresh.length) return '';
+    const label = { supervisor: 'New patients (last 14 days)', therapist: 'Newly allotted to you', student: 'Newly allotted to you', diagnostician: 'New on the waiting list' }[u.role];
+    return '<section class="card new-patients"><div class="card-head"><h2>' + esc(label) + ' <span class="rb-count">' + fresh.length + '</span></h2></div><ul class="list flat">' +
+      fresh.slice(0, 6).map(function (p) {
+        return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(nm(p)) + '</strong> ' + caseTag(p) + statusPill(p) + '<div class="muted small">' + esc(p.caseCode) + (p.assignedTo ? ' · ' + esc(userName(p.assignedTo)) : '') + '</div></div><span class="chev" aria-hidden="true">›</span></a></li>';
+      }).join('') + '</ul>' + (fresh.length > 6 ? '<p class="small"><a href="#/patients">All patients ›</a></p>' : '') + '</section>';
+  }
+
+  Object.assign(ACTIONS, {
+    'choose-workspace': function (el) { S.chooseWorkspace(el.dataset.ws); },
+    'fake-patients': function () {
+      try {
+        const made = S.generateFake(6);
+        toast(made.length + ' fake patients added: waiting list, to allot, in therapy and discharged');
+        render();
+      } catch (e) { toast(e.message); }
+    },
+    'clean-start': function () {
+      ask('Clean start: delete every patient, every account (including yours) and all settings on this device? Deletion receipts are kept. You then create a new first supervisor.', 'Delete everything').then(function (ok) {
+        if (!ok) return;
+        S.cleanStart().then(function () { route = '#/'; render(); toast('Clean start: create the first supervisor'); });
+      });
+    }
+  });
+  Object.assign(SUBMITS, {
+    'setup-form': function (form) {
+      const v = function (n) { return form.querySelector('[name=' + n + ']').value; };
+      const err = document.getElementById('setup-error');
+      const fail = function (m) { err.textContent = m; err.hidden = false; };
+      if (v('p1') !== v('p2')) return fail('The passwords don’t match.');
+      if (v('k1') !== v('k2')) return fail('The passphrases don’t match.');
+      if (v('k1') === v('p1')) return fail('Use a passphrase that is different from your password.');
+      if (!S.cryptoAvailable()) return fail('This browser cannot encrypt data here. Open TJS from a file or over https in an up-to-date browser.');
+      S.createFirstSupervisor(v('name').trim(), v('email').trim(), v('p1'), v('clinic').trim())
+        .then(function () { return S.setPassphrase(v('k1')); })
+        .then(function () { S.audit('Turned on encryption'); lastActivity = Date.now(); route = '#/'; render(); toast('Your clinic is ready. Add people under Privacy → People & sign-in.'); }, function (e) { fail(e.message); });
+    }
+  });
+
   /* ---------- router ---------- */
 
   function render() {
@@ -4795,6 +5902,9 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
       return;
     }
     const cur = S.currentUser();
+    document.body.classList.toggle('demo-mode', S.isDemo());
+    if (!S.isServer() && !S.workspace()) { document.body.classList.add('locked'); bar.innerHTML = ''; view.innerHTML = welcomeScreen(); return; }
+    if (!S.isServer() && !S.state.users.length) { document.body.classList.add('locked'); bar.innerHTML = ''; view.innerHTML = setupScreen(); const f = view.querySelector('input'); if (f) f.focus(); return; }
     if (!cur && S.isServer() && (S.syncStatus() === 'connecting' || S.syncStatus() === 'unreachable')) {
       document.body.classList.add('locked');
       bar.innerHTML = '';
@@ -4804,7 +5914,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     if (!cur || cur.mustChange) {
       document.body.classList.add('locked');
       bar.innerHTML = '';
-      view.innerHTML = cur ? newPasswordScreen(cur) : loginScreen();
+      view.innerHTML = (S.isDemo() ? '<div class="demo-banner" role="note"><strong>Demo – fake data only.</strong> <span>Sign in with any demo account below.</span></div>' : '') + (cur ? newPasswordScreen(cur) : loginScreen());
       const f = view.querySelector('input');
       if (f) f.focus();
       return;
@@ -4815,7 +5925,7 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     let section = r.parts[0];
     if (section === 'settings') section = 'privacy';
     if (!section) section = u.role === 'diagnostician' ? 'diagnostics' : 'schedule';
-    bar.innerHTML = rolebar();
+    bar.innerHTML = (S.isDemo() ? demoBanner() : '') + rolebar();
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.hidden = NAV_ROLES[a.dataset.nav].indexOf(u.role) < 0;
       if (a.dataset.nav === 'cases') a.lastChild.textContent = u.role === 'student' || u.role === 'therapist' ? ' My cases' : ' Cases';
@@ -4834,6 +5944,8 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     else if (section === 'inbox') html = viewInbox(r.parts[1]);
     else if (section === 'leave') html = viewLeave();
     else if (section === 'team') html = viewTeam(r.params);
+    else if (section === 'consent') html = viewConsent(r.parts[1], r.params);
+    else if (section === 'consent-receipt') html = viewConsentReceipt(r.parts[1], r.params);
     else if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
     else if (section === 'patients') html = viewPatients(r.params);
@@ -4842,8 +5954,10 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     else if (section === 'reports') html = viewReports(r.params);
     else html = viewSchedule(r.params);
     view.innerHTML = html;
+    const cf = document.getElementById('consent-form');
+    if (cf) consentFormState(cf);
 
-    const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases' }[section] || section;
+    const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases', consent: 'patients', 'consent-receipt': 'patients' }[section] || section;
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.classList.toggle('active', a.dataset.nav === navKey);
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -4908,15 +6022,15 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
         break;
       }
       case 'export': {
-        S.exportBackup().then(function (text) {
+        backupPassword(function (pw) { return S.exportBackup(pw).then(function (text) {
           S.audit('Downloaded backup');
           const blob = new Blob([text], { type: 'application/json' });
           const a = document.createElement('a');
           a.href = URL.createObjectURL(blob);
-          a.download = 'speech-therapy-backup-' + L.todayISO() + '.json';
+          a.download = 'tjs-backup-' + L.todayISO() + '.json';
           a.click();
           setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
-        });
+        }); });
         break;
       }
       case 'reset-demo':
@@ -4953,7 +6067,9 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
     }
     if (t.id === 'import-file' && t.files[0]) {
       t.files[0].text().then(function (text) {
-        S.importBackup(text).then(function (r) {
+        let fmt = '';
+        try { fmt = JSON.parse(text).format; } catch (e) { toast('That is not a TJS backup or key file.'); return; }
+        const restore = function (pw) { return S.importBackup(text, pw).then(function (r) {
           if (r.keysAdded != null) {
             S.audit('Restored key file', null, r.keysAdded + ' keys');
             toast(r.keysAdded + ' keys restored' + (r.keysRefused ? '; ' + r.keysRefused + ' refused (erased patients)' : ''));
@@ -4962,7 +6078,9 @@ fieldset.checks legend { padding: 0 4px; font-weight: 600; }
             toast('Restored ' + r.restored + ' patients' + (r.shredded.length ? '. ' + r.shredded.length + ' could not be read (erased or key missing): ' + r.shredded.join(', ') : ''));
           }
           render();
-        }).catch(function (e) { toast('Could not restore: ' + e.message); });
+        }); };
+        if (fmt === 'tjs-backup') backupPassword(restore, true);
+        else restore().catch(function (e) { toast('Could not restore: ' + e.message); });
       });
     }
   });

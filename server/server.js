@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /*
- * Therapy Planner clinic server: keeps one shared copy of the clinic's records on this computer's disk and
+ * TJS clinic server: keeps one shared copy of the clinic's records on this computer's disk and
  * serves the app to everyone's browser. Each person signs in; the server sends them only what their role may see,
  * checks every change against the same rules, and pushes updates to everyone who is signed in.
  *
  * No dependencies beyond Node.js 18+.  Usage: see docs/SERVER-SETUP.md, or `node server/server.js --help`.
  *
- * Copyright (C) 2026 the Therapy Planner contributors. Licensed under the GNU AGPL v3 or later (see LICENSE).
+ * Copyright (C) 2026 Meenakshi Ramesh. Licensed under the GNU AGPL v3 or later (see LICENSE).
  */
 'use strict';
 const fs = require('fs');
@@ -51,7 +51,7 @@ function parseArgs(argv) {
   return o;
 }
 
-const HELP = `Therapy Planner clinic server
+const HELP = `TJS clinic server
 
   node server/server.js [options]
 
@@ -208,8 +208,8 @@ function createServer(opts) {
   }
 
   function info() {
-    return { app: 'Therapy Planner', version: PKG.version, license: 'AGPL-3.0-or-later', source: opts.source, clinic: db.state.settings.messaging && db.state.settings.messaging.clinicName || '',
-      encryptedAtRest: !!process.env.THERAPY_DATA_PASSPHRASE, https: secure,
+    return { app: 'TJS', version: PKG.version, license: 'AGPL-3.0-or-later', source: opts.source, clinic: db.state.settings.messaging && db.state.settings.messaging.clinicName || '',
+      encryptedAtRest: !!process.env.THERAPY_DATA_PASSPHRASE, https: secure, demo: !!db.state.seeded,
       demoAccounts: db.state.seeded ? db.state.users.map((u) => ({ login: u.email || u.name, name: u.name, role: u.role })) : null };
   }
 
@@ -228,7 +228,8 @@ function createServer(opts) {
       const f = failures.get(login);
       if (f && f.until > Date.now()) return json(res, 429, { error: 'Too many attempts. Try again in a few minutes.' });
       const u = db.state.users.find((x) => (x.email || '').toLowerCase() === login || x.name.toLowerCase() === login);
-      const ok = u && (u.pwHash ? checkPassword(u, body.password || '') : true);
+      // Every account has a password; one without (never set) cannot sign in.
+      const ok = !!(u && u.pwHash && checkPassword(u, body.password || ''));
       if (!ok) {
         const n = (f ? f.n : 0) + 1;
         failures.set(login, { n: n, until: n >= 5 ? Date.now() + 5 * 60 * 1000 : 0 });
@@ -238,7 +239,6 @@ function createServer(opts) {
       failures.delete(login);
       const token = crypto.randomBytes(32).toString('base64url');
       sessions.set(token, { userId: u.id, created: Date.now(), seen: Date.now() });
-      if (!u.pwHash) u.mustChange = true;
       log(req, u, 'Signed in');
       return json(res, 200, { user: Sync.publicUser(u) }, { 'Set-Cookie': cookie(token) });
     }
@@ -261,7 +261,14 @@ function createServer(opts) {
       const body = await readBody(req);
       if (!Array.isArray(body.ops)) return json(res, 400, { error: 'No changes' });
       if (me.mustChange) return json(res, 403, { error: 'Choose your own password first' });
-      const r = Sync.applyFrom(me, db.state, body.ops);
+      // Real patients only once the data on disk is encrypted (the demo is fake data).
+      let ops = body.ops, held = [];
+      if (!process.env.THERAPY_DATA_PASSPHRASE && !db.state.seeded) {
+        held = ops.map((op, i) => op && op.c === 'patients' && !op.del && !db.state.patients.some((p) => p.id === op.id) ? i : -1).filter((i) => i >= 0);
+        ops = ops.map((op, i) => held.indexOf(i) >= 0 ? null : op).filter(Boolean);
+      }
+      const r = Sync.applyFrom(me, db.state, ops);
+      held.forEach((i) => r.rejected.push({ i: i, c: 'patients', reason: 'Set THERAPY_DATA_PASSPHRASE on the server before adding patients' }));
       if (r.applied) {
         r.erased.forEach((pid) => { delete keys[pid]; });
         if (r.erased.length) persistKeys();
@@ -362,7 +369,7 @@ if (require.main === module) {
     const server = createServer(opts);
     server.listen(opts.port, opts.host, () => {
       const proto = opts.tlsCert ? 'https' : 'http';
-      console.log('Therapy Planner clinic server ' + PKG.version + ' – ' + proto + '://' + (opts.host === '0.0.0.0' ? 'localhost' : opts.host) + ':' + opts.port);
+      console.log('TJS clinic server ' + PKG.version + ' – ' + proto + '://' + (opts.host === '0.0.0.0' ? 'localhost' : opts.host) + ':' + opts.port);
       console.log('Data folder: ' + opts.data + (process.env.THERAPY_DATA_PASSPHRASE ? ' (encrypted)' : ' (NOT encrypted: set THERAPY_DATA_PASSPHRASE, and use full-disk encryption)'));
       if (!opts.tlsCert) console.log('No HTTPS: use only inside a VPN such as Tailscale/WireGuard, which encrypts the traffic. See docs/SERVER-SETUP.md.');
       if (!server.state().state.users.length) console.log('No accounts yet. Stop the server and run: node server/server.js --init-admin "Your name" you@clinic.example');
