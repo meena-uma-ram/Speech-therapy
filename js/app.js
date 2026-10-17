@@ -2397,6 +2397,11 @@
     }
   });
 
+  // Installable app: register the offline worker when served from a website (not from a file or an embedded preview).
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && window.self === window.top) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* optional */ }); });
+  }
+
   window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0 && location.hash !== route) go(location.hash); });
   render();
 })();

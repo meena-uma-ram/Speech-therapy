@@ -90,6 +90,18 @@ No install or build step. Either:
 
 It loads demo data the first time: five people (supervisor, therapist, diagnostician, two students), patients at each stage, and coursework waiting for review. Sign in with any demo account (password `demo1234`) to see each role. **Privacy → Delete all patient data** gives you a clean start; set up your own people under **Privacy → People**.
 
+## Install it as an app
+
+Therapy Planner is an installable web app (PWA). Once it is served from a website address (for example GitHub Pages, Netlify or the clinic's own server):
+
+- **Android (Chrome):** open the address → menu ⋮ → **Install app** (or *Add to Home screen*).
+- **iPhone / iPad (Safari):** Share → **Add to Home Screen**.
+- **Windows / Mac (Chrome or Edge):** the **Install** icon in the address bar.
+
+It then opens in its own window with its own icon, and **works offline**. The offline worker caches only the app's own files. Patient data stays in the device's local storage, exactly as before. The single `therapy-planner.html` file still works by double-clicking, but it can't be installed (browsers only install apps served from a web address).
+
+To try it locally: `npm start`, then open http://localhost:8080.
+
 ## Where the data lives
 
 Everything is stored **only in the browser on this device** (`localStorage`, encrypted if you set a passphrase). It does not sync between devices, and clearing browser data deletes it. If the passphrase is lost, the data cannot be recovered.

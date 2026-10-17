@@ -6,6 +6,10 @@
   <title>Therapy Planner</title>
   <meta name="description" content="Speech diagnostics and therapy: referrals, case allotment, student coursework, timetable, SMART goals, materials, session logs and reports.">
   <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#0e6b6b">
+  <link rel="icon" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjExMiIgZmlsbD0iIzBlNmI2YiIvPgogIDxwYXRoIGQ9Ik0xMjAgMTQwaDI3MmEyNCAyNCAwIDAgMSAyNCAyNHYxNjhhMjQgMjQgMCAwIDEtMjQgMjRIMjIwbC04NCA2NHYtNjRoLTE2YTI0IDI0IDAgMCAxLTI0LTI0VjE2NGEyNCAyNCAwIDAgMSAyNC0yNHoiIGZpbGw9IiNmZmZmZmYiLz4KICA8Y2lyY2xlIGN4PSIxOTAiIGN5PSIyNDgiIHI9IjIyIiBmaWxsPSIjMGU2YjZiIi8+CiAgPGNpcmNsZSBjeD0iMjU2IiBjeT0iMjQ4IiByPSIyMiIgZmlsbD0iIzBlNmI2YiIvPgogIDxjaXJjbGUgY3g9IjMyMiIgY3k9IjI0OCIgcj0iMjIiIGZpbGw9IiMwZTZiNmIiLz4KPC9zdmc+Cg==" type="image/svg+xml">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Therapy">
   <style>
 /* Layout: fixed left rail (bottom bar on phones) + one working column; the day's schedule is the spine. */
 :root {
@@ -4249,6 +4253,11 @@ label.check.radio input { margin-top: 3px; }
       S.save(); toast('Saved'); render();
     }
   });
+
+  // Installable app: register the offline worker when served from a website (not from a file or an embedded preview).
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && window.self === window.top) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () { /* optional */ }); });
+  }
 
   window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0 && location.hash !== route) go(location.hash); });
   render();

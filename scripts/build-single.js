@@ -27,7 +27,11 @@ if (fragIdx > -1) {
   fs.writeFileSync(process.argv[fragIdx + 1], out);
   console.log('wrote', process.argv[fragIdx + 1]);
 } else {
+  const icon = 'data:image/svg+xml;base64,' + Buffer.from(read('icons/icon.svg')).toString('base64');
   const out = html
+    .replace(/  <link rel="manifest"[^>]*>\n/, '')
+    .replace(/  <link rel="apple-touch-icon"[^>]*>\n/, '')
+    .replace('href="icons/icon.svg"', 'href="' + icon + '"')
     .replace('<link rel="stylesheet" href="css/styles.css">', '<style>\n' + css + '\n</style>')
     .replace(/<script src="js\/logic\.js"><\/script>\s*<script src="js\/store\.js"><\/script>\s*<script src="js\/app\.js"><\/script>/,
       () => '<script>\n' + js + '\n</script>');
