@@ -89,3 +89,50 @@ test('report addresses adults without a guardian directly', () => {
   assert.match(text, /^Hello Robert,$/m);
   assert.match(text, /summary of your speech therapy session/);
 });
+
+test('initials and case codes pseudonymise patients', () => {
+  assert.strictEqual(L.initials('Robert  Hughes'), 'R.H.');
+  assert.strictEqual(L.caseCode(2026, 7), 'SLT-26-007');
+});
+
+test('need-to-know access by role', () => {
+  const student = { id: 's1', role: 'student' }, ther = { id: 't1', role: 'therapist' }, diag = { id: 'd1', role: 'diagnostician' };
+  const mine = { assignedTo: 's1', status: 'active' }, other = { assignedTo: 's2', status: 'active' }, referred = { status: 'referred' };
+  assert.strictEqual(L.canSeePatient(student, mine), true);
+  assert.strictEqual(L.canSeePatient(student, other), false);
+  assert.strictEqual(L.canSeePatient(student, referred), false);
+  assert.strictEqual(L.canSeePatient(ther, referred), true);
+  assert.strictEqual(L.canSeePatient(ther, other), false);
+  assert.strictEqual(L.canSeePatient(diag, other), false);
+  assert.strictEqual(L.canSeePatient(diag, { assessedBy: 'd1', status: 'active' }), true);
+  assert.strictEqual(L.canSeePatient({ role: 'supervisor' }, other), true);
+});
+
+test('allotment respects consent', () => {
+  const student = { role: 'student' }, ther = { role: 'therapist' };
+  assert.strictEqual(L.canAllot({ consent: { therapy: true, students: false } }, student).ok, false);
+  assert.strictEqual(L.canAllot({ consent: { therapy: true, students: false } }, ther).ok, true);
+  assert.strictEqual(L.canAllot({ consent: {} }, ther).ok, false);
+});
+
+test('retention period after discharge', () => {
+  assert.strictEqual(L.isPastRetention({ status: 'discharged', dischargedAt: '2018-03-01' }, 8, '2026-03-01'), true);
+  assert.strictEqual(L.isPastRetention({ status: 'discharged', dischargedAt: '2018-03-02' }, 8, '2026-03-01'), false);
+  assert.strictEqual(L.isPastRetention({ status: 'active' }, 0, '2026-03-01'), false);
+});
+
+test('session report is pre-filled from the session log', () => {
+  const goals = [{ id: 'g', title: '/s/ initial', specific: 'X will say /s/' }];
+  const log = { notes: 'Tired today.', homework: '5 words daily', entries: [{ goalId: 'g', trials: 10, correct: 7, cueing: 'Minimal', progress: 'improving' }] };
+  const d = L.prefillDoc('session-report', { goals, log });
+  assert.strictEqual(d.subjective, 'Tired today.');
+  assert.match(d.objective, /\/s\/ initial: 7\/10 \(70%\), minimal cues/);
+  assert.match(d.assessment, /improving/);
+  assert.match(d.plan, /5 words daily/);
+});
+
+test('caseProgress names the next step', () => {
+  assert.strictEqual(L.caseProgress([], 0).next, 'Write pre-assessment');
+  assert.strictEqual(L.caseProgress([{ type: 'pre-assessment', status: 'approved' }], 2).next, 'Write session report');
+  assert.strictEqual(L.caseProgress([{ type: 'pre-assessment', status: 'approved' }, { type: 'lesson-plan', status: 'returned' }], 0).next, 'Revise lesson plan');
+});

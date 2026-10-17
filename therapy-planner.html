@@ -4,10 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Therapy Planner</title>
-  <meta name="description" content="Daily schedule, SMART goals, materials, session logs, progress and client reports for speech therapists.">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
+  <meta name="description" content="Speech diagnostics and therapy: referrals, case allotment, student coursework, timetable, SMART goals, materials, session logs and reports.">
+  <meta name="referrer" content="no-referrer">
   <style>
 /* Layout: fixed left rail (bottom bar on phones) + one working column; the day's schedule is the spine. */
 :root {
@@ -36,7 +34,7 @@
   --fam-voice: #86680a; --fam-voice-soft: #f7f0d5;
   --fam-other: #586a6d; --fam-other-soft: #eef2f2;
   --lunch: #fbf5e6; --lunch-ink: #7a5a12; --now: #d2452f;
-  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-display: ui-rounded, "SF Pro Rounded", "Avenir Next", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
@@ -73,6 +71,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; }
 body {
   font: 15px/1.5 var(--font-body);
@@ -103,7 +102,7 @@ p { margin: .4rem 0; }
 .nav a { display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; color: var(--text); }
 .nav a:hover { background: var(--bg); text-decoration: none; }
 .nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-main { flex: 1; min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
+main { min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
 
 @media (max-width: 760px) {
   .layout { flex-direction: column; }
@@ -366,6 +365,98 @@ dialog::backdrop { background: var(--overlay); }
 .appt-time { width: 112px; }
 @media (max-width: 560px) { .appt-time { width: auto; } }
 
+/* ---------- roles, workflow & privacy ---------- */
+:root { --warn: #9a5b00; --warn-soft: #fdf0d8; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --warn: #f0b85c; --warn-soft: #3a2b12; } }
+:root[data-theme="dark"] { --warn: #f0b85c; --warn-soft: #3a2b12; }
+
+.main-col { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.rolebar { display: flex; justify-content: space-between; align-items: center; gap: 8px 16px; flex-wrap: wrap;
+  padding-block: 8px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px));
+  background: var(--surface); border-bottom: 1px solid var(--border); font-size: .85rem; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 4; }
+.rolebar:empty { display: none; }
+.rb-left, .rb-right { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.rb-dept { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin-right: 6px; }
+.rb-link { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--border); color: var(--text); }
+.rb-link:hover { border-color: var(--primary); text-decoration: none; }
+.rb-count { font-weight: 700; font-variant-numeric: tabular-nums; color: var(--primary); }
+.rb-link.alert { background: var(--warn-soft); border-color: transparent; }
+.rb-link.alert .rb-count { color: var(--warn); }
+.rb-btn { font: inherit; background: none; border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 10px; cursor: pointer; min-height: 32px; }
+.rb-btn[aria-pressed="true"] { background: var(--primary-soft); color: var(--primary); border-color: transparent; }
+.rb-user { flex-direction: row; align-items: center; gap: 6px; margin: 0; font-weight: 400; }
+.rb-as { color: var(--muted); white-space: nowrap; }
+.rb-user select { width: auto; max-width: 260px; padding: 4px 8px; font-size: .85rem; }
+@media (max-width: 760px) {
+  .rolebar { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); position: static; }
+  .rb-as { display: none; }
+  .rb-user select { max-width: 200px; }
+  .nav { justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .nav a { min-width: 62px; flex-shrink: 0; }
+}
+
+body.locked .sidebar { display: none; }
+.lock { min-height: 80vh; display: grid; place-items: center; }
+.lock-card { width: min(420px, 100%); }
+.lock-card h1 { font-size: 1.4rem; }
+.form-error { color: var(--bad); font-weight: 600; font-size: .9rem; }
+
+.badge-warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.prio-urgent { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.prio-soon { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.yes { color: var(--good); font-weight: 700; }
+.no { color: var(--bad); font-weight: 700; }
+.referral .note { background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.consent-line { color: var(--muted); }
+
+.doc-chip { display: inline-block; font-size: .75rem; font-weight: 700; padding: 2px 9px; border-radius: 99px; white-space: nowrap; background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+a.doc-chip:hover { text-decoration: none; border-color: currentColor; }
+.doc-chip.st-approved { background: var(--good-soft); color: var(--good); border-color: transparent; }
+.doc-chip.st-submitted { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.doc-chip.st-returned { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.doc-count { font-variant-numeric: tabular-nums; }
+.doc-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; flex-wrap: wrap; }
+.doc-row + .doc-row { border-top: 1px solid var(--border); }
+.coursework { border-color: var(--info); }
+.coursework h2 { font-size: 1rem; }
+.progress-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 8px 0; }
+.progress-row > div { display: flex; flex-direction: column; }
+.progress-row strong { font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .progress-row { grid-template-columns: repeat(2, 1fr); } }
+.callout { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: var(--radius); margin: 10px 0; color: var(--text); }
+.callout.warn { background: var(--warn-soft); }
+.callout.warn strong { color: var(--warn); }
+a.callout:hover { text-decoration: none; filter: brightness(.98); }
+.privacy-note { margin-top: -6px; }
+.doc-read h3 { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 14px 0 4px; }
+.doc-read h3:first-child { margin-top: 0; }
+.pre { white-space: pre-wrap; }
+.timeline { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.timeline li { border-left: 2px solid var(--border); padding-left: 12px; }
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.table-wrap .tbl { margin: 0; }
+.table-wrap .tbl th, .table-wrap .tbl td { padding: 10px 12px; }
+.cases-tbl td { min-width: 110px; }
+.nowrap { white-space: nowrap; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 18px; margin: 0; }
+.kv > div { display: contents; }
+.kv dt { color: var(--muted); font-size: .85rem; }
+.kv dd { margin: 0; min-width: 0; }
+@media (max-width: 560px) { .kv { grid-template-columns: 1fr; } .kv dt { margin-top: 6px; } }
+.safeguards, .consent-list, .plain { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.safeguards li { display: flex; gap: 10px; align-items: baseline; }
+.plain li { padding-left: 14px; position: relative; }
+.plain li::before { content: "•"; position: absolute; left: 0; color: var(--muted); }
+.list.flat { border: 0; background: none; }
+.list.flat .row { padding-inline: 0; }
+.add-user { margin-top: 12px; align-items: end; }
+.add-user .actions { margin: 0 0 10px; }
+.actions.end { justify-content: flex-end; }
+.refer { margin-top: 6px; }
+fieldset.consent { display: block; }
+fieldset.consent label.check { margin-bottom: 6px; }
+.card > label.check { margin-bottom: 12px; }
+
 </style>
 </head>
 <body>
@@ -375,14 +466,19 @@ dialog::backdrop { background: var(--overlay); }
       <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></svg> Therapy Planner</div>
       <nav class="nav" aria-label="Main">
         <a href="#/schedule" data-nav="schedule"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg> Schedule</a>
+        <a href="#/diagnostics" data-nav="diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3h6v4H9z"/><path d="M7 5H5v16h14V5h-2"/><path d="M9 12h6M9 16h4"/></svg> Diagnostics</a>
+        <a href="#/cases" data-nav="cases"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h18v13H3z"/><path d="M8 7V4h8v3"/><path d="M3 12h18"/></svg> Cases</a>
         <a href="#/materials" data-nav="materials"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v12H4z"/><path d="M9 8V5h6v3M4 13h16"/></svg> Materials</a>
         <a href="#/goals" data-nav="goals"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg> Goals</a>
         <a href="#/patients" data-nav="patients"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.8a3.3 3.3 0 0 1 0 6.4M18 14.8c1.8.7 3 2.4 3.5 5.2"/></svg> Patients</a>
         <a href="#/reports" data-nav="reports"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 7 8.5-7"/></svg> Reports</a>
-        <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg> Settings</a>
+        <a href="#/privacy" data-nav="privacy"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg> Privacy</a>
       </nav>
     </aside>
-    <main id="view" tabindex="-1"></main>
+    <div class="main-col">
+      <div id="rolebar" class="rolebar"></div>
+      <main id="view" tabindex="-1"></main>
+    </div>
   </div>
   <dialog id="modal" aria-label="Form"></dialog>
   <dialog id="confirm" aria-label="Confirm"></dialog>
@@ -608,6 +704,134 @@ dialog::backdrop { background: var(--overlay); }
     return [ageGroup(patient), patient.condition].filter(Boolean).join(' · ');
   }
 
+  /* ---------- people, privacy and workflow ---------- */
+
+  const ROLES = {
+    diagnostician: { label: 'Diagnostician', dept: 'Diagnostics' },
+    therapist: { label: 'Speech therapist', dept: 'Therapy' },
+    supervisor: { label: 'Clinical supervisor', dept: 'Therapy' },
+    student: { label: 'Student clinician', dept: 'Therapy' }
+  };
+
+  function initials(name) {
+    return (name || '').split(/\s+/).filter(Boolean).map(function (w) { return w[0].toUpperCase() + '.'; }).join('');
+  }
+
+  function caseCode(year, n) { return 'SLT-' + String(year).slice(-2) + '-' + String(n).padStart(3, '0'); }
+
+  /* Who may open a patient's record (need-to-know). */
+  function canSeePatient(user, p) {
+    if (!user || !p) return false;
+    switch (user.role) {
+      case 'supervisor': return true;
+      case 'diagnostician': return p.status === 'waiting' || p.status === 'referred' || p.assessedBy === user.id;
+      case 'therapist': return p.assignedTo === user.id || p.status === 'referred';
+      case 'student': return p.assignedTo === user.id;
+      default: return false;
+    }
+  }
+
+  /* Can this patient be allotted to this clinician? */
+  function canAllot(p, assignee) {
+    if (!assignee) return { ok: false, reason: 'Choose who will take the case.' };
+    const c = p.consent || {};
+    if (!c.therapy) return { ok: false, reason: 'Consent for therapy has not been recorded.' };
+    if (assignee.role === 'student' && !c.students) return { ok: false, reason: 'No consent for student clinicians. Allot to a qualified therapist, or record consent first.' };
+    return { ok: true };
+  }
+
+  function addYears(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return toISODate(new Date(y + n, m - 1, d));
+  }
+
+  /* Discharged records whose retention period has run out. */
+  function isPastRetention(p, years, today) {
+    return p.status === 'discharged' && !!p.dischargedAt && addYears(p.dischargedAt, Number(years) || 0) <= (today || todayISO());
+  }
+
+  const DOC_TYPES = {
+    'pre-assessment': { label: 'Pre-assessment', perSession: false },
+    'lesson-plan': { label: 'Lesson plan', perSession: true },
+    'session-report': { label: 'Session report', perSession: true },
+    'conclusion': { label: 'Conclusion report', perSession: false }
+  };
+  const DOC_FIELDS = {
+    'pre-assessment': [
+      ['background', 'Background & case history', 4], ['assessments', 'Assessments used', 3], ['findings', 'Findings & baseline', 4],
+      ['impressions', 'Clinical impressions', 3], ['goals', 'Proposed long- and short-term goals', 4], ['plan', 'Intervention plan', 3]],
+    'lesson-plan': [
+      ['objectives', 'Objectives (SMART)', 4], ['procedure', 'Activities & procedure', 5], ['materials', 'Materials', 2],
+      ['cueing', 'Cueing hierarchy & reinforcement', 3], ['carryover', 'Home practice / carry-over', 2], ['backup', 'Back-up plan', 2]],
+    'session-report': [
+      ['subjective', 'S – Subjective', 3], ['objective', 'O – Objective (data)', 5], ['assessment', 'A – Assessment', 3], ['plan', 'P – Plan', 3]],
+    'conclusion': [
+      ['summary', 'Summary of intervention', 4], ['outcomes', 'Goal outcomes', 5], ['recommendations', 'Recommendations', 3], ['discharge', 'Discharge or continuation plan', 2]]
+  };
+  const DOC_STATUS = { draft: 'Draft', submitted: 'Awaiting review', approved: 'Approved', returned: 'Changes requested' };
+
+  /* Pre-filled starting text for each document, built from what the app already knows. */
+  function prefillDoc(type, ctx) {
+    const p = ctx.patient || {}, a = ctx.assessment || {};
+    const goals = ctx.goals || [];
+    const numbered = function (list) { return list.map(function (g, i) { return (i + 1) + '. ' + smartStatement(g); }).join('\n'); };
+    if (type === 'pre-assessment') {
+      return {
+        background: [caseLabel(p), p.diagnosis, a.source ? 'Referred by ' + a.source + (a.reason ? ' for ' + a.reason : '') + '.' : '', a.history].filter(Boolean).join('. ').replace(/\.\./g, '.'),
+        assessments: a.tests || '',
+        findings: a.findings || '',
+        impressions: [a.diagnosis, a.severity ? a.severity + ' severity' : ''].filter(Boolean).join(', '),
+        goals: numbered(goals),
+        plan: [a.recommendations, a.frequency ? 'Frequency: ' + a.frequency : ''].filter(Boolean).join('\n')
+      };
+    }
+    if (type === 'lesson-plan') {
+      return { objectives: numbered(goals), procedure: '', materials: (ctx.materials || []).map(function (m) { return m.name; }).join(', '), cueing: '', carryover: '', backup: '' };
+    }
+    if (type === 'session-report') {
+      const log = ctx.log;
+      const byId = {};
+      goals.forEach(function (g) { byId[g.id] = g; });
+      const objective = log ? (log.entries || []).map(function (e) {
+        const g = byId[e.goalId];
+        if (!g) return '';
+        const acc = e.accuracy != null ? e.accuracy : accuracy(e.correct, e.trials);
+        if (acc == null && !e.note) return '';
+        return '• ' + g.title + ': ' + (e.trials ? e.correct + '/' + e.trials + ' ' : '') + (acc != null ? '(' + acc + '%)' : 'no score') + (e.cueing ? ', ' + e.cueing.toLowerCase() + ' cues' : '') + (e.note ? ' – ' + e.note : '');
+      }).filter(Boolean).join('\n') : '';
+      const assess = log ? (log.entries || []).filter(function (e) { return e.progress && byId[e.goalId]; })
+        .map(function (e) { return byId[e.goalId].title + ': ' + PROGRESS_LABELS[e.progress].toLowerCase(); }).join('; ') : '';
+      return { subjective: log ? log.notes || '' : '', objective: objective, assessment: assess, plan: log && log.homework ? 'Home practice: ' + log.homework : '' };
+    }
+    if (type === 'conclusion') {
+      const logs = (ctx.logs || []).slice().sort(function (x, y) { return x.date < y.date ? -1 : 1; });
+      const summary = logs.length ? logs.length + ' sessions between ' + formatDate(logs[0].date, { day: 'numeric', month: 'short', year: 'numeric' }) +
+        ' and ' + formatDate(logs[logs.length - 1].date, { day: 'numeric', month: 'short', year: 'numeric' }) + '.' : 'No sessions logged.';
+      const outcomes = goals.map(function (g) {
+        const series = goalSeries(g.id, logs);
+        const st = goalStats(series, g.targetAccuracy);
+        if (!series.length) return '• ' + g.title + ': no data';
+        return '• ' + g.title + ': ' + series[0].accuracy + '% → ' + st.latest + '% (target ' + g.targetAccuracy + '%) – ' + (st.metTarget ? 'met' : 'not yet met');
+      }).join('\n');
+      return { summary: summary, outcomes: outcomes, recommendations: '', discharge: '' };
+    }
+    return {};
+  }
+
+  /* Coursework progress for one case: counts by document type and status, plus the next thing to do. */
+  function caseProgress(docs, sessionsLogged) {
+    const out = {};
+    Object.keys(DOC_TYPES).forEach(function (t) { out[t] = { total: 0, approved: 0, submitted: 0, returned: 0, draft: 0 }; });
+    docs.forEach(function (d) { if (out[d.type]) { out[d.type].total++; out[d.type][d.status]++; } });
+    let next = 'Up to date';
+    const returned = docs.filter(function (d) { return d.status === 'returned'; });
+    if (returned.length) next = 'Revise ' + DOC_TYPES[returned[0].type].label.toLowerCase();
+    else if (!out['pre-assessment'].approved) next = out['pre-assessment'].submitted ? 'Pre-assessment awaiting review' : 'Write pre-assessment';
+    else if (out['session-report'].total < (sessionsLogged || 0)) next = 'Write session report';
+    out.next = next;
+    return out;
+  }
+
   const PROGRESS_LABELS = {
     improving: 'Improving',
     steady: 'Steady',
@@ -668,50 +892,152 @@ dialog::backdrop { background: var(--overlay); }
     materialsForDay: materialsForDay, appointmentMaterialIds: appointmentMaterialIds,
     clientReport: clientReport, PROGRESS_LABELS: PROGRESS_LABELS,
     toMinutes: toMinutes, fromMinutes: fromMinutes, layoutDay: layoutDay, splitByLunch: splitByLunch,
-    CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel
+    CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel,
+    ROLES: ROLES, initials: initials, caseCode: caseCode, canSeePatient: canSeePatient, canAllot: canAllot,
+    addYears: addYears, isPastRetention: isPastRetention, DOC_TYPES: DOC_TYPES, DOC_FIELDS: DOC_FIELDS, DOC_STATUS: DOC_STATUS,
+    prefillDoc: prefillDoc, caseProgress: caseProgress
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Logic = api;
 })(typeof window !== 'undefined' ? window : this);
 
-/* Local data store. Everything lives in this browser's localStorage; nothing is sent anywhere. */
+/*
+ * Local data store. Everything lives in this browser's localStorage; nothing is sent anywhere.
+ * With a passphrase set, the data is encrypted at rest (AES-GCM, key derived with PBKDF2).
+ */
 (function () {
   'use strict';
   const L = window.Logic;
   const KEY = 'speech-therapy-planner-v1';
+  const ENC_KEY = KEY + '-encrypted';
+  const AUDIT_MAX = 2000;
 
   const EMPTY = {
-    settings: { therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable' },
-    patients: [], goals: [], materials: [], appointments: [], logs: [],
+    settings: {
+      therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable',
+      currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1
+    },
+    users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
+    assessments: [], referrals: [], documents: [], audit: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
+  let locked = false;
+  let cryptoKey = null, cryptoSalt = null;
+  let writing = Promise.resolve();
   let state = load();
+
+  function blank() { return JSON.parse(JSON.stringify(EMPTY)); }
 
   function load() {
     try {
+      if (localStorage.getItem(ENC_KEY)) { locked = true; return blank(); }
       const raw = localStorage.getItem(KEY);
-      if (raw) return migrate(Object.assign({}, EMPTY, JSON.parse(raw)));
+      if (raw) return migrate(Object.assign(blank(), JSON.parse(raw)));
     } catch (e) { /* storage blocked or corrupt: fall through to demo data */ }
     return seed();
   }
 
-  /* Fill in fields added after the first release. */
+  /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
+    ['users', 'assessments', 'referrals', 'documents', 'audit'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
+    if (!s.users.length) {
+      s.users.push({ id: 'u_me', name: s.settings.therapistName || 'Me', role: 'supervisor' });
+      s.settings.currentUserId = 'u_me';
+    }
+    const me = s.settings.currentUserId || s.users[0].id;
     s.patients.forEach(function (p) {
       if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
       if (p.condition == null) p.condition = s.seeded && demoCases[p.id] || '';
+      if (!p.caseCode) p.caseCode = L.caseCode(new Date().getFullYear(), s.settings.nextCaseNo++);
+      if (!p.status) p.status = 'active';
+      if (!p.assignedTo && p.status === 'active') p.assignedTo = me;
+      if (!p.consent) p.consent = { therapy: true, students: false, shareReports: false, teaching: false, recordedOn: '', givenBy: '' };
     });
     return s;
   }
 
+  /* ---------- persistence & encryption ---------- */
+
+  const enc = new TextEncoder(), dec = new TextDecoder();
+  function b64(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+  function unb64(str) { return Uint8Array.from(atob(str), function (c) { return c.charCodeAt(0); }); }
+
+  function cryptoAvailable() { return !!(window.crypto && crypto.subtle && window.isSecureContext !== false); }
+
+  function deriveKey(pass, salt) {
+    return crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveKey']).then(function (base) {
+      return crypto.subtle.deriveKey({ name: 'PBKDF2', salt: salt, iterations: 310000, hash: 'SHA-256' }, base,
+        { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+    });
+  }
+
+  function writeEncrypted(json) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, cryptoKey, enc.encode(json)).then(function (ct) {
+      localStorage.setItem(ENC_KEY, JSON.stringify({ v: 1, salt: b64(cryptoSalt), iv: b64(iv), ct: b64(new Uint8Array(ct)) }));
+      localStorage.removeItem(KEY);
+    });
+  }
+
   function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
+    if (locked) return;
+    const json = JSON.stringify(state);
+    if (cryptoKey) {
+      // Writes are chained so the newest state always lands last.
+      writing = writing.then(function () { return writeEncrypted(json); }).catch(function (e) { console.warn('Could not save', e); });
+      return;
+    }
+    try { localStorage.setItem(KEY, json); }
     catch (e) { console.warn('Could not save to localStorage', e); }
   }
+
+  function setPassphrase(pass) {
+    cryptoSalt = crypto.getRandomValues(new Uint8Array(16));
+    return deriveKey(pass, cryptoSalt).then(function (key) {
+      cryptoKey = key;
+      save();
+      return writing;
+    });
+  }
+
+  function removePassphrase() {
+    return writing.then(function () {
+      cryptoKey = null; cryptoSalt = null;
+      localStorage.removeItem(ENC_KEY);
+      save();
+    });
+  }
+
+  function unlock(pass) {
+    const payload = JSON.parse(localStorage.getItem(ENC_KEY));
+    const salt = unb64(payload.salt);
+    return deriveKey(pass, salt).then(function (key) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(payload.iv) }, key, unb64(payload.ct)).then(function (plain) {
+        cryptoKey = key; cryptoSalt = salt;
+        state = migrate(Object.assign(blank(), JSON.parse(dec.decode(plain))));
+        locked = false;
+      }, function () { throw new Error('That passphrase is not correct.'); });
+    });
+  }
+
+  function lock() {
+    return writing.then(function () {
+      if (!cryptoKey) return;
+      cryptoKey = null;
+      state = blank();
+      locked = true;
+    });
+  }
+
+  /* ---------- records ---------- */
 
   function byId(list) {
     const m = {};
@@ -731,9 +1057,11 @@ dialog::backdrop { background: var(--overlay); }
   function remove(collection, id) {
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
-      state.goals = state.goals.filter(function (g) { return g.patientId !== id; });
-      state.appointments = state.appointments.filter(function (a) { return a.patientId !== id; });
-      state.logs = state.logs.filter(function (l) { return l.patientId !== id; });
+      // Erasure covers every record linked to the person.
+      ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
+        state[k] = state[k].filter(function (x) { return x.patientId !== id; });
+      });
+      state.audit.forEach(function (e) { if (e.patientId === id) { e.patientId = null; e.target = '(erased record)'; } });
     }
     if (collection === 'goals') {
       state.appointments.forEach(function (a) { a.goalIds = (a.goalIds || []).filter(function (g) { return g !== id; }); });
@@ -745,11 +1073,46 @@ dialog::backdrop { background: var(--overlay); }
     save();
   }
 
+  function currentUser() {
+    return state.users.find(function (u) { return u.id === state.settings.currentUserId; }) || state.users[0] || null;
+  }
+
+  function audit(action, patientId, detail) {
+    const u = currentUser();
+    const p = patientId && state.patients.find(function (x) { return x.id === patientId; });
+    state.audit.push({ at: new Date().toISOString(), userId: u ? u.id : '', user: u ? u.name : '', action: action,
+      patientId: patientId || null, target: p ? p.caseCode : '', detail: detail || '' });
+    if (state.audit.length > AUDIT_MAX) state.audit.splice(0, state.audit.length - AUDIT_MAX);
+    save();
+  }
+
+  /* Everything held about one person, for a subject access or portability request. */
+  function patientRecord(pid) {
+    const pick = function (k) { return state[k].filter(function (x) { return x.patientId === pid; }); };
+    return {
+      exportedAt: new Date().toISOString(),
+      patient: state.patients.find(function (p) { return p.id === pid; }),
+      assessments: pick('assessments'), referrals: pick('referrals'), goals: pick('goals'),
+      appointments: pick('appointments'), sessionLogs: pick('logs'), documents: pick('documents'),
+      accessLog: state.audit.filter(function (e) { return e.patientId === pid; })
+    };
+  }
+
+  /* ---------- demo data ---------- */
+
   function seed() {
     const t = L.todayISO();
-    const s = JSON.parse(JSON.stringify(EMPTY));
-    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Your Therapist' });
+    const s = blank();
     s.seeded = true;
+    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Dr. Priya Nair', currentUserId: 'u_sup' });
+
+    s.users.push(
+      { id: 'u_sup', name: 'Dr. Priya Nair', role: 'supervisor' },
+      { id: 'u_ther', name: 'Sam Okafor', role: 'therapist' },
+      { id: 'u_diag', name: 'Dr. Elena Rossi', role: 'diagnostician' },
+      { id: 'u_stu1', name: 'Aisha Khan', role: 'student', year: 'Year 3' },
+      { id: 'u_stu2', name: 'Tom Becker', role: 'student', year: 'Year 4' }
+    );
 
     const mat = function (id, name, category, location) { s.materials.push({ id: id, name: name, category: category, location: location }); };
     mat('m_artic', 'Articulation cards – /s/ & /r/', 'Cards', 'Shelf A, bin 2');
@@ -762,21 +1125,59 @@ dialog::backdrop { background: var(--overlay); }
     mat('m_metronome', 'Metronome / pacing board', 'Tools', 'Desk drawer');
     mat('m_feelings', 'Emotions & social scenario cards', 'Cards', 'Shelf B');
     mat('m_playdoh', 'Play-Doh & animal figurines', 'Toys', 'Toy cupboard');
-
     mat('m_naming', 'Naming picture cards (everyday objects)', 'Cards', 'Shelf C');
     mat('m_commbook', 'Communication book & whiteboard', 'AAC', 'Cupboard B');
     mat('m_blow', 'Straws, whistles & cotton-ball blowing kit', 'Tools', 'Desk drawer');
     mat('m_nasal', 'Nasal airflow mirror', 'Tools', 'Desk drawer');
 
-    const pat = function (id, name, dob, ageGroup, condition, diagnosis, guardian, contact) {
-      s.patients.push({ id: id, name: name, dob: dob, ageGroup: ageGroup, condition: condition, diagnosis: diagnosis, guardian: guardian, contact: contact, notes: '' });
+    const consentAll = { therapy: true, students: true, shareReports: true, teaching: false, recordedOn: L.addDays(t, -70), givenBy: 'Parent' };
+    const pat = function (id, name, years, ageGroup, condition, diagnosis, guardian, contact, extra) {
+      s.patients.push(Object.assign({
+        id: id, name: name, dob: L.addDays(t, -365 * years), ageGroup: ageGroup, condition: condition, diagnosis: diagnosis,
+        guardian: guardian, contact: contact, notes: '', caseCode: L.caseCode(new Date().getFullYear(), s.settings.nextCaseNo++),
+        status: 'active', assessedBy: 'u_diag', referredAt: L.addDays(t, -63), consent: Object.assign({}, consentAll)
+      }, extra));
     };
-    pat('p_ava', 'Ava Thompson', L.addDays(t, -365 * 6), 'Child', 'Speech sound disorder', 'Errors on /s/ and /r/', 'Ms. Thompson', 'thompson.family@example.com');
-    pat('p_isla', 'Isla Brown', L.addDays(t, -365 * 5), 'Child', 'CLP', 'Repaired cleft palate; glottal substitutions, weak oral pressure', 'Mrs. Brown', 'brown.family@example.com');
-    pat('p_leo', 'Leo Martinez', L.addDays(t, -365 * 4), 'Child', 'DLD', 'Expressive language below age level', 'Mr. Martinez', '(555) 201-3344');
-    pat('p_maya', 'Maya Chen', L.addDays(t, -365 * 9), 'Child', 'Stammering', 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com');
-    pat('p_rob', 'Robert Hughes', L.addDays(t, -365 * 67), 'Adult', 'Stroke – aphasia', 'Left MCA stroke 4 months ago; anomia, good comprehension', '', 'r.hughes@example.com');
-    pat('p_noah', 'Noah Williams', L.addDays(t, -365 * 7), 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200');
+    pat('p_ava', 'Ava Thompson', 6, 'Child', 'Speech sound disorder', 'Errors on /s/ and /r/', 'Ms. Thompson', 'thompson.family@example.com', { assignedTo: 'u_stu1', supervisorId: 'u_sup' });
+    pat('p_isla', 'Isla Brown', 5, 'Child', 'CLP', 'Repaired cleft palate; glottal substitutions, weak oral pressure', 'Mrs. Brown', 'brown.family@example.com', { assignedTo: 'u_stu1', supervisorId: 'u_sup' });
+    pat('p_leo', 'Leo Martinez', 4, 'Child', 'DLD', 'Expressive language below age level', 'Mr. Martinez', '(555) 201-3344', { assignedTo: 'u_stu2', supervisorId: 'u_sup' });
+    pat('p_maya', 'Maya Chen', 9, 'Child', 'Stammering', 'Childhood-onset fluency disorder', 'Mrs. Chen', 'chen.home@example.com', { assignedTo: 'u_stu2', supervisorId: 'u_sup' });
+    pat('p_rob', 'Robert Hughes', 67, 'Adult', 'Stroke – aphasia', 'Left MCA stroke 4 months ago; anomia, good comprehension', '', 'r.hughes@example.com',
+      { assignedTo: 'u_ther', consent: Object.assign({}, consentAll, { students: false, givenBy: 'Patient' }) });
+    pat('p_noah', 'Noah Williams', 7, 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200', { assignedTo: 'u_ther' });
+    // Referred by diagnostics, waiting to be allotted.
+    pat('p_grace', 'Grace Lee', 72, 'Adult', 'Dysphagia', 'Oropharyngeal dysphagia after stroke; coughing on thin fluids', 'Daughter: Ms. Lee', 'lee.family@example.com',
+      { status: 'referred', referredAt: L.addDays(t, -2), consent: Object.assign({}, consentAll, { givenBy: 'Patient', recordedOn: L.addDays(t, -3) }) });
+    pat('p_ethan', 'Ethan Patel', 5, 'Child', 'DLD', 'Receptive and expressive language delay', 'Mrs. Patel', 'patel.home@example.com',
+      { status: 'referred', referredAt: L.addDays(t, -1), consent: Object.assign({}, consentAll, { students: false, recordedOn: L.addDays(t, -2) }) });
+    // On the diagnostics waiting list.
+    pat('p_oliver', 'Oliver Smith', 6, 'Child', 'Stammering', 'Query stammering – parent concern', 'Mr. Smith', 'smith.family@example.com',
+      { status: 'waiting', assessedBy: null, referredAt: null, consent: { therapy: true, students: true, shareReports: false, teaching: false, recordedOn: t, givenBy: 'Parent' } });
+
+    const assess = function (id, pid, days, fields, status) {
+      s.assessments.push(Object.assign({ id: id, patientId: pid, assessorId: 'u_diag', date: L.addDays(t, -days), status: status || 'completed' }, fields));
+    };
+    assess('as_ava', 'p_ava', 66, { source: 'School nurse', reason: 'unclear speech', history: 'Typical development otherwise; hearing normal.', tests: 'DEAP articulation & phonology; oro-motor exam', findings: '/s/ produced as dental fricative in all positions; vocalic /r/ distorted. Stimulable for /s/ with visual cue.', diagnosis: 'Speech sound disorder (articulation)', severity: 'Mild', recommendations: 'Weekly articulation therapy; home practice.', frequency: 'Weekly, 30 min' });
+    assess('as_isla', 'p_isla', 66, { source: 'Cleft team', reason: 'post-palate repair speech', history: 'Cleft palate repaired at 11 months. Grommets at 2 years.', tests: 'CAPS-A; nasometry; perceptual assessment', findings: 'Glottal stops for /p b t d/; mild hypernasality; nasal emission on pressure consonants.', diagnosis: 'Cleft palate speech (compensatory articulation)', severity: 'Moderate', recommendations: 'Articulation therapy for oral placement; review velopharyngeal function in 6 months.', frequency: 'Weekly, 45 min' });
+    assess('as_leo', 'p_leo', 65, { source: 'Health visitor', reason: 'late talking', tests: 'CELF Preschool-2; language sample', findings: 'Expressive language standard score 72; uses ~40 single words.', diagnosis: 'Developmental language disorder', severity: 'Moderate', recommendations: 'Language stimulation; parent training.', frequency: 'Weekly, 30 min' });
+    assess('as_maya', 'p_maya', 65, { source: 'Parent', reason: 'stammering at school', tests: 'SSI-4; OASES-S', findings: '7% syllables stuttered; moderate impact on communication attitudes.', diagnosis: 'Developmental stammering', severity: 'Mild–moderate', recommendations: 'Fluency shaping and attitude work.', frequency: 'Weekly, 30 min' });
+    assess('as_rob', 'p_rob', 64, { source: 'Stroke unit', reason: 'aphasia after stroke', tests: 'WAB-R; Boston Naming Test', findings: 'Anomic aphasia; BNT 28/60; comprehension functional.', diagnosis: 'Anomic aphasia', severity: 'Moderate', recommendations: 'Naming therapy (semantic feature analysis); communication partner training.', frequency: 'Weekly, 45 min' });
+    assess('as_noah', 'p_noah', 64, { source: 'Paediatrician', reason: 'social communication', tests: 'CCC-2; observation', findings: 'Difficulty with topic maintenance and inferring emotions.', diagnosis: 'Social communication difficulties (autism)', severity: 'Moderate', recommendations: 'Social communication group or individual therapy.', frequency: 'Weekly, 30 min' });
+    assess('as_grace', 'p_grace', 3, { source: 'Acute stroke ward', reason: 'coughing on drinks', history: 'Right hemisphere stroke 3 weeks ago.', tests: 'Bedside swallow assessment; 90 ml water test', findings: 'Delayed swallow trigger; coughing on thin fluids; safe on mildly thick fluids.', diagnosis: 'Oropharyngeal dysphagia', severity: 'Moderate', recommendations: 'Swallow therapy; IDDSI level 2 fluids; review for instrumental assessment.', frequency: 'Twice weekly, 30 min' });
+    assess('as_ethan', 'p_ethan', 2, { source: 'Nursery', reason: 'not following instructions', tests: 'CELF Preschool-2; play observation', findings: 'Receptive SS 74, expressive SS 70.', diagnosis: 'Developmental language disorder', severity: 'Moderate', recommendations: 'Language therapy; nursery strategies.', frequency: 'Weekly, 30 min' });
+    s.assessments.push({ id: 'as_oliver', patientId: 'p_oliver', assessorId: 'u_diag', date: t, status: 'draft', source: 'Parent', reason: 'repetitions and blocks for 6 months', history: '', tests: '', findings: '', diagnosis: '', severity: '', recommendations: '', frequency: '' });
+
+    const ref = function (pid, days, priority, status, extra) {
+      s.referrals.push(Object.assign({ id: 'r_' + pid, patientId: pid, assessmentId: 'as_' + pid.slice(2), fromId: 'u_diag', at: L.addDays(t, -days), priority: priority, notes: '', status: status }, extra));
+    };
+    ref('p_ava', 63, 'Routine', 'allotted', { allottedTo: 'u_stu1', allottedBy: 'u_sup' });
+    ref('p_isla', 63, 'Soon', 'allotted', { allottedTo: 'u_stu1', allottedBy: 'u_sup' });
+    ref('p_leo', 63, 'Routine', 'allotted', { allottedTo: 'u_stu2', allottedBy: 'u_sup' });
+    ref('p_maya', 63, 'Routine', 'allotted', { allottedTo: 'u_stu2', allottedBy: 'u_sup' });
+    ref('p_rob', 63, 'Soon', 'allotted', { allottedTo: 'u_ther', allottedBy: 'u_sup' });
+    ref('p_noah', 63, 'Routine', 'allotted', { allottedTo: 'u_ther', allottedBy: 'u_sup' });
+    ref('p_grace', 2, 'Urgent', 'pending', { notes: 'Aspiration risk – please see this week.' });
+    ref('p_ethan', 1, 'Routine', 'pending', { notes: 'Parents prefer a qualified therapist (no student consent).' });
 
     const goal = function (id, patientId, area, title, specific, measurable, achievable, relevant, weeks, target, materialIds) {
       s.goals.push({
@@ -807,7 +1208,6 @@ dialog::backdrop { background: var(--overlay); }
     goal('g_noah2', 'p_noah', 'Pragmatics', 'Conversational turn-taking',
       'Noah will maintain a topic for 3 conversational turns', 'in 4 of 5 opportunities',
       'Currently maintains 1–2 turns', 'Needed for lunchtime conversations', 12, 80, ['m_feelings']);
-
     goal('g_isla1', 'p_isla', 'Articulation', 'Oral /p/ /b/ with good pressure',
       'Isla will produce /p/ and /b/ with oral airflow (no glottal substitution) in words', 'with 80% accuracy',
       'Correct in isolation with nasal mirror feedback', 'Makes her speech easier to understand at school', 12, 80, ['m_blow', 'm_nasal', 'm_artic']);
@@ -835,17 +1235,12 @@ dialog::backdrop { background: var(--overlay); }
 
     // Past sessions so the progress charts have history.
     const history = {
-      g_ava1: [40, 45, 50, 55, 60, 62, 68],
-      g_ava2: [20, 25, 25, 30, 35, 40, 42],
-      g_leo1: [30, 35, 40, 50, 50, 55, 60],
-      g_leo2: [50, 45, 55, 60, 60, 65, 70],
+      g_ava1: [40, 45, 50, 55, 60, 62, 68], g_ava2: [20, 25, 25, 30, 35, 40, 42],
+      g_leo1: [30, 35, 40, 50, 50, 55, 60], g_leo2: [50, 45, 55, 60, 60, 65, 70],
       g_maya1: [60, 65, 70, 68, 75, 78, 82],
-      g_noah1: [50, 55, 60, 60, 65, 70, 75],
-      g_noah2: [20, 30, 30, 40, 40, 45, 50],
-      g_isla1: [30, 35, 45, 50, 55, 60, 65],
-      g_isla2: [15, 20, 20, 30, 35, 35, 45],
-      g_rob1: [45, 48, 52, 55, 60, 58, 64],
-      g_rob2: [30, 40, 40, 50, 55, 60, 70]
+      g_noah1: [50, 55, 60, 60, 65, 70, 75], g_noah2: [20, 30, 30, 40, 40, 45, 50],
+      g_isla1: [30, 35, 45, 50, 55, 60, 65], g_isla2: [15, 20, 20, 30, 35, 35, 45],
+      g_rob1: [45, 48, 52, 55, 60, 58, 64], g_rob2: [30, 40, 40, 50, 55, 60, 70]
     };
     const byPatient = {};
     s.goals.forEach(function (g) { (byPatient[g.patientId] = byPatient[g.patientId] || []).push(g.id); });
@@ -866,25 +1261,70 @@ dialog::backdrop { background: var(--overlay); }
         s.logs.push({ id: 'l_' + pid + i, appointmentId: null, patientId: pid, date: date, entries: entries, notes: 'Good engagement.', homework: '' });
       }
     });
+
+    // Student coursework at different stages.
+    const doc = function (id, type, pid, author, status, days, extra) {
+      const at = new Date(Date.now() - days * 864e5).toISOString();
+      s.documents.push(Object.assign({
+        id: id, type: type, patientId: pid, authorId: author, reviewerId: 'u_sup', appointmentId: null, status: status,
+        fields: {}, createdAt: at, submittedAt: status === 'draft' ? null : at, history: []
+      }, extra));
+    };
+    const pre = function (pid, extra) {
+      const p = s.patients.find(function (x) { return x.id === pid; });
+      return L.prefillDoc('pre-assessment', { patient: p, assessment: s.assessments.find(function (a) { return a.patientId === pid; }), goals: s.goals.filter(function (g) { return g.patientId === pid; }) });
+    };
+    doc('d_ava_pre', 'pre-assessment', 'p_ava', 'u_stu1', 'approved', 55, { fields: pre('p_ava'), history: [{ at: new Date(Date.now() - 50 * 864e5).toISOString(), by: 'u_sup', action: 'approved', note: 'Clear baseline. Good.' }] });
+    doc('d_isla_pre', 'pre-assessment', 'p_isla', 'u_stu1', 'returned', 6, { fields: pre('p_isla'), history: [{ at: new Date(Date.now() - 4 * 864e5).toISOString(), by: 'u_sup', action: 'returned', note: 'Please add a word-level baseline for /t/ /d/ and say which cueing you used.' }] });
+    doc('d_leo_pre', 'pre-assessment', 'p_leo', 'u_stu2', 'approved', 55, { fields: pre('p_leo') });
+    doc('d_maya_pre', 'pre-assessment', 'p_maya', 'u_stu2', 'approved', 55, { fields: pre('p_maya') });
+    const ava = s.appointments.find(function (a) { return a.id === 'a_1'; });
+    doc('d_ava_lp', 'lesson-plan', 'p_ava', 'u_stu1', 'submitted', 1, { appointmentId: 'a_1', fields: Object.assign(L.prefillDoc('lesson-plan', {
+      goals: s.goals.filter(function (g) { return ava.goalIds.indexOf(g.id) >= 0; }),
+      materials: s.materials.filter(function (m) { return ['m_artic', 'm_mirror', 'm_tokens'].indexOf(m.id) >= 0; })
+    }), { procedure: '1. Warm-up: /s/ in isolation with mirror (5 min)\n2. Picture card naming, initial /s/ (15 min)\n3. Fishing game with /s/ words (10 min)', cueing: 'Visual (mirror) → verbal model → phonetic placement. Token per 5 correct.' }) });
+    doc('d_leo_lp', 'lesson-plan', 'p_leo', 'u_stu2', 'draft', 0, { appointmentId: 'a_3', fields: L.prefillDoc('lesson-plan', { goals: s.goals.filter(function (g) { return g.patientId === 'p_leo'; }) }) });
+    doc('d_maya_sr', 'session-report', 'p_maya', 'u_stu2', 'submitted', 2, { fields: { subjective: 'Maya arrived chatty and settled quickly.', objective: '• Easy onset in structured sentences: 16/20 (80%), minimal cues', assessment: 'Improving; generalising to picture description.', plan: 'Move to short monologues next week.' } });
+
+    s.audit.push({ at: new Date().toISOString(), userId: 'u_sup', user: 'Dr. Priya Nair', action: 'Loaded demo data', patientId: null, target: '', detail: '' });
     return s;
   }
 
   window.Store = {
     get state() { return state; },
+    isLocked: function () { return locked; },
+    hasPassphrase: function () { try { return !!cryptoKey || !!localStorage.getItem(ENC_KEY); } catch (e) { return false; } },
+    cryptoAvailable: cryptoAvailable,
+    setPassphrase: setPassphrase,
+    removePassphrase: removePassphrase,
+    unlock: unlock,
+    lock: lock,
     save: save,
     byId: byId,
     upsert: upsert,
     remove: remove,
+    audit: audit,
+    currentUser: currentUser,
+    patientRecord: patientRecord,
+    user: function (id) { return state.users.find(function (u) { return u.id === id; }); },
     patient: function (id) { return state.patients.find(function (p) { return p.id === id; }); },
     goal: function (id) { return state.goals.find(function (g) { return g.id === id; }); },
+    doc: function (id) { return state.documents.find(function (d) { return d.id === id; }); },
+    assessment: function (id) { return state.assessments.find(function (a) { return a.id === id; }); },
+    latestAssessment: function (pid) {
+      return state.assessments.filter(function (a) { return a.patientId === pid; }).sort(function (a, b) { return b.date.localeCompare(a.date); })[0];
+    },
+    referralFor: function (pid) { return state.referrals.filter(function (r) { return r.patientId === pid; }).slice(-1)[0]; },
     appointment: function (id) { return state.appointments.find(function (a) { return a.id === id; }); },
     logForAppointment: function (apptId) { return state.logs.find(function (l) { return l.appointmentId === apptId; }); },
     logsForPatient: function (pid) { return state.logs.filter(function (l) { return l.patientId === pid; }); },
     goalsForPatient: function (pid) { return state.goals.filter(function (g) { return g.patientId === pid; }); },
+    docsForPatient: function (pid) { return state.documents.filter(function (d) { return d.patientId === pid; }); },
     appointmentsOn: function (date) {
       return state.appointments.filter(function (a) { return a.date === date; })
         .sort(function (a, b) { return (a.time || '').localeCompare(b.time || ''); });
     },
+    nextCaseCode: function () { return L.caseCode(new Date().getFullYear(), state.settings.nextCaseNo++); },
     setPacked: function (date, mid, val) {
       state.packed[date] = state.packed[date] || {};
       if (val) state.packed[date][mid] = true; else delete state.packed[date][mid];
@@ -894,10 +1334,15 @@ dialog::backdrop { background: var(--overlay); }
     importJSON: function (text) {
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
-      state = migrate(Object.assign({}, EMPTY, data));
+      state = migrate(Object.assign(blank(), data));
       save();
     },
-    clearAll: function () { state = JSON.parse(JSON.stringify(EMPTY)); save(); },
+    clearAll: function () {
+      const users = state.users, me = state.settings.currentUserId;
+      state = blank();
+      state.users = users; state.settings.currentUserId = me;
+      save();
+    },
     resetDemo: function () { state = seed(); save(); }
   };
 })();
@@ -930,7 +1375,7 @@ dialog::backdrop { background: var(--overlay); }
     return { goals: S.byId(st.goals), materials: S.byId(st.materials), patients: S.byId(st.patients) };
   }
   function parseHash() {
-    const raw = route.replace(/^#\/?/, '') || 'schedule';
+    const raw = route.replace(/^#\/?/, '');
     const [path, qs] = raw.split('?');
     const params = {};
     (qs || '').split('&').filter(Boolean).forEach(function (kv) {
@@ -1057,7 +1502,7 @@ dialog::backdrop { background: var(--overlay); }
   function viewSchedule(params) {
     const date = params.date || L.todayISO();
     const st = S.state.settings;
-    const appts = S.appointmentsOn(date);
+    const appts = visibleAppts(S.appointmentsOn(date));
     const m = maps();
     const active = appts.filter(function (a) { return a.status !== 'cancelled'; });
     const logged = active.filter(function (a) { return S.logForAppointment(a.id); });
@@ -1121,8 +1566,8 @@ dialog::backdrop { background: var(--overlay); }
       return '<a class="tt-block fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (h < 60 ? ' compact' : '') + '" href="#/session/' + a.id + '" ' +
         'style="top:' + (y(b.start) + 1) + 'px;height:' + (h - 2) + 'px;left:calc(var(--tt-gutter) + (100% - var(--tt-gutter)) * ' + b.lane + ' / ' + b.lanes + ');width:calc((100% - var(--tt-gutter)) / ' + b.lanes + ' - 4px)">' +
         '<div class="tt-line"><span class="tt-time">' + esc(L.formatTime(a.time)) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' + statusBadge(a) + '</div>' +
-        '<div class="tt-line"><strong class="tt-name">' + esc(p.name) + '</strong>' + caseTag(p) + '</div>' +
-        '<div class="tt-goals">' + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
+        '<div class="tt-line"><strong class="tt-name">' + esc(nm(p)) + '</strong>' + caseTag(p) + '</div>' +
+        '<div class="tt-goals">' + (me().role !== 'student' && p.assignedTo ? esc(firstName(p.assignedTo)) + ' · ' : '') + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
         '</a>';
     }).join('');
     html += '</div>';
@@ -1139,8 +1584,8 @@ dialog::backdrop { background: var(--overlay); }
       const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
       return '<li><a class="appt fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
         '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
-        '<div class="appt-body"><div class="appt-title"><strong>' + esc(p.name) + '</strong>' + caseTag(p) + statusBadge(a) + '</div>' +
-        '<div class="muted small">' + esc(p.diagnosis || '') + '</div>' +
+        '<div class="appt-body"><div class="appt-title"><strong>' + esc(nm(p)) + '</strong>' + caseTag(p) + statusBadge(a) + '</div>' +
+        '<div class="muted small">' + esc([me().role !== 'student' && p.assignedTo ? 'With ' + userName(p.assignedTo) : '', p.diagnosis].filter(Boolean).join(' · ')) + '</div>' +
         '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
         '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
         '</div><span class="chev" aria-hidden="true">›</span></a></li>';
@@ -1156,12 +1601,13 @@ dialog::backdrop { background: var(--overlay); }
     if (!a) return '<div class="empty"><p>Session not found.</p><a href="#/schedule">Back to schedule</a></div>';
     const m = maps();
     const p = m.patients[a.patientId] || { name: 'Unknown' };
+    if (!canSee(p)) return noAccess();
     const tab = params.tab || 'prep';
     const base = '#/session/' + a.id;
     const log = S.logForAppointment(a.id);
 
     let html = '<a class="back" href="#/schedule?date=' + a.date + '">‹ Schedule</a>' +
-      '<header class="page-head"><div><h1>' + esc(p.name) + '</h1><p class="muted">' +
+      '<header class="page-head"><div><h1>' + esc(nm(p)) + '</h1><p class="muted">' +
       esc(L.formatDate(a.date, { weekday: 'short', month: 'short', day: 'numeric' })) + ' · ' + esc(L.formatTime(a.time)) +
       ' · ' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + ' ' + statusBadge(a) + '</p>' +
       '<p class="small muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
@@ -1174,6 +1620,7 @@ dialog::backdrop { background: var(--overlay); }
     if (tab === 'prep') {
       const matIds = L.appointmentMaterialIds(a, m.goals);
       const packed = S.state.packed[a.date] || {};
+      html += courseworkPanel(a, p);
       html += '<section><h2>Goals for this session</h2>';
       if (!goals.length) html += '<p class="muted">No goals selected. <button class="link" data-action="edit-appt" data-id="' + a.id + '">Choose goals</button></p>';
       html += goals.map(function (g) {
@@ -1196,7 +1643,7 @@ dialog::backdrop { background: var(--overlay); }
     if (tab === 'progress') {
       const logs = S.logsForPatient(p.id);
       html += goals.length ? goals.map(function (g) { return goalProgressCard(g, logs); }).join('') : '<p class="muted">No goals for this session.</p>';
-      html += '<p><a href="#/patients/' + p.id + '?tab=progress">See all of ' + esc(p.name.split(' ')[0]) + '\'s goals →</a></p>';
+      html += '<p><a href="#/patients/' + p.id + '?tab=progress">See all of this patient\'s goals →</a></p>';
     }
 
     if (tab === 'report') {
@@ -1244,15 +1691,14 @@ dialog::backdrop { background: var(--overlay); }
 
   function reportPanel(log, p, m) {
     const text = log.reportText || L.clientReport({ patient: p, log: log, goalsById: m.goals, therapist: S.state.settings.therapistName });
-    const email = /@/.test(p.contact || '') ? p.contact : '';
-    const subject = 'Speech therapy session summary – ' + L.formatDate(log.date, { month: 'short', day: 'numeric' });
+    const allowed = p.consent && p.consent.shareReports;
     return '<section class="card"><div class="card-head"><h2>Client report</h2>' +
       (log.reportSent ? '<span class="badge badge-good">Sent</span>' : '<span class="badge">Not sent</span>') + '</div>' +
-      '<p class="muted small">Edit freely; changes are saved with this session.</p>' +
+      (allowed ? '' : '<div class="callout warn"><strong>No permission recorded to send session summaries to this family.</strong><span>Record consent in the patient\'s details before sharing.</span></div>') +
+      '<p class="muted small">Edit freely; changes are saved with this session. Send it through your organisation\'s secure email or portal, not personal email or messaging apps.</p>' +
       '<textarea id="report-text" data-log="' + log.id + '" rows="16">' + esc(text) + '</textarea>' +
       '<div class="actions wrap">' +
       '<button class="btn" data-action="copy-report">Copy</button>' +
-      (email ? '<a class="btn" data-action="email-report" href="mailto:' + esc(email) + '?subject=' + encodeURIComponent(subject) + '&body=' + encodeURIComponent(text) + '">Email ' + esc(p.guardian || 'family') + '</a>' : '') +
       '<button class="btn" data-action="regen-report" data-log="' + log.id + '">Regenerate from log</button>' +
       '<button class="btn btn-primary" data-action="toggle-sent" data-log="' + log.id + '">' + (log.reportSent ? 'Mark as not sent' : 'Mark as sent') + '</button>' +
       '</div></section>';
@@ -1261,11 +1707,12 @@ dialog::backdrop { background: var(--overlay); }
   function viewPatients(params) {
     const st = S.state;
     const fAge = params.age || '', fCond = params.condition || '';
-    const conds = st.patients.map(function (p) { return p.condition; }).filter(function (c, i, arr) { return c && arr.indexOf(c) === i; }).sort();
-    const shown = st.patients.filter(function (p) { return (!fAge || L.ageGroup(p) === fAge) && (!fCond || p.condition === fCond); });
-    let html = '<header class="page-head"><div><h1>Patients</h1><p class="muted">' + st.patients.length + ' on caseload</p></div>' +
-      '<button class="btn btn-primary" data-action="new-patient">+ Add patient</button></header>';
-    if (!st.patients.length) return html + '<div class="empty"><p>No patients yet.</p></div>';
+    const mine = visiblePatients();
+    const conds = mine.map(function (p) { return p.condition; }).filter(function (c, i, arr) { return c && arr.indexOf(c) === i; }).sort();
+    const shown = mine.filter(function (p) { return (!fAge || L.ageGroup(p) === fAge) && (!fCond || p.condition === fCond); });
+    let html = '<header class="page-head"><div><h1>Patients</h1><p class="muted">' + mine.length + ' records you can access</p></div>' +
+      (me().role !== 'student' ? '<button class="btn btn-primary" data-action="new-patient">' + (me().role === 'therapist' ? '+ Add patient' : '+ Register patient') + '</button>' : '') + '</header>';
+    if (!mine.length) return html + '<div class="empty"><p>No patients yet.</p></div>';
     html += '<div class="filters" id="patient-filters">' +
       '<select name="age" aria-label="Adult or child">' + opt('', 'Adults & children') + opt('Child', 'Children', fAge === 'Child') + opt('Adult', 'Adults', fAge === 'Adult') + '</select>' +
       '<select name="condition" aria-label="Case type">' + opt('', 'All case types') + conds.map(function (c) { return opt(c, c, fCond === c); }).join('') + '</select></div>';
@@ -1274,7 +1721,7 @@ dialog::backdrop { background: var(--overlay); }
       const goals = S.goalsForPatient(p.id).filter(function (g) { return g.status === 'active'; });
       const next = st.appointments.filter(function (a) { return a.patientId === p.id && a.date >= L.todayISO() && a.status !== 'cancelled'; })
         .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); })[0];
-      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(p.name) + '</strong> ' + caseTag(p) +
+      return '<li><a class="row" href="#/patients/' + p.id + '"><div><strong>' + esc(nm(p)) + '</strong> ' + caseTag(p) + statusPill(p) +
         '<div class="muted small">' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</div></div>' +
         '<div class="right small"><div>' + goals.length + ' active goal' + (goals.length === 1 ? '' : 's') + '</div>' +
         '<div class="muted">' + (next ? 'Next: ' + esc(L.formatDate(next.date, { month: 'short', day: 'numeric' })) + ' ' + esc(L.formatTime(next.time)) : 'No upcoming session') + '</div></div></a></li>';
@@ -1285,19 +1732,23 @@ dialog::backdrop { background: var(--overlay); }
   function viewPatient(id, params) {
     const p = S.patient(id);
     if (!p) return '<div class="empty"><p>Patient not found.</p><a href="#/patients">Back</a></div>';
-    const tab = params.tab || 'goals';
+    if (!canSee(p)) return noAccess();
+    if (lastViewed !== p.id) { lastViewed = p.id; S.audit('Opened patient record', p.id); }
+    const tab = params.tab || (p.status === 'active' ? 'goals' : 'record');
     const base = '#/patients/' + p.id;
     const goals = S.goalsForPatient(p.id);
     const logs = S.logsForPatient(p.id);
     const m = maps();
 
     let html = '<a class="back" href="#/patients">‹ Patients</a>' +
-      '<header class="page-head"><div><h1>' + esc(p.name) + '</h1>' +
-      '<p class="muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
+      '<header class="page-head"><div><h1>' + esc(nm(p)) + '</h1>' +
+      '<p class="muted">' + esc(p.caseCode) + ' · ' + caseTag(p) + statusPill(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
       '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p></div>' +
-      '<div class="head-actions"><button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' +
-      '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button></div></header>' +
-      tabs(base, tab, [['goals', 'SMART goals'], ['progress', 'Progress'], ['history', 'Session journal']]);
+      '<div class="head-actions">' + (canManage(p) ? '<button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' : '') +
+      (p.status === 'active' && me().role !== 'diagnostician' ? '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button>' : '') +
+      (isStudentCase(p) ? '<a class="btn btn-ghost" href="#/cases/' + p.id + '">Coursework</a>' : '') + '</div></header>' +
+      tabs(base, tab, [['goals', 'SMART goals'], ['progress', 'Progress'], ['history', 'Session journal'], ['record', 'Details & consent']]);
+    if (tab === 'record') return html + recordTab(p);
 
     if (tab === 'goals') {
       html += '<div class="actions"><button class="btn btn-primary" data-action="new-goal" data-patient="' + p.id + '">+ Add SMART goal</button></div>';
@@ -1330,7 +1781,7 @@ dialog::backdrop { background: var(--overlay); }
     const mats = (g.materialIds || []).map(function (id) { return m.materials[id]; }).filter(Boolean);
     const statusCls = g.status === 'met' ? 'badge-good' : g.status === 'active' ? 'badge-info' : 'badge-muted';
     return '<article class="card goal-card"><div class="card-head"><div>' +
-      (showPatient && p ? '<a class="small" href="#/patients/' + p.id + '">' + esc(p.name) + '</a><br>' : '') +
+      (showPatient && p ? '<a class="small" href="#/patients/' + p.id + '">' + esc(nm(p)) + '</a><br>' : '') +
       '<span class="chip">' + esc(g.area) + '</span> <strong>' + esc(g.title) + '</strong></div>' +
       '<div class="head-actions"><span class="badge ' + statusCls + '">' + esc(g.status) + '</span>' +
       '<button class="btn btn-ghost btn-sm" data-action="edit-goal" data-id="' + g.id + '">Edit</button></div></div>' +
@@ -1341,13 +1792,14 @@ dialog::backdrop { background: var(--overlay); }
   function viewGoals(params) {
     const st = S.state, m = maps();
     const f = { patient: params.patient || '', area: params.area || '', status: 'status' in params ? params.status : 'active' };
+    const seeable = S.byId(visiblePatients());
     const list = st.goals.filter(function (g) {
-      return (!f.patient || g.patientId === f.patient) && (!f.area || g.area === f.area) && (!f.status || g.status === f.status);
+      return seeable[g.patientId] && (!f.patient || g.patientId === f.patient) && (!f.area || g.area === f.area) && (!f.status || g.status === f.status);
     });
     let html = '<header class="page-head"><div><h1>Goals</h1><p class="muted">SMART goals across your caseload</p></div>' +
       '<button class="btn btn-primary" data-action="new-goal">+ Add goal</button></header>' +
       '<div class="filters" id="goal-filters">' +
-      '<select name="patient" aria-label="Patient">' + opt('', 'All patients') + st.patients.map(function (p) { return opt(p.id, p.name, f.patient === p.id); }).join('') + '</select>' +
+      '<select name="patient" aria-label="Patient">' + opt('', 'All patients') + visiblePatients().filter(function (p) { return p.status === 'active'; }).map(function (p) { return opt(p.id, nm(p), f.patient === p.id); }).join('') + '</select>' +
       '<select name="area" aria-label="Area">' + opt('', 'All areas') + AREAS.map(function (a) { return opt(a, a, f.area === a); }).join('') + '</select>' +
       '<select name="status" aria-label="Status">' + opt('', 'Any status', !f.status) + ['active', 'met', 'paused', 'discontinued'].map(function (s) { return opt(s, s[0].toUpperCase() + s.slice(1), f.status === s); }).join('') + '</select>' +
       '</div>';
@@ -1374,12 +1826,12 @@ dialog::backdrop { background: var(--overlay); }
       return html + '<ul class="list">' + mats.map(function (x) {
         const goals = used[x.id] || [];
         return '<li><div class="row"><div><strong>' + esc(x.name) + '</strong><div class="muted small">' + esc([x.category, x.location].filter(Boolean).join(' · ')) + '</div>' +
-          '<div class="small">' + (goals.length ? 'Used for: ' + goals.map(function (g) { return esc((m.patients[g.patientId] || {}).name + ' – ' + g.title); }).join('; ') : '<span class="muted">Not linked to any goal</span>') + '</div></div>' +
+          '<div class="small">' + (goals.length ? 'Used for: ' + goals.map(function (g) { return esc(nm(m.patients[g.patientId]) + ' – ' + g.title); }).join('; ') : '<span class="muted">Not linked to any goal</span>') + '</div></div>' +
           '<button class="btn btn-ghost btn-sm" data-action="edit-material" data-id="' + x.id + '">Edit</button></div></li>';
       }).join('') + '</ul>';
     }
 
-    const appts = S.appointmentsOn(date).filter(function (a) { return a.status !== 'cancelled'; });
+    const appts = visibleAppts(S.appointmentsOn(date)).filter(function (a) { return a.status !== 'cancelled'; });
     const all = L.materialsForDay(appts, m.goals, m.materials, m.patients);
     const packed = S.state.packed[date] || {};
     const common = all.filter(function (x) { return x.count > 1; });
@@ -1392,7 +1844,7 @@ dialog::backdrop { background: var(--overlay); }
     const item = function (x, showWho) {
       return '<li><label><input type="checkbox" data-action="pack" data-date="' + date + '" data-id="' + x.material.id + '"' + (packed[x.material.id] ? ' checked' : '') + '> ' +
         '<span>' + esc(x.material.name) + '</span></label>' +
-        '<span class="muted small">' + (showWho ? esc(x.sessions.map(function (s) { return (s.patient || {}).name; }).join(', ')) + (x.material.location ? ' · ' : '') : '') + esc(x.material.location || '') + '</span></li>';
+        '<span class="muted small">' + (showWho ? esc(x.sessions.map(function (s) { return nm(s.patient); }).join(', ')) + (x.material.location ? ' · ' : '') : '') + esc(x.material.location || '') + '</span></li>';
     };
     html += '<section><h2>Common materials <span class="muted small">needed in 2+ sessions</span></h2>' +
       (common.length ? '<ul class="checklist">' + common.map(function (x) { return item(x, true); }).join('') + '</ul>' : '<p class="muted">No materials are shared between sessions today.</p>') + '</section>';
@@ -1400,7 +1852,7 @@ dialog::backdrop { background: var(--overlay); }
     html += '<section><h2>By session</h2>' + appts.map(function (a) {
       const p = m.patients[a.patientId] || {};
       const ids = L.appointmentMaterialIds(a, m.goals);
-      return '<article class="card"><div class="card-head"><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(p.name) + '</strong><a class="small" href="#/session/' + a.id + '">Open</a></div>' +
+      return '<article class="card"><div class="card-head"><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(nm(p)) + '</strong><a class="small" href="#/session/' + a.id + '">Open</a></div>' +
         (ids.length ? '<ul class="checklist">' + ids.map(function (id) {
           const x = m.materials[id];
           return '<li><label><input type="checkbox" data-action="pack" data-date="' + date + '" data-id="' + id + '"' + (packed[id] ? ' checked' : '') + '> <span>' + esc(x.name) + '</span></label><span class="muted small">' + esc(x.location || '') + '</span></li>';
@@ -1412,7 +1864,7 @@ dialog::backdrop { background: var(--overlay); }
   function viewReports(params) {
     const date = params.date || L.todayISO();
     const m = maps();
-    const appts = S.appointmentsOn(date).filter(function (a) { return a.status !== 'cancelled'; });
+    const appts = visibleAppts(S.appointmentsOn(date)).filter(function (a) { return a.status !== 'cancelled'; });
     let html = '<header class="page-head"><div><h1>Daily reports</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div></header>' + dateNav('reports', date);
     if (!appts.length) return html + '<div class="empty"><p>No sessions on this day.</p></div>';
     html += '<ul class="list">' + appts.map(function (a) {
@@ -1422,27 +1874,10 @@ dialog::backdrop { background: var(--overlay); }
       if (!log) action = '<a class="btn btn-sm" href="#/session/' + a.id + '?tab=log">Log session</a>';
       else action = '<button class="btn btn-sm" data-action="copy-log-report" data-log="' + log.id + '">Copy</button>' +
         '<a class="btn btn-sm ' + (log.reportSent ? '' : 'btn-primary') + '" href="#/session/' + a.id + '?tab=report">' + (log.reportSent ? 'View' : 'Review & send') + '</a>';
-      return '<li><div class="row"><div><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(p.name) + '</strong> ' + statusBadge(a) +
+      return '<li><div class="row"><div><strong>' + esc(L.formatTime(a.time)) + ' · ' + esc(nm(p)) + '</strong> ' + statusBadge(a) +
         '<div class="muted small">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</div></div><div class="head-actions">' + action + '</div></div></li>';
     }).join('') + '</ul>';
     return html;
-  }
-
-  function viewSettings() {
-    const st = S.state;
-    return '<header class="page-head"><div><h1>Settings</h1><p class="muted">Data is stored only in this browser on this device.</p></div></header>' +
-      '<form class="card" id="settings-form"><label>Your name (used to sign reports)<input name="therapistName" value="' + esc(st.settings.therapistName) + '"></label>' +
-      '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(st.settings.dayStart) + '"></label>' +
-      '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(st.settings.lunchStart) + '"></label>' +
-      '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(st.settings.lunchEnd) + '"></label>' +
-      '<label>Day ends<input type="time" name="dayEnd" value="' + esc(st.settings.dayEnd) + '"></label></div>' +
-      '<div class="actions"><button class="btn btn-primary" type="submit">Save</button></div></form>' +
-      '<section class="card"><h2>Backup</h2><p class="muted small">Download a backup regularly, and use it to move your data to another device.</p>' +
-      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
-      '<label class="btn">Restore from backup<input type="file" accept="application/json,.json" id="import-file" hidden></label></div></section>' +
-      '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
-      '<button class="btn" data-action="reset-demo">Load demo data</button>' +
-      '<button class="btn btn-danger" data-action="clear-all">Delete all data</button></div></section>';
   }
 
   /* ---------- forms in a modal ---------- */
@@ -1471,8 +1906,9 @@ dialog::backdrop { background: var(--overlay); }
 
   function patientForm(id) {
     const p = id ? S.patient(id) : {};
+    const c = p.consent || { therapy: true };
     openModal(id ? 'Edit patient' : 'New patient',
-      '<label>Full name<input name="name" required value="' + esc(p.name) + '"></label>' +
+      '<label>Full name<input name="name" required value="' + esc(nm(p)) + '"></label>' +
       '<div class="grid-3"><label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', (p.ageGroup || 'Child') === 'Child') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label>' +
       '<label class="span-2">Case type<input name="condition" list="conditions" placeholder="e.g. DLD, CLP, Stroke – aphasia" value="' + esc(p.condition) + '"></label></div>' +
       '<datalist id="conditions">' + L.CONDITIONS.Child.concat(L.CONDITIONS.Adult).filter(function (c, i, a) { return a.indexOf(c) === i; }).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
@@ -1480,16 +1916,33 @@ dialog::backdrop { background: var(--overlay); }
       '<label>Diagnosis details<input name="diagnosis" placeholder="e.g. Left MCA stroke, anomia" value="' + esc(p.diagnosis) + '"></label></div>' +
       '<div class="grid-2"><label>Parent / guardian / carer<input name="guardian" placeholder="Blank = address adult directly" value="' + esc(p.guardian) + '"></label>' +
       '<label>Email or phone<input name="contact" value="' + esc(p.contact) + '"></label></div>' +
-      '<label>Notes<textarea name="notes" rows="3">' + esc(p.notes) + '</textarea></label>',
+      '<label>Notes<textarea name="notes" rows="2">' + esc(p.notes) + '</textarea></label>' +
+      '<fieldset class="pick consent"><legend>Consent &amp; permissions</legend>' +
+      '<div class="grid-2"><label>Recorded on<input type="date" name="consentOn" value="' + esc(c.recordedOn || L.todayISO()) + '"></label>' +
+      '<label>Given by<select name="consentBy">' + ['Patient', 'Parent', 'Legal guardian', 'Carer with legal authority'].map(function (x) { return opt(x, x, c.givenBy === x); }).join('') + '</select></label></div>' +
+      [['therapy', 'Assessment and therapy'], ['students', 'Supervised student clinicians may be involved'], ['shareReports', 'Session summaries may be sent to the family'], ['teaching', 'Anonymised use in teaching']].map(function (k) {
+        return '<label class="check"><input type="checkbox" name="c_' + k[0] + '"' + (c[k[0]] ? ' checked' : '') + '> ' + k[1] + '</label>';
+      }).join('') + '</fieldset>',
       function (fd) {
+        const consent = { therapy: !!fd.get('c_therapy'), students: !!fd.get('c_students'), shareReports: !!fd.get('c_shareReports'), teaching: !!fd.get('c_teaching'),
+          recordedOn: fd.get('consentOn'), givenBy: fd.get('consentBy') };
+        const u = me();
+        const fresh = !id;
         const saved = S.upsert('patients', Object.assign({}, p, {
           name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
           ageGroup: fd.get('ageGroup'), condition: fd.get('condition').trim(),
-          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes')
-        }));
-        if (!id) go('#/patients/' + saved.id);
+          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes'), consent: consent
+        }, fresh ? { caseCode: S.nextCaseCode(), status: u.role === 'therapist' ? 'active' : 'waiting', assignedTo: u.role === 'therapist' ? u.id : '' } : {}));
+        if (fresh) {
+          S.audit('Registered patient', saved.id);
+          if (saved.status === 'waiting') {
+            const a = S.upsert('assessments', { patientId: saved.id, assessorId: u.role === 'diagnostician' ? u.id : '', date: L.todayISO(), status: 'draft' });
+            go('#/assessment/' + a.id);
+          } else go('#/patients/' + saved.id);
+        } else if (JSON.stringify(p.consent || {}) !== JSON.stringify(consent)) S.audit('Updated consent', saved.id);
+        else S.audit('Edited patient details', saved.id);
       },
-      id ? function () { S.remove('patients', id); go('#/patients'); } : null);
+      id && me().role === 'supervisor' ? function () { const code = p.caseCode; S.remove('patients', id); S.audit('Erased record', null, code); go('#/patients'); } : null);
   }
 
   function goalForm(id, patientId) {
@@ -1497,7 +1950,7 @@ dialog::backdrop { background: var(--overlay); }
     const st = S.state;
     openModal(id ? 'Edit SMART goal' : 'New SMART goal',
       '<div class="grid-2"><label>Patient<select name="patientId" required>' + opt('', 'Choose…') +
-      st.patients.map(function (p) { return opt(p.id, p.name, g.patientId === p.id); }).join('') + '</select></label>' +
+      visiblePatients().filter(function (p) { return p.status === 'active' || p.id === g.patientId; }).map(function (p) { return opt(p.id, nm(p), g.patientId === p.id); }).join('') + '</select></label>' +
       '<label>Area<select name="area">' + AREAS.map(function (a) { return opt(a, a, g.area === a); }).join('') + '</select></label></div>' +
       '<label>Short title<input name="title" required placeholder="e.g. /s/ in initial position" value="' + esc(g.title) + '"></label>' +
       '<label><b>S</b>pecific – who will do what<textarea name="specific" rows="2" required placeholder="Ava will produce /s/ in the initial position of words">' + esc(g.specific) + '</textarea></label>' +
@@ -1559,7 +2012,7 @@ dialog::backdrop { background: var(--overlay); }
       }).join('');
     };
     const form = openModal(id ? 'Edit session' : 'New session',
-      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + st.patients.map(function (p) { const c = L.caseLabel(p); return opt(p.id, p.name + (c ? ' (' + c + ')' : ''), a.patientId === p.id); }).join('') + '</select></label>' +
+      '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + visiblePatients().filter(function (p) { return p.status === 'active' || p.id === a.patientId; }).map(function (p) { const c = L.caseLabel(p); return opt(p.id, nm(p) + (c ? ' (' + c + ')' : ''), a.patientId === p.id); }).join('') + '</select></label>' +
       '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
       '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"></label>' +
       '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
@@ -1590,23 +2043,749 @@ dialog::backdrop { background: var(--overlay); }
     });
   }
 
+  /* ---------- people, access and privacy helpers ---------- */
+
+  const NAV_ROLES = {
+    schedule: ['supervisor', 'therapist', 'student'],
+    diagnostics: ['supervisor', 'diagnostician'],
+    cases: ['supervisor', 'therapist', 'student'],
+    patients: ['supervisor', 'therapist', 'student', 'diagnostician'],
+    goals: ['supervisor', 'therapist', 'student'],
+    materials: ['supervisor', 'therapist', 'student'],
+    reports: ['supervisor', 'therapist', 'student'],
+    privacy: ['supervisor', 'therapist', 'student', 'diagnostician']
+  };
+  const SEVERITY = ['Mild', 'Mild–moderate', 'Moderate', 'Moderate–severe', 'Severe', 'Profound'];
+  const PRIORITY = ['Routine', 'Soon', 'Urgent'];
+
+  function me() { return S.currentUser() || { id: '', role: 'supervisor', name: '' }; }
+  function canSee(p) { return L.canSeePatient(me(), p); }
+  function canManage(p) {
+    const u = me();
+    return u.role === 'supervisor' || (u.role === 'therapist' && p.assignedTo === u.id) || (u.role === 'diagnostician' && p.status === 'waiting');
+  }
+  function nm(p) {
+    if (!p) return 'Unknown';
+    return S.state.settings.hideNames ? p.caseCode + ' · ' + L.initials(p.name) : p.name;
+  }
+  function pseud(p) { return p ? p.caseCode + ' (' + L.initials(p.name) + ')' : '—'; }
+  function userName(id) { const u = S.user(id); return u ? u.name : '—'; }
+  function firstName(id) { return userName(id).replace(/^Dr\.\s*/, '').split(' ')[0]; }
+  function visiblePatients() { return S.state.patients.filter(canSee); }
+  function visibleAppts(list) {
+    const pm = S.byId(S.state.patients);
+    return list.filter(function (a) { return canSee(pm[a.patientId]); });
+  }
+  function noAccess() {
+    return '<div class="empty"><p><strong>You don\'t have access to this.</strong></p><p class="small">Records are shown on a need-to-know basis for your role (' + esc(L.ROLES[me().role].label) + ').</p></div>';
+  }
+  function isStudentCase(p) { const u = S.user(p.assignedTo); return !!u && u.role === 'student'; }
+  function docChip(d) {
+    return '<a class="doc-chip st-' + d.status + '" href="#/doc/' + d.id + '">' + esc(L.DOC_STATUS[d.status]) + '</a>';
+  }
+  function tick(v) { return v ? '<span class="yes">✓</span>' : '<span class="no">✗</span>'; }
+  function fmtStamp(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /* ---------- role bar ---------- */
+
+  function quickLinks(u) {
+    const st = S.state;
+    const pending = st.referrals.filter(function (r) { return r.status === 'pending'; }).length;
+    if (u.role === 'supervisor') {
+      return [
+        { label: 'To allot', n: pending, href: '#/cases?tab=allot', alert: pending > 0 },
+        { label: 'To review', n: st.documents.filter(function (d) { return d.status === 'submitted'; }).length, href: '#/cases?tab=review' },
+        { label: 'Allotted', n: st.patients.filter(function (p) { return p.status === 'active' && p.assignedTo; }).length, href: '#/cases?tab=allotted' }
+      ];
+    }
+    if (u.role === 'therapist') {
+      return [
+        { label: 'Referrals', n: pending, href: '#/cases?tab=allot', alert: pending > 0 },
+        { label: 'My cases', n: st.patients.filter(function (p) { return p.assignedTo === u.id && p.status === 'active'; }).length, href: '#/cases?tab=allotted' }
+      ];
+    }
+    if (u.role === 'student') {
+      const mine = st.patients.filter(function (p) { return p.assignedTo === u.id; });
+      const returned = st.documents.filter(function (d) { return d.authorId === u.id && d.status === 'returned'; }).length;
+      return [
+        { label: 'Allotted cases', n: mine.length, href: '#/cases' },
+        { label: 'Changes requested', n: returned, href: '#/cases', alert: returned > 0 }
+      ];
+    }
+    return [
+      { label: 'Waiting list', n: st.patients.filter(function (p) { return p.status === 'waiting'; }).length, href: '#/diagnostics' },
+      { label: 'Referred', n: st.referrals.filter(function (r) { return r.fromId === u.id && r.status === 'pending'; }).length, href: '#/diagnostics?tab=done' }
+    ];
+  }
+
+  function rolebar() {
+    const u = me(), st = S.state;
+    return '<div class="rb-left"><span class="rb-dept">' + esc(L.ROLES[u.role].dept) + '</span>' +
+      quickLinks(u).map(function (l) {
+        return '<a class="rb-link' + (l.alert ? ' alert' : '') + '" href="' + l.href + '">' + esc(l.label) + ' <span class="rb-count">' + l.n + '</span></a>';
+      }).join('') + '</div>' +
+      '<div class="rb-right">' +
+      '<button class="rb-btn" data-action="toggle-names" aria-pressed="' + !!st.settings.hideNames + '">' + (st.settings.hideNames ? 'Show names' : 'Hide names') + '</button>' +
+      (S.hasPassphrase() ? '<button class="rb-btn" data-action="lock-now">Lock</button>' : '') +
+      '<label class="rb-user"><span class="rb-as">Signed in as</span><select id="user-switch" aria-label="Signed in as">' +
+      st.users.map(function (x) { return opt(x.id, x.name + ' – ' + L.ROLES[x.role].label, x.id === u.id); }).join('') +
+      '</select></label></div>';
+  }
+
+  function lockScreen() {
+    return '<div class="lock"><form id="unlock-form" class="card lock-card">' +
+      '<h1>Therapy Planner is locked</h1><p class="muted">Patient data on this device is encrypted. Enter the passphrase to continue.</p>' +
+      '<label>Passphrase<input type="password" name="pass" id="unlock-pass" autocomplete="current-password" required></label>' +
+      '<p class="form-error" id="unlock-error" hidden></p>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Unlock</button></div>' +
+      '<p class="muted small">If the passphrase is lost, the data cannot be recovered. Restore from a backup instead.</p></form></div>';
+  }
+
+  /* ---------- diagnostics department ---------- */
+
+  function viewDiagnostics(params) {
+    const tab = params.tab || 'waiting';
+    const st = S.state;
+    const waiting = st.patients.filter(function (p) { return p.status === 'waiting'; });
+    const done = st.assessments.filter(function (a) { return a.status === 'completed'; }).sort(function (a, b) { return b.date.localeCompare(a.date); });
+    let html = '<header class="page-head"><div><h1>Diagnostics</h1><p class="muted">Assess new patients and refer them to the therapy department</p></div>' +
+      '<button class="btn btn-primary" data-action="new-patient">+ Register patient</button></header>' +
+      tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')']]);
+
+    if (tab === 'waiting') {
+      if (!waiting.length) return html + '<div class="empty"><p>No one is waiting for assessment.</p></div>';
+      return html + '<ul class="list">' + waiting.map(function (p) {
+        const a = S.state.assessments.find(function (x) { return x.patientId === p.id && x.status === 'draft'; });
+        return '<li><div class="row"><div><strong>' + esc(nm(p)) + '</strong> ' + caseTag(p) +
+          '<div class="muted small">' + esc(p.caseCode) + (a && a.source ? ' · Referred by ' + esc(a.source) : '') + (a && a.reason ? ' – ' + esc(a.reason) : '') + '</div></div>' +
+          (a ? '<a class="btn btn-sm btn-primary" href="#/assessment/' + a.id + '">Continue assessment</a>'
+            : '<button class="btn btn-sm btn-primary" data-action="start-assessment" data-patient="' + p.id + '">Start assessment</button>') + '</div></li>';
+      }).join('') + '</ul>';
+    }
+    if (!done.length) return html + '<div class="empty"><p>No completed assessments yet.</p></div>';
+    return html + '<ul class="list">' + done.map(function (a) {
+      const p = S.patient(a.patientId);
+      if (!p) return '';
+      const r = S.state.referrals.find(function (x) { return x.assessmentId === a.id; });
+      const status = !r ? '<span class="badge badge-muted">Not referred</span>'
+        : r.status === 'pending' ? '<span class="badge badge-warn">Awaiting allotment</span>'
+          : '<span class="badge badge-good">Allotted to ' + esc(firstName(r.allottedTo)) + '</span>';
+      return '<li><a class="row" href="#/assessment/' + a.id + '"><div><strong>' + esc(nm(p)) + '</strong> ' + caseTag(p) +
+        '<div class="muted small">' + esc(L.formatDate(a.date, { day: 'numeric', month: 'short' })) + ' · ' + esc(a.diagnosis || '') + (a.severity ? ' · ' + esc(a.severity) : '') + '</div></div>' + status + '</a></li>';
+    }).join('') + '</ul>';
+  }
+
+  function viewAssessment(id) {
+    const a = S.assessment(id);
+    const p = a && S.patient(a.patientId);
+    if (!a || !p) return '<div class="empty"><p>Assessment not found.</p></div>';
+    const u = me();
+    if (!(u.role === 'supervisor' || u.role === 'diagnostician' || canSee(p))) return noAccess();
+    const editable = a.status === 'draft' && (u.role === 'diagnostician' || u.role === 'supervisor');
+    const r = S.state.referrals.find(function (x) { return x.assessmentId === a.id; });
+    let html = '<a class="back" href="#/diagnostics' + (a.status === 'draft' ? '' : '?tab=done') + '">‹ Diagnostics</a>' +
+      '<header class="page-head"><div><h1>Assessment · ' + esc(nm(p)) + '</h1><p class="muted">' + esc(p.caseCode) + ' · ' + caseTag(p) +
+      (p.dob ? ' · Age ' + L.age(p.dob) : '') + ' · ' + (a.status === 'draft' ? '<span class="badge">Draft</span>' : '<span class="badge badge-good">Completed</span>') + '</p></div>' +
+      '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '?tab=record">Details & consent</a></div></header>';
+
+    const F = [['source', 'Referred by', 1], ['reason', 'Reason for referral', 2], ['history', 'Case history', 3], ['tests', 'Tests & tools used', 2],
+      ['findings', 'Findings', 4], ['diagnosis', 'Diagnosis', 1], ['recommendations', 'Recommendations', 3], ['frequency', 'Recommended frequency', 1]];
+
+    if (!editable) {
+      html += '<section class="card"><dl class="kv">' +
+        '<div><dt>Date</dt><dd>' + esc(L.formatDate(a.date)) + '</dd></div><div><dt>Assessed by</dt><dd>' + esc(userName(a.assessorId)) + '</dd></div>' +
+        F.map(function (f) { return '<div><dt>' + esc(f[1]) + '</dt><dd class="pre">' + esc(a[f[0]] || '—') + '</dd></div>'; }).join('') +
+        '<div><dt>Severity</dt><dd>' + esc(a.severity || '—') + '</dd></div></dl></section>';
+      if (r) html += '<section class="card"><h2>Referral to therapy</h2><p>' + esc(r.priority) + ' priority · sent ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + ' · ' +
+        (r.status === 'pending' ? 'awaiting allotment' : 'allotted to ' + esc(userName(r.allottedTo))) + '</p>' + (r.notes ? '<p class="muted">' + esc(r.notes) + '</p>' : '') + '</section>';
+      return html;
+    }
+
+    const field = function (f) {
+      return f[2] > 1 ? '<label>' + esc(f[1]) + '<textarea name="' + f[0] + '" rows="' + f[2] + '">' + esc(a[f[0]] || '') + '</textarea></label>'
+        : '<label>' + esc(f[1]) + '<input name="' + f[0] + '" value="' + esc(a[f[0]] || '') + '"></label>';
+    };
+    html += '<form id="assessment-form" data-id="' + a.id + '" class="card">' +
+      '<div class="grid-3"><label>Date<input type="date" name="date" value="' + esc(a.date) + '" required></label>' + field(F[0]) +
+      '<label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', p.ageGroup !== 'Adult') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label></div>' +
+      F.slice(1, 5).map(field).join('') +
+      '<div class="grid-3"><label>Case type<input name="condition" list="conditions-dx" value="' + esc(p.condition) + '"></label>' + field(F[5]) +
+      '<label>Severity<select name="severity">' + opt('', '—') + SEVERITY.map(function (s) { return opt(s, s, a.severity === s); }).join('') + '</select></label></div>' +
+      '<datalist id="conditions-dx">' + L.CONDITIONS.Child.concat(L.CONDITIONS.Adult).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('') + '</datalist>' +
+      field(F[6]) + field(F[7]) +
+      '<fieldset class="refer"><legend>Refer to therapy department</legend>' +
+      '<div class="grid-2"><label>Priority<select name="priority">' + PRIORITY.map(function (x) { return opt(x, x); }).join('') + '</select></label>' +
+      '<label>Note for the therapy team<input name="refNotes" placeholder="e.g. aspiration risk, family preferences"></label></div>' +
+      '<p class="small muted">Consent for therapy: ' + tick(p.consent && p.consent.therapy) + ' · Student clinicians: ' + tick(p.consent && p.consent.students) +
+      ' <button type="button" class="link" data-action="edit-patient" data-id="' + p.id + '">Update consent</button></p></fieldset>' +
+      '<div class="actions wrap end"><button class="btn" name="intent" value="draft">Save draft</button>' +
+      '<button class="btn" name="intent" value="close">Complete – no therapy needed</button>' +
+      '<button class="btn btn-primary" name="intent" value="refer">Complete &amp; refer to therapy</button></div></form>';
+    return html;
+  }
+
+  function submitAssessment(form, intent) {
+    const a = S.assessment(form.dataset.id), p = S.patient(a.patientId);
+    const v = function (n) { const el = form.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
+    ['date', 'source', 'reason', 'history', 'tests', 'findings', 'diagnosis', 'severity', 'recommendations', 'frequency'].forEach(function (k) { a[k] = v(k); });
+    p.ageGroup = v('ageGroup'); p.condition = v('condition');
+    if (intent === 'draft') { S.save(); toast('Draft saved'); return; }
+    if (intent === 'refer' && !(p.consent && p.consent.therapy)) { toast('Record consent for therapy before referring.'); S.save(); return; }
+    a.status = 'completed';
+    p.assessedBy = a.assessorId;
+    if (intent === 'refer') {
+      S.upsert('referrals', { patientId: p.id, assessmentId: a.id, fromId: me().id, at: L.todayISO(), priority: v('priority'), notes: v('refNotes'), status: 'pending' });
+      p.status = 'referred'; p.referredAt = L.todayISO();
+      S.audit('Referred to therapy', p.id, v('priority') + ' priority');
+      toast('Referred to the therapy department');
+    } else {
+      p.status = 'discharged'; p.dischargedAt = L.todayISO();
+      S.audit('Assessment completed, no therapy', p.id);
+      toast('Assessment completed');
+    }
+    S.save();
+    go('#/diagnostics?tab=done');
+  }
+
+  /* ---------- therapy department: cases ---------- */
+
+  function viewCases(params) {
+    const u = me();
+    if (u.role === 'student') return studentCases();
+    if (u.role === 'diagnostician') return noAccess();
+    const st = S.state;
+    const tab = params.tab || 'allot';
+    const pending = st.referrals.filter(function (r) { return r.status === 'pending'; });
+    const allotted = st.patients.filter(function (p) { return p.status === 'active' && p.assignedTo && canSee(p); });
+    const review = st.documents.filter(function (d) { return d.status === 'submitted'; });
+    const t = [['allot', 'To allot (' + pending.length + ')'], ['allotted', (u.role === 'therapist' ? 'My cases' : 'Allotted cases') + ' (' + allotted.length + ')']];
+    if (u.role === 'supervisor') t.push(['review', 'To review (' + review.length + ')']);
+    let html = '<header class="page-head"><div><h1>Cases</h1><p class="muted">Referrals from diagnostics, allotment and student coursework</p></div></header>' + tabs('#/cases', tab, t);
+
+    if (tab === 'allot') {
+      if (!pending.length) return html + '<div class="empty"><p>No referrals are waiting.</p></div>';
+      return html + pending.sort(function (a, b) { return PRIORITY.indexOf(b.priority) - PRIORITY.indexOf(a.priority) || a.at.localeCompare(b.at); }).map(function (r) {
+        const p = S.patient(r.patientId), a = S.assessment(r.assessmentId) || {};
+        const c = p.consent || {};
+        return '<article class="card referral"><div class="card-head"><div><strong>' + esc(nm(p)) + '</strong> ' + caseTag(p) +
+          '<div class="muted small">' + esc(p.caseCode) + (p.dob ? ' · Age ' + L.age(p.dob) : '') + ' · referred ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + ' by ' + esc(userName(r.fromId)) + '</div></div>' +
+          '<span class="badge prio-' + r.priority.toLowerCase() + '">' + esc(r.priority) + '</span></div>' +
+          '<p><strong>' + esc(a.diagnosis || '') + '</strong>' + (a.severity ? ' · ' + esc(a.severity) : '') + '</p>' +
+          (a.recommendations ? '<p class="small">' + esc(a.recommendations) + (a.frequency ? ' <span class="muted">(' + esc(a.frequency) + ')</span>' : '') + '</p>' : '') +
+          (r.notes ? '<p class="small note">' + esc(r.notes) + '</p>' : '') +
+          '<p class="small consent-line">Therapy ' + tick(c.therapy) + ' · Student clinicians ' + tick(c.students) + ' · Reports to family ' + tick(c.shareReports) + '</p>' +
+          '<div class="actions wrap"><a class="btn btn-sm" href="#/assessment/' + a.id + '">Assessment</a>' +
+          (u.role === 'supervisor' ? '<button class="btn btn-sm btn-primary" data-action="allot" data-patient="' + p.id + '">Allot</button>'
+            : '<button class="btn btn-sm btn-primary" data-action="take-case" data-patient="' + p.id + '">Take on this case</button>') +
+          '</div></article>';
+      }).join('');
+    }
+
+    if (tab === 'review') {
+      if (!review.length) return html + '<div class="empty"><p>Nothing is waiting for review.</p></div>';
+      return html + '<ul class="list">' + review.sort(function (a, b) { return a.submittedAt.localeCompare(b.submittedAt); }).map(function (d) {
+        const p = S.patient(d.patientId), ap = d.appointmentId && S.appointment(d.appointmentId);
+        return '<li><a class="row" href="#/doc/' + d.id + '"><div><strong>' + esc(L.DOC_TYPES[d.type].label) + '</strong> · ' + esc(pseud(p)) +
+          '<div class="muted small">' + esc(userName(d.authorId)) + (ap ? ' · session ' + esc(L.formatDate(ap.date, { day: 'numeric', month: 'short' })) : '') + ' · submitted ' + esc(fmtStamp(d.submittedAt)) + '</div></div>' +
+          '<span class="btn btn-sm btn-primary">Review</span></a></li>';
+      }).join('') + '</ul>';
+    }
+
+    if (!allotted.length) return html + '<div class="empty"><p>No allotted cases.</p></div>';
+    return html + '<div class="table-wrap"><table class="tbl cases-tbl"><thead><tr><th>Case</th><th>Clinician</th><th>Pre-assessment</th><th>Lesson plans</th><th>Session reports</th><th>Conclusion</th><th>Next step</th></tr></thead><tbody>' +
+      allotted.map(function (p) {
+        const student = isStudentCase(p);
+        const docs = S.docsForPatient(p.id);
+        const prog = L.caseProgress(docs, S.logsForPatient(p.id).filter(function (l) { return l.appointmentId; }).length);
+        const cell = function (type) {
+          if (!student) return '<td class="muted">—</td>';
+          const c = prog[type];
+          if (!c.total) return '<td class="muted">None</td>';
+          return '<td><span class="doc-count">' + c.approved + '/' + c.total + ' approved</span>' + (c.submitted ? ' <span class="doc-chip st-submitted">' + c.submitted + ' to review</span>' : '') +
+            (c.returned ? ' <span class="doc-chip st-returned">' + c.returned + ' returned</span>' : '') + '</td>';
+        };
+        return '<tr><td><a href="#/cases/' + p.id + '"><strong>' + esc(nm(p)) + '</strong></a><div>' + caseTag(p) + '</div></td>' +
+          '<td>' + esc(userName(p.assignedTo)) + (student ? '<div class="muted small">Student · supervisor ' + esc(firstName(p.supervisorId)) + '</div>' : '') + '</td>' +
+          cell('pre-assessment') + cell('lesson-plan') + cell('session-report') + cell('conclusion') +
+          '<td class="small">' + (student ? esc(prog.next) : '<span class="muted">Qualified clinician</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>';
+  }
+
+  function studentCases() {
+    const u = me();
+    const mine = S.state.patients.filter(function (p) { return p.assignedTo === u.id; });
+    let html = '<header class="page-head"><div><h1>My cases</h1><p class="muted">Cases allotted to you by your supervisor</p></div></header>';
+    if (!mine.length) return html + '<div class="empty"><p>No cases have been allotted to you yet.</p></div>';
+    return html + mine.map(function (p) {
+      const docs = S.docsForPatient(p.id);
+      const prog = L.caseProgress(docs, S.logsForPatient(p.id).filter(function (l) { return l.appointmentId; }).length);
+      const returned = docs.filter(function (d) { return d.status === 'returned'; });
+      return '<article class="card"><div class="card-head"><div><a href="#/cases/' + p.id + '"><strong>' + esc(nm(p)) + '</strong></a> ' + caseTag(p) +
+        '<div class="muted small">' + esc(p.caseCode) + ' · Supervisor: ' + esc(userName(p.supervisorId)) + '</div></div>' +
+        '<a class="btn btn-sm btn-primary" href="#/cases/' + p.id + '">Open case</a></div>' +
+        '<div class="progress-row">' + Object.keys(L.DOC_TYPES).map(function (t) {
+          const c = prog[t];
+          return '<div><span class="muted small">' + esc(L.DOC_TYPES[t].label) + '</span><strong>' + c.approved + '/' + c.total + '</strong></div>';
+        }).join('') + '</div>' +
+        '<p class="small"><span class="meta-label">Next</span> ' + esc(prog.next) + '</p>' +
+        returned.map(function (d) {
+          const fb = (d.history || []).filter(function (h) { return h.action === 'returned'; }).slice(-1)[0];
+          return '<a class="callout warn" href="#/doc/' + d.id + '"><strong>' + esc(L.DOC_TYPES[d.type].label) + ': changes requested</strong>' + (fb ? '<span>' + esc(fb.note) + '</span>' : '') + '</a>';
+        }).join('') + '</article>';
+    }).join('');
+  }
+
+  function viewCase(pid) {
+    const p = S.patient(pid);
+    if (!p) return '<div class="empty"><p>Case not found.</p></div>';
+    if (!canSee(p)) return noAccess();
+    const u = me();
+    const author = u.role === 'student' && p.assignedTo === u.id;
+    const docs = S.docsForPatient(pid);
+    const ofType = function (t) { return docs.filter(function (d) { return d.type === t; }); };
+    const newBtn = function (type, apptId, label) {
+      return author ? '<button class="btn btn-sm" data-action="new-doc" data-type="' + type + '" data-patient="' + pid + '"' + (apptId ? ' data-appt="' + apptId + '"' : '') + '>' + esc(label || 'Write') + '</button>' : '<span class="muted small">Not started</span>';
+    };
+    const single = function (type) {
+      const list = ofType(type);
+      return '<div class="doc-row"><div><strong>' + esc(L.DOC_TYPES[type].label) + '</strong></div><div class="head-actions">' +
+        (list.length ? list.map(docChip).join(' ') : newBtn(type, null)) + '</div></div>';
+    };
+    const appts = S.state.appointments.filter(function (a) { return a.patientId === pid && a.status !== 'cancelled'; })
+      .sort(function (a, b) { return (a.date + a.time).localeCompare(b.date + b.time); });
+
+    let html = '<a class="back" href="#/cases' + (u.role === 'student' ? '' : '?tab=allotted') + '">‹ Cases</a>' +
+      '<header class="page-head"><div><h1>' + esc(nm(p)) + '</h1><p class="muted">' + esc(p.caseCode) + ' · ' + caseTag(p) + '</p>' +
+      '<p class="small muted">Clinician: ' + esc(userName(p.assignedTo)) + (p.supervisorId ? ' · Supervisor: ' + esc(userName(p.supervisorId)) : '') + '</p></div>' +
+      '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a></div></header>';
+
+    if (!isStudentCase(p)) return html + '<div class="empty"><p>This case is held by a qualified clinician, so there is no coursework to submit.</p></div>';
+
+    html += '<section><h2>Before therapy</h2><div class="card">' + single('pre-assessment') + '</div></section>';
+    html += '<section><h2>Sessions</h2>' + (appts.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Session</th><th>Lesson plan</th><th>Session report</th></tr></thead><tbody>' +
+      appts.map(function (a) {
+        const lp = docs.filter(function (d) { return d.type === 'lesson-plan' && d.appointmentId === a.id; });
+        const sr = docs.filter(function (d) { return d.type === 'session-report' && d.appointmentId === a.id; });
+        const past = a.date <= L.todayISO();
+        return '<tr><td><a href="#/session/' + a.id + '">' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + esc(L.formatTime(a.time)) + '</a></td>' +
+          '<td>' + (lp.length ? lp.map(docChip).join(' ') : newBtn('lesson-plan', a.id)) + '</td>' +
+          '<td>' + (sr.length ? sr.map(docChip).join(' ') : past ? newBtn('session-report', a.id) : '<span class="muted small">After the session</span>') + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted">No sessions booked yet.</p>') +
+      (ofType('session-report').filter(function (d) { return !d.appointmentId; }).length ? '<p class="small">Other reports: ' + ofType('session-report').filter(function (d) { return !d.appointmentId; }).map(docChip).join(' ') + '</p>' : '') +
+      '</section>';
+    html += '<section><h2>End of therapy</h2><div class="card">' + single('conclusion') + '</div></section>';
+    return html;
+  }
+
+  function newDoc(type, pid, apptId) {
+    const p = S.patient(pid);
+    const a = apptId && S.appointment(apptId);
+    const m = maps();
+    const goals = a ? (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean)
+      : S.goalsForPatient(pid).filter(function (g) { return g.status !== 'discontinued'; });
+    const fields = L.prefillDoc(type, {
+      patient: p, assessment: S.latestAssessment(pid), goals: goals,
+      materials: a ? L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean) : [],
+      log: a ? S.logForAppointment(a.id) : null, logs: S.logsForPatient(pid)
+    });
+    const d = S.upsert('documents', {
+      type: type, patientId: pid, authorId: me().id, reviewerId: p.supervisorId || '', appointmentId: apptId || null,
+      status: 'draft', fields: fields, createdAt: new Date().toISOString(), submittedAt: null, history: []
+    });
+    S.audit('Started ' + L.DOC_TYPES[type].label.toLowerCase(), pid);
+    go('#/doc/' + d.id);
+  }
+
+  function docText(d) {
+    const p = S.patient(d.patientId), a = d.appointmentId && S.appointment(d.appointmentId);
+    return [L.DOC_TYPES[d.type].label + ' – ' + pseud(p) + (a ? ' – session ' + L.formatDate(a.date) : ''),
+      'Student clinician: ' + userName(d.authorId) + ' · Supervisor: ' + userName(d.reviewerId), '']
+      .concat(L.DOC_FIELDS[d.type].map(function (f) { return f[1].toUpperCase() + '\n' + (d.fields[f[0]] || '—') + '\n'; })).join('\n');
+  }
+
+  function viewDoc(id) {
+    const d = S.doc(id);
+    const p = d && S.patient(d.patientId);
+    if (!d || !p) return '<div class="empty"><p>Document not found.</p></div>';
+    if (!canSee(p)) return noAccess();
+    const u = me();
+    const editable = d.authorId === u.id && (d.status === 'draft' || d.status === 'returned');
+    const reviewing = u.role === 'supervisor' && d.status === 'submitted';
+    const a = d.appointmentId && S.appointment(d.appointmentId);
+    const lastReturn = (d.history || []).filter(function (h) { return h.action === 'returned'; }).slice(-1)[0];
+
+    let html = '<a class="back" href="#/cases/' + p.id + '">‹ ' + esc(pseud(p)) + '</a>' +
+      '<header class="page-head"><div><h1>' + esc(L.DOC_TYPES[d.type].label) + '</h1>' +
+      '<p class="muted">' + esc(pseud(p)) + ' · ' + caseTag(p) + (a ? ' · Session ' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) : '') +
+      ' <span class="doc-chip st-' + d.status + '">' + esc(L.DOC_STATUS[d.status]) + '</span></p>' +
+      '<p class="small muted">By ' + esc(userName(d.authorId)) + ' · Reviewer: ' + esc(userName(d.reviewerId)) + '</p></div>' +
+      '<div class="head-actions"><button class="btn btn-ghost" data-action="copy-doc" data-id="' + d.id + '">Copy as text</button></div></header>' +
+      '<p class="small muted privacy-note">Coursework uses the case code and initials only. Don\'t add names, addresses or other identifiers.</p>';
+
+    if (d.status === 'returned' && lastReturn) html += '<div class="callout warn"><strong>Changes requested by ' + esc(userName(lastReturn.by)) + '</strong><span>' + esc(lastReturn.note) + '</span></div>';
+
+    if (editable) {
+      html += '<form id="doc-form" data-id="' + d.id + '" class="card">' + L.DOC_FIELDS[d.type].map(function (f) {
+        return '<label>' + esc(f[1]) + '<textarea name="' + f[0] + '" rows="' + f[2] + '">' + esc(d.fields[f[0]] || '') + '</textarea></label>';
+      }).join('') + '<div class="actions wrap end"><button class="btn" name="intent" value="save">Save draft</button>' +
+        '<button class="btn btn-primary" name="intent" value="submit">Submit to ' + esc(firstName(d.reviewerId)) + ' for review</button></div></form>';
+    } else {
+      html += '<section class="card doc-read">' + L.DOC_FIELDS[d.type].map(function (f) {
+        return '<h3>' + esc(f[1]) + '</h3><p class="pre">' + esc(d.fields[f[0]] || '—') + '</p>';
+      }).join('') + '</section>';
+    }
+
+    if (reviewing) {
+      html += '<form id="review-form" data-id="' + d.id + '" class="card"><h2>Your review</h2>' +
+        '<label>Feedback for ' + esc(firstName(d.authorId)) + '<textarea name="feedback" rows="3" placeholder="Required when requesting changes"></textarea></label>' +
+        '<div class="actions wrap end"><button class="btn" name="intent" value="return">Request changes</button>' +
+        '<button class="btn btn-primary" name="intent" value="approve">Approve</button></div></form>';
+    }
+
+    if ((d.history || []).length) {
+      html += '<section><h2>History</h2><ol class="timeline">' + d.history.slice().reverse().map(function (h) {
+        return '<li><span class="muted small">' + esc(fmtStamp(h.at)) + '</span> <strong>' + esc(userName(h.by)) + '</strong> ' +
+          esc({ submitted: 'submitted for review', approved: 'approved', returned: 'requested changes' }[h.action] || h.action) +
+          (h.note ? '<div class="small">' + esc(h.note) + '</div>' : '') + '</li>';
+      }).join('') + '</ol></section>';
+    }
+    return html;
+  }
+
+  function submitDoc(form, intent) {
+    const d = S.doc(form.dataset.id);
+    L.DOC_FIELDS[d.type].forEach(function (f) { d.fields[f[0]] = form.querySelector('[name=' + f[0] + ']').value; });
+    if (intent === 'submit') {
+      d.status = 'submitted'; d.submittedAt = new Date().toISOString();
+      d.history.push({ at: d.submittedAt, by: me().id, action: 'submitted' });
+      S.audit('Submitted ' + L.DOC_TYPES[d.type].label.toLowerCase(), d.patientId);
+      toast('Submitted for review');
+    } else toast('Draft saved');
+    S.save();
+    render();
+  }
+
+  function submitReview(form, intent) {
+    const d = S.doc(form.dataset.id);
+    const note = form.querySelector('[name=feedback]').value.trim();
+    if (intent === 'return' && !note) { toast('Add feedback so the student knows what to change.'); return; }
+    d.status = intent === 'approve' ? 'approved' : 'returned';
+    d.reviewedAt = new Date().toISOString();
+    d.history.push({ at: d.reviewedAt, by: me().id, action: d.status, note: note });
+    S.audit((intent === 'approve' ? 'Approved ' : 'Returned ') + L.DOC_TYPES[d.type].label.toLowerCase(), d.patientId);
+    S.save();
+    toast(intent === 'approve' ? 'Approved' : 'Sent back with feedback');
+    go('#/cases?tab=review');
+  }
+
+  function allotForm(pid) {
+    const p = S.patient(pid);
+    const st = S.state;
+    const load = function (uid) { return st.patients.filter(function (x) { return x.assignedTo === uid && x.status === 'active'; }).length; };
+    const people = st.users.filter(function (x) { return x.role === 'student' || x.role === 'therapist'; });
+    const c = p.consent || {};
+    const form = openModal('Allot ' + pseud(p),
+      '<p class="small">' + caseTag(p) + ' · Consent for student clinicians: ' + tick(c.students) + '</p>' +
+      '<label>Allot to<select name="assignee" required>' + opt('', 'Choose…') + people.map(function (x) {
+        const blocked = x.role === 'student' && !c.students;
+        return '<option value="' + x.id + '"' + (blocked ? ' disabled' : '') + '>' + esc(x.name + ' – ' + L.ROLES[x.role].label + (x.year ? ', ' + x.year : '') + ' (' + load(x.id) + ' cases)' + (blocked ? ' – no consent' : '')) + '</option>';
+      }).join('') + '</select></label>' +
+      '<label>Supervisor (for student clinicians)<select name="supervisor">' + st.users.filter(function (x) { return x.role === 'supervisor'; })
+        .map(function (x) { return opt(x.id, x.name, x.id === me().id); }).join('') + '</select></label>' +
+      '<p class="form-error" id="allot-error" hidden></p>',
+      function (fd) {
+        const who = S.user(fd.get('assignee'));
+        const check = L.canAllot(p, who);
+        if (!check.ok) { const e = document.getElementById('allot-error'); e.textContent = check.reason; e.hidden = false; return false; }
+        assignCase(p, who, who.role === 'student' ? fd.get('supervisor') : '');
+      });
+    form.querySelector('[type=submit]').textContent = 'Allot case';
+  }
+
+  function assignCase(p, who, supervisorId) {
+    p.assignedTo = who.id; p.supervisorId = supervisorId || ''; p.status = 'active';
+    const r = S.state.referrals.find(function (x) { return x.patientId === p.id && x.status === 'pending'; });
+    if (r) { r.status = 'allotted'; r.allottedTo = who.id; r.allottedBy = me().id; r.allottedAt = L.todayISO(); }
+    S.audit('Allotted case', p.id, 'to ' + who.name);
+    toast('Allotted to ' + who.name);
+  }
+
+  /* ---------- privacy & settings ---------- */
+
+  function viewPrivacy() {
+    const st = S.state, set = st.settings, u = me();
+    const lockOn = S.hasPassphrase();
+    const due = st.patients.filter(function (p) { return L.isPastRetention(p, set.retentionYears); });
+    const isLead = u.role === 'supervisor';
+    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data on this device</p></div></header>';
+
+    html += '<section class="card"><h2>How patient data is protected</h2><ul class="safeguards">' +
+      '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
+      '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Need-to-know access.</strong> Students see only their allotted cases; diagnostics sees only its waiting list and referrals.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Consent recorded</strong> per patient; allotment to students and family reports check it.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
+      '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records are flagged for erasure after ' + esc(set.retentionYears) + ' years' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
+      '</ul><p class="small muted">The person switcher at the top is for shared clinic devices and is not a secure login. For several people on separate devices, the app needs a server with individual accounts.</p></section>';
+
+    html += '<section class="card"><h2>Encryption &amp; lock</h2>';
+    if (!S.cryptoAvailable()) html += '<p class="muted">This browser cannot encrypt data here. Open the app over https or from a file in an up-to-date browser.</p>';
+    else if (!lockOn) {
+      html += '<form id="pass-form"><p class="small">Choose a passphrase of at least 10 characters. If it is lost, the data cannot be recovered, so keep a backup.</p>' +
+        '<div class="grid-2"><label>Passphrase<input type="password" name="pass" minlength="10" autocomplete="new-password" required></label>' +
+        '<label>Repeat passphrase<input type="password" name="pass2" minlength="10" autocomplete="new-password" required></label></div>' +
+        '<p class="form-error" id="pass-error" hidden></p><div class="actions"><button class="btn btn-primary" type="submit">Encrypt data on this device</button></div></form>';
+    } else {
+      html += '<div class="actions wrap"><button class="btn" data-action="lock-now">Lock now</button><button class="btn btn-danger" data-action="remove-pass">Remove encryption</button></div>';
+    }
+    html += '</section>';
+
+    html += '<form class="card" id="settings-form"><h2>Settings</h2>' +
+      '<label class="check"><input type="checkbox" name="hideNames"' + (set.hideNames ? ' checked' : '') + '> Hide patient names on screen (show case code and initials)</label>' +
+      '<div class="grid-3"><label>Auto-lock after (minutes)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"></label>' +
+      '<label>Keep discharged records (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
+      '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"></label></div>' +
+      '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(set.dayStart) + '"></label>' +
+      '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(set.lunchStart) + '"></label>' +
+      '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(set.lunchEnd) + '"></label>' +
+      '<label>Day ends<input type="time" name="dayEnd" value="' + esc(set.dayEnd) + '"></label></div>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div></form>';
+
+    if (due.length && isLead) {
+      html += '<section class="card"><h2>Due for erasure</h2><ul class="list flat">' + due.map(function (p) {
+        return '<li><div class="row"><div><strong>' + esc(pseud(p)) + '</strong><div class="muted small">Discharged ' + esc(L.formatDate(p.dischargedAt)) + '</div></div>' +
+          '<button class="btn btn-sm btn-danger" data-action="erase" data-id="' + p.id + '">Erase</button></div></li>';
+      }).join('') + '</ul></section>';
+    }
+
+    const vis = visiblePatients();
+    html += '<section class="card"><h2>Requests from patients</h2><p class="small muted">Right of access and portability: copy everything held about a person. Right to erasure: delete the record and all linked notes.</p>' +
+      '<div class="filters"><select id="sar-patient" aria-label="Patient">' + vis.map(function (p) { return opt(p.id, pseud(p) + ' – ' + nm(p)); }).join('') + '</select>' +
+      '<button class="btn" data-action="copy-record">Copy full record</button>' +
+      (isLead ? '<button class="btn btn-danger" data-action="erase-selected">Erase record</button>' : '') + '</div></section>';
+
+    if (isLead) {
+      html += '<section class="card"><h2>People</h2><ul class="list flat">' + st.users.map(function (x) {
+        const n = st.patients.filter(function (p) { return p.assignedTo === x.id; }).length;
+        return '<li><div class="row"><div><strong>' + esc(x.name) + '</strong><div class="muted small">' + esc(L.ROLES[x.role].label) + (x.year ? ' · ' + esc(x.year) : '') + ' · ' + n + ' cases</div></div>' +
+          (x.id !== u.id && !n ? '<button class="btn btn-sm btn-ghost" data-action="remove-user" data-id="' + x.id + '">Remove</button>' : '') + '</div></li>';
+      }).join('') + '</ul><form id="user-form" class="grid-3 add-user"><label>Name<input name="name" required></label>' +
+        '<label>Role<select name="role">' + Object.keys(L.ROLES).map(function (k) { return opt(k, L.ROLES[k].label, k === 'student'); }).join('') + '</select></label>' +
+        '<label>Year / group (students)<input name="year" placeholder="e.g. Year 3"></label><div class="actions"><button class="btn" type="submit">Add person</button></div></form></section>';
+    }
+
+    const log = st.audit.slice(-80).reverse();
+    html += '<section class="card"><div class="card-head"><h2>Access log</h2><button class="btn btn-sm" data-action="copy-audit">Copy log</button></div>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th></tr></thead><tbody>' +
+      log.map(function (e) {
+        return '<tr><td class="nowrap">' + esc(fmtStamp(e.at)) + '</td><td>' + esc(e.user) + '</td><td>' + esc(e.action) + (e.detail ? ' <span class="muted">(' + esc(e.detail) + ')</span>' : '') + '</td><td>' + esc(e.target || '') + '</td></tr>';
+      }).join('') + '</tbody></table></div><p class="small muted">Showing the latest ' + log.length + ' of ' + st.audit.length + ' entries.</p></section>';
+
+    html += '<section class="card"><h2>Backup</h2><p class="small muted">A backup contains identifiable health data and is <strong>not encrypted</strong>. Store it only in an encrypted, access-controlled location approved by your organisation.</p>' +
+      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
+      '<label class="btn">Restore from backup<input type="file" accept="application/json,.json" id="import-file" hidden></label></div></section>';
+
+    html += '<section class="card"><h2>Your organisation\'s part</h2><p class="small">The app supports GDPR compliance but cannot provide it alone. Your clinic or university, as data controller, still needs to:</p><ul class="small plain">' +
+      '<li>Record the lawful basis for processing health data (usually Article 6(1)(e) or (b) with Article 9(2)(h)), and complete a DPIA.</li>' +
+      '<li>Give patients a privacy notice explaining how their data is used, including by student clinicians.</li>' +
+      '<li>Use encrypted, managed devices, and send reports only through a secure channel (not personal email or messaging apps).</li>' +
+      '<li>Have a process for access and erasure requests (one month to respond) and for reporting breaches (within 72 hours).</li></ul></section>';
+
+    html += '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
+      '<button class="btn" data-action="reset-demo">Load demo data</button>' +
+      '<button class="btn btn-danger" data-action="clear-all">Delete all patient data</button></div></section>';
+    return html;
+  }
+
+  /* ---------- actions & form handlers for the workflow ---------- */
+
+  const ACTIONS = {
+    'start-assessment': function (el) {
+      const a = S.upsert('assessments', { patientId: el.dataset.patient, assessorId: me().id, date: L.todayISO(), status: 'draft' });
+      go('#/assessment/' + a.id);
+    },
+    'allot': function (el) { allotForm(el.dataset.patient); },
+    'take-case': function (el) {
+      const p = S.patient(el.dataset.patient);
+      const check = L.canAllot(p, me());
+      if (!check.ok) { toast(check.reason); return; }
+      assignCase(p, me(), ''); S.save(); render();
+    },
+    'new-doc': function (el) { newDoc(el.dataset.type, el.dataset.patient, el.dataset.appt); },
+    'copy-doc': function (el) { copyText(docText(S.doc(el.dataset.id))); },
+    'toggle-names': function () { S.state.settings.hideNames = !S.state.settings.hideNames; S.save(); render(); },
+    'lock-now': function () { S.audit('Locked'); S.lock().then(render); },
+    'remove-pass': function () {
+      ask('Remove encryption? Patient data will be stored unencrypted on this device.', 'Remove encryption').then(function (ok) {
+        if (!ok) return;
+        S.removePassphrase().then(function () { S.audit('Removed encryption'); render(); toast('Encryption removed'); });
+      });
+    },
+    'copy-record': function () {
+      const pid = document.getElementById('sar-patient').value;
+      if (!pid) return;
+      S.audit('Copied full record (access request)', pid);
+      copyText(JSON.stringify(S.patientRecord(pid), null, 2));
+    },
+    'erase-selected': function () { eraseRecord(document.getElementById('sar-patient').value); },
+    'erase': function (el) { eraseRecord(el.dataset.id); },
+    'discharge': function (el) {
+      const p = S.patient(el.dataset.id);
+      if (p.status === 'discharged') { p.status = 'active'; p.dischargedAt = null; S.audit('Reopened case', p.id); }
+      else { p.status = 'discharged'; p.dischargedAt = L.todayISO(); S.audit('Discharged', p.id); }
+      S.save(); render();
+    },
+    'remove-user': function (el) { S.remove('users', el.dataset.id); render(); },
+    'copy-audit': function () {
+      copyText(S.state.audit.map(function (e) { return [e.at, e.user, e.action, e.target, e.detail].join('\t'); }).join('\n'));
+    }
+  };
+
+  function eraseRecord(pid) {
+    const p = S.patient(pid);
+    if (!p) return;
+    ask('Erase all data for ' + pseud(p) + '? This removes the record, assessments, sessions, notes and coursework. It cannot be undone.', 'Erase').then(function (ok) {
+      if (!ok) return;
+      const code = p.caseCode;
+      S.remove('patients', pid);
+      S.audit('Erased record', null, code);
+      toast('Record erased');
+      go('#/patients');
+      render();
+    });
+  }
+
+  const SUBMITS = {
+    'assessment-form': function (form, intent) { submitAssessment(form, intent); },
+    'doc-form': function (form, intent) { submitDoc(form, intent); },
+    'review-form': function (form, intent) { submitReview(form, intent); },
+    'unlock-form': function (form) {
+      const err = document.getElementById('unlock-error');
+      S.unlock(form.querySelector('[name=pass]').value).then(function () {
+        S.audit('Unlocked'); lastActivity = Date.now(); render();
+      }, function (e) { err.textContent = e.message; err.hidden = false; });
+    },
+    'pass-form': function (form) {
+      const a = form.querySelector('[name=pass]').value, b = form.querySelector('[name=pass2]').value;
+      const err = document.getElementById('pass-error');
+      if (a !== b) { err.textContent = 'The passphrases don\'t match.'; err.hidden = false; return; }
+      S.setPassphrase(a).then(function () { S.audit('Turned on encryption'); render(); toast('Data is now encrypted on this device'); });
+    },
+    'user-form': function (form) {
+      const name = form.querySelector('[name=name]').value.trim();
+      if (!name) return;
+      S.upsert('users', { name: name, role: form.querySelector('[name=role]').value, year: form.querySelector('[name=year]').value.trim() });
+      render(); toast(name + ' added');
+    }
+  };
+
+  /* Auto-lock after inactivity when encryption is on. */
+  let lastActivity = Date.now();
+  ['click', 'keydown', 'pointermove', 'touchstart'].forEach(function (t) {
+    document.addEventListener(t, function () { lastActivity = Date.now(); }, { passive: true });
+  });
+  setInterval(function () {
+    if (S.isLocked() || !S.hasPassphrase()) return;
+    const mins = Number(S.state.settings.autoLockMinutes) || 10;
+    if (Date.now() - lastActivity > mins * 60000) { S.audit('Auto-locked'); S.lock().then(function () { if (modal.open) modal.close(); render(); }); }
+  }, 20000);
+
+  let lastViewed = null;
+
+  function statusPill(p) {
+    const map = { waiting: ['Awaiting assessment', 'badge-warn'], referred: ['Referred – not allotted', 'badge-warn'], discharged: ['Discharged', 'badge-muted'] };
+    const s = map[p.status];
+    return s ? ' <span class="badge ' + s[1] + '">' + s[0] + '</span>' : '';
+  }
+
+  /* Lesson plan / session report status for a session held by a student. */
+  function courseworkPanel(a, p) {
+    if (!isStudentCase(p)) return '';
+    const u = me();
+    const author = u.id === p.assignedTo;
+    const docs = S.docsForPatient(p.id).filter(function (d) { return d.appointmentId === a.id; });
+    const cell = function (type, allowed, wait) {
+      const list = docs.filter(function (d) { return d.type === type; });
+      if (list.length) return list.map(docChip).join(' ');
+      if (author && allowed) return '<button class="btn btn-sm" data-action="new-doc" data-type="' + type + '" data-patient="' + p.id + '" data-appt="' + a.id + '">Write</button>';
+      return '<span class="muted small">' + (allowed ? 'Not started' : wait) + '</span>';
+    };
+    return '<section class="card coursework"><div class="card-head"><h2>Coursework for this session</h2><span class="muted small">' + esc(userName(p.assignedTo)) + ' · supervisor ' + esc(firstName(p.supervisorId)) + '</span></div>' +
+      '<div class="doc-row"><strong>Lesson plan</strong><div>' + cell('lesson-plan', true) + '</div></div>' +
+      '<div class="doc-row"><strong>Session report</strong><div>' + cell('session-report', a.date <= L.todayISO(), 'After the session') + '</div></div></section>';
+  }
+
+  function recordTab(p) {
+    const c = p.consent || {};
+    const a = S.latestAssessment(p.id);
+    const r = S.referralFor(p.id);
+    const manage = canManage(p) && me().role !== 'diagnostician';
+    return '<section class="card"><h2>Case</h2><dl class="kv">' +
+      '<div><dt>Case code</dt><dd>' + esc(p.caseCode) + '</dd></div>' +
+      '<div><dt>Status</dt><dd>' + esc({ waiting: 'Awaiting assessment', referred: 'Referred, not yet allotted', active: 'In therapy', discharged: 'Discharged ' + (p.dischargedAt ? L.formatDate(p.dischargedAt) : '') }[p.status] || p.status) + '</dd></div>' +
+      '<div><dt>Clinician</dt><dd>' + esc(p.assignedTo ? userName(p.assignedTo) : '—') + '</dd></div>' +
+      '<div><dt>Supervisor</dt><dd>' + esc(p.supervisorId ? userName(p.supervisorId) : '—') + '</dd></div>' +
+      '<div><dt>Assessment</dt><dd>' + (a ? '<a href="#/assessment/' + a.id + '">' + esc(L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' })) + ' · ' + esc(a.diagnosis || 'draft') + '</a> by ' + esc(userName(a.assessorId)) : '—') + '</dd></div>' +
+      '<div><dt>Referral</dt><dd>' + (r ? esc(r.priority) + ', ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + (r.status === 'pending' ? ' – awaiting allotment' : ' – allotted') : '—') + '</dd></div>' +
+      '</dl></section>' +
+      '<section class="card"><div class="card-head"><h2>Consent &amp; permissions</h2>' + (canManage(p) ? '<button class="btn btn-sm btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Update</button>' : '') + '</div>' +
+      '<ul class="consent-list"><li>' + tick(c.therapy) + ' Assessment and therapy</li><li>' + tick(c.students) + ' Supervised student clinicians may be involved</li>' +
+      '<li>' + tick(c.shareReports) + ' Session summaries may be sent to the family</li><li>' + tick(c.teaching) + ' Anonymised use in teaching</li></ul>' +
+      '<p class="small muted">' + (c.recordedOn ? 'Recorded ' + esc(L.formatDate(c.recordedOn)) + (c.givenBy ? ', given by ' + esc(c.givenBy) : '') : 'Not recorded yet') + '</p></section>' +
+      (manage ? '<section class="card"><h2>Data requests</h2><div class="actions wrap"><button class="btn" data-action="copy-record-one" data-id="' + p.id + '">Copy full record</button>' +
+        '<button class="btn" data-action="discharge" data-id="' + p.id + '">' + (p.status === 'discharged' ? 'Reopen case' : 'Discharge') + '</button>' +
+        (me().role === 'supervisor' ? '<button class="btn btn-danger" data-action="erase" data-id="' + p.id + '">Erase record</button>' : '') + '</div></section>' : '');
+  }
+  ACTIONS['copy-record-one'] = function (el) {
+    S.audit('Copied full record (access request)', el.dataset.id);
+    copyText(JSON.stringify(S.patientRecord(el.dataset.id), null, 2));
+  };
+
   /* ---------- router ---------- */
 
   function render() {
+    const bar = document.getElementById('rolebar');
+    if (S.isLocked()) {
+      document.body.classList.add('locked');
+      bar.innerHTML = '';
+      view.innerHTML = lockScreen();
+      const f = document.getElementById('unlock-pass');
+      if (f) f.focus();
+      return;
+    }
+    document.body.classList.remove('locked');
+    const u = me();
     const r = parseHash();
-    const section = r.parts[0];
+    let section = r.parts[0];
+    if (section === 'settings') section = 'privacy';
+    if (!section) section = u.role === 'diagnostician' ? 'diagnostics' : 'schedule';
+    bar.innerHTML = rolebar();
+    document.querySelectorAll('.nav a').forEach(function (a) {
+      a.hidden = NAV_ROLES[a.dataset.nav].indexOf(u.role) < 0;
+      if (a.dataset.nav === 'cases') a.lastChild.textContent = u.role === 'student' ? ' My cases' : ' Cases';
+    });
     let html;
-    if (section === 'session') html = viewSession(r.parts[1], r.params);
+    if (NAV_ROLES[section] && NAV_ROLES[section].indexOf(u.role) < 0) html = noAccess();
+    else if (section === 'diagnostics') html = viewDiagnostics(r.params);
+    else if (section === 'assessment') html = viewAssessment(r.parts[1]);
+    else if (section === 'cases' && r.parts[1]) html = viewCase(r.parts[1]);
+    else if (section === 'cases') html = viewCases(r.params);
+    else if (section === 'doc') html = viewDoc(r.parts[1]);
+    else if (section === 'privacy') html = viewPrivacy();
+    else if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
     else if (section === 'patients') html = viewPatients(r.params);
     else if (section === 'goals') html = viewGoals(r.params);
     else if (section === 'materials') html = viewMaterials(r.params);
     else if (section === 'reports') html = viewReports(r.params);
-    else if (section === 'settings') html = viewSettings();
     else html = viewSchedule(r.params);
     view.innerHTML = html;
 
-    const navKey = section === 'session' ? 'schedule' : (section || 'schedule');
+    const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases' }[section] || section;
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.classList.toggle('active', a.dataset.nav === navKey);
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
@@ -1634,25 +2813,24 @@ dialog::backdrop { background: var(--overlay); }
       case 'edit-material': materialForm(id); break;
       case 'copy-picklist': {
         const d = el.dataset.date, mm = maps();
-        const appts = S.appointmentsOn(d).filter(function (a) { return a.status !== 'cancelled'; });
+        const appts = visibleAppts(S.appointmentsOn(d)).filter(function (a) { return a.status !== 'cancelled'; });
         const list = L.materialsForDay(appts, mm.goals, mm.materials, mm.patients);
         copyText('Materials for ' + L.formatDate(d) + '\n' + list.map(function (x) {
-          return '[ ] ' + x.material.name + (x.material.location ? ' (' + x.material.location + ')' : '') + ' – ' + x.sessions.map(function (s) { return (s.patient || {}).name; }).join(', ');
+          return '[ ] ' + x.material.name + (x.material.location ? ' (' + x.material.location + ')' : '') + ' – ' + x.sessions.map(function (s) { return nm(s.patient); }).join(', ');
         }).join('\n'));
         break;
       }
-      case 'copy-backup': copyText(S.exportJSON()); break;
-      case 'copy-report': copyText(document.getElementById('report-text').value); break;
+      case 'copy-backup': S.audit('Copied backup'); copyText(S.exportJSON()); break;
+      case 'copy-report': {
+        const log = S.state.logs.find(function (l) { return l.id === document.getElementById('report-text').dataset.log; });
+        S.audit('Copied family report', log && log.patientId);
+        copyText(document.getElementById('report-text').value);
+        break;
+      }
       case 'copy-log-report': {
         const log = S.state.logs.find(function (l) { return l.id === el.dataset.log; });
         const m = maps();
         copyText(log.reportText || L.clientReport({ patient: m.patients[log.patientId], log: log, goalsById: m.goals, therapist: S.state.settings.therapistName }));
-        break;
-      }
-      case 'email-report': {
-        // Refresh the mailto body with any edits made in the textarea.
-        const text = document.getElementById('report-text').value;
-        el.href = el.href.replace(/&body=.*$/, '&body=' + encodeURIComponent(text));
         break;
       }
       case 'regen-report': {
@@ -1667,6 +2845,7 @@ dialog::backdrop { background: var(--overlay); }
         break;
       }
       case 'export': {
+        S.audit('Downloaded backup');
         const blob = new Blob([S.exportJSON()], { type: 'application/json' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
@@ -1679,8 +2858,10 @@ dialog::backdrop { background: var(--overlay); }
         ask('Replace all current data with demo data?', 'Replace').then(function (ok) { if (ok) { S.resetDemo(); go('#/schedule'); render(); toast('Demo data loaded'); } });
         break;
       case 'clear-all':
-        ask('Delete ALL patients, goals, sessions and materials from this browser?', 'Delete everything').then(function (ok) { if (ok) { S.clearAll(); go('#/schedule'); render(); toast('All data deleted'); } });
+        ask('Delete ALL patient data from this device? People and settings are kept.', 'Delete everything').then(function (ok) { if (ok) { S.clearAll(); S.audit('Deleted all patient data'); go('#/schedule'); render(); toast('All patient data deleted'); } });
         break;
+      default:
+        if (ACTIONS[act]) ACTIONS[act](el, ev);
     }
   });
 
@@ -1689,6 +2870,14 @@ dialog::backdrop { background: var(--overlay); }
     if (t.dataset.action === 'pack') {
       S.setPacked(t.dataset.date, t.dataset.id, t.checked);
       document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
+    }
+    if (t.id === 'user-switch') {
+      S.state.settings.currentUserId = t.value;
+      S.audit('Switched user');
+      lastViewed = null;
+      route = '#/';
+      render();
+      return;
     }
     if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
     if (t.closest('#patient-filters')) {
@@ -1706,7 +2895,7 @@ dialog::backdrop { background: var(--overlay); }
     }
     if (t.id === 'import-file' && t.files[0]) {
       t.files[0].text().then(function (text) {
-        try { S.importJSON(text); render(); toast('Backup restored'); }
+        try { S.importJSON(text); S.audit('Restored backup'); render(); toast('Backup restored'); }
         catch (e) { toast('Could not restore: ' + e.message); }
       });
     }
@@ -1747,14 +2936,23 @@ dialog::backdrop { background: var(--overlay); }
       toast('Session saved');
       go('#/session/' + a.id + '?tab=report');
     }
+    if (SUBMITS[form.id]) {
+      ev.preventDefault();
+      SUBMITS[form.id](form, ev.submitter ? ev.submitter.value : '');
+      return;
+    }
     if (form.id === 'settings-form') {
       ev.preventDefault();
+      const set = S.state.settings;
+      set.hideNames = form.querySelector('[name=hideNames]').checked;
+      set.autoLockMinutes = Number(form.querySelector('[name=autoLockMinutes]').value) || 10;
+      if (!form.querySelector('[name=retentionYears]').disabled) set.retentionYears = Number(form.querySelector('[name=retentionYears]').value) || 0;
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
       ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {
         const v = form.querySelector('[name=' + k + ']').value;
         if (v) S.state.settings[k] = v;
       });
-      S.save(); toast('Saved');
+      S.save(); toast('Saved'); render();
     }
   });
 

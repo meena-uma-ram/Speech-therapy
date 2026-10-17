@@ -9,7 +9,8 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 const html = read('index.html');
 const css = read('css/styles.css');
 const js = ['js/logic.js', 'js/store.js', 'js/app.js'].map(read).join('\n');
-const fonts = html.match(/<link rel="preconnect"[\s\S]*?display=swap">/)[0];
+const fontMatch = html.match(/<link rel="preconnect"[\s\S]*?display=swap">/);
+const fonts = fontMatch ? fontMatch[0] : '';
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script')).trim();
 
 const fragIdx = process.argv.indexOf('--fragment');
@@ -17,6 +18,7 @@ if (fragIdx > -1) {
   const out = [
     '<title>Therapy Planner</title>',
     '<meta name="claude:viewport-fit-sides" content="cover">',
+    '<meta name="referrer" content="no-referrer">',
     fonts,
     '<style>\n' + css + '\n</style>',
     body,

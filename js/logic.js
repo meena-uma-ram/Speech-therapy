@@ -217,6 +217,134 @@
     return [ageGroup(patient), patient.condition].filter(Boolean).join(' · ');
   }
 
+  /* ---------- people, privacy and workflow ---------- */
+
+  const ROLES = {
+    diagnostician: { label: 'Diagnostician', dept: 'Diagnostics' },
+    therapist: { label: 'Speech therapist', dept: 'Therapy' },
+    supervisor: { label: 'Clinical supervisor', dept: 'Therapy' },
+    student: { label: 'Student clinician', dept: 'Therapy' }
+  };
+
+  function initials(name) {
+    return (name || '').split(/\s+/).filter(Boolean).map(function (w) { return w[0].toUpperCase() + '.'; }).join('');
+  }
+
+  function caseCode(year, n) { return 'SLT-' + String(year).slice(-2) + '-' + String(n).padStart(3, '0'); }
+
+  /* Who may open a patient's record (need-to-know). */
+  function canSeePatient(user, p) {
+    if (!user || !p) return false;
+    switch (user.role) {
+      case 'supervisor': return true;
+      case 'diagnostician': return p.status === 'waiting' || p.status === 'referred' || p.assessedBy === user.id;
+      case 'therapist': return p.assignedTo === user.id || p.status === 'referred';
+      case 'student': return p.assignedTo === user.id;
+      default: return false;
+    }
+  }
+
+  /* Can this patient be allotted to this clinician? */
+  function canAllot(p, assignee) {
+    if (!assignee) return { ok: false, reason: 'Choose who will take the case.' };
+    const c = p.consent || {};
+    if (!c.therapy) return { ok: false, reason: 'Consent for therapy has not been recorded.' };
+    if (assignee.role === 'student' && !c.students) return { ok: false, reason: 'No consent for student clinicians. Allot to a qualified therapist, or record consent first.' };
+    return { ok: true };
+  }
+
+  function addYears(iso, n) {
+    const [y, m, d] = iso.split('-').map(Number);
+    return toISODate(new Date(y + n, m - 1, d));
+  }
+
+  /* Discharged records whose retention period has run out. */
+  function isPastRetention(p, years, today) {
+    return p.status === 'discharged' && !!p.dischargedAt && addYears(p.dischargedAt, Number(years) || 0) <= (today || todayISO());
+  }
+
+  const DOC_TYPES = {
+    'pre-assessment': { label: 'Pre-assessment', perSession: false },
+    'lesson-plan': { label: 'Lesson plan', perSession: true },
+    'session-report': { label: 'Session report', perSession: true },
+    'conclusion': { label: 'Conclusion report', perSession: false }
+  };
+  const DOC_FIELDS = {
+    'pre-assessment': [
+      ['background', 'Background & case history', 4], ['assessments', 'Assessments used', 3], ['findings', 'Findings & baseline', 4],
+      ['impressions', 'Clinical impressions', 3], ['goals', 'Proposed long- and short-term goals', 4], ['plan', 'Intervention plan', 3]],
+    'lesson-plan': [
+      ['objectives', 'Objectives (SMART)', 4], ['procedure', 'Activities & procedure', 5], ['materials', 'Materials', 2],
+      ['cueing', 'Cueing hierarchy & reinforcement', 3], ['carryover', 'Home practice / carry-over', 2], ['backup', 'Back-up plan', 2]],
+    'session-report': [
+      ['subjective', 'S – Subjective', 3], ['objective', 'O – Objective (data)', 5], ['assessment', 'A – Assessment', 3], ['plan', 'P – Plan', 3]],
+    'conclusion': [
+      ['summary', 'Summary of intervention', 4], ['outcomes', 'Goal outcomes', 5], ['recommendations', 'Recommendations', 3], ['discharge', 'Discharge or continuation plan', 2]]
+  };
+  const DOC_STATUS = { draft: 'Draft', submitted: 'Awaiting review', approved: 'Approved', returned: 'Changes requested' };
+
+  /* Pre-filled starting text for each document, built from what the app already knows. */
+  function prefillDoc(type, ctx) {
+    const p = ctx.patient || {}, a = ctx.assessment || {};
+    const goals = ctx.goals || [];
+    const numbered = function (list) { return list.map(function (g, i) { return (i + 1) + '. ' + smartStatement(g); }).join('\n'); };
+    if (type === 'pre-assessment') {
+      return {
+        background: [caseLabel(p), p.diagnosis, a.source ? 'Referred by ' + a.source + (a.reason ? ' for ' + a.reason : '') + '.' : '', a.history].filter(Boolean).join('. ').replace(/\.\./g, '.'),
+        assessments: a.tests || '',
+        findings: a.findings || '',
+        impressions: [a.diagnosis, a.severity ? a.severity + ' severity' : ''].filter(Boolean).join(', '),
+        goals: numbered(goals),
+        plan: [a.recommendations, a.frequency ? 'Frequency: ' + a.frequency : ''].filter(Boolean).join('\n')
+      };
+    }
+    if (type === 'lesson-plan') {
+      return { objectives: numbered(goals), procedure: '', materials: (ctx.materials || []).map(function (m) { return m.name; }).join(', '), cueing: '', carryover: '', backup: '' };
+    }
+    if (type === 'session-report') {
+      const log = ctx.log;
+      const byId = {};
+      goals.forEach(function (g) { byId[g.id] = g; });
+      const objective = log ? (log.entries || []).map(function (e) {
+        const g = byId[e.goalId];
+        if (!g) return '';
+        const acc = e.accuracy != null ? e.accuracy : accuracy(e.correct, e.trials);
+        if (acc == null && !e.note) return '';
+        return '• ' + g.title + ': ' + (e.trials ? e.correct + '/' + e.trials + ' ' : '') + (acc != null ? '(' + acc + '%)' : 'no score') + (e.cueing ? ', ' + e.cueing.toLowerCase() + ' cues' : '') + (e.note ? ' – ' + e.note : '');
+      }).filter(Boolean).join('\n') : '';
+      const assess = log ? (log.entries || []).filter(function (e) { return e.progress && byId[e.goalId]; })
+        .map(function (e) { return byId[e.goalId].title + ': ' + PROGRESS_LABELS[e.progress].toLowerCase(); }).join('; ') : '';
+      return { subjective: log ? log.notes || '' : '', objective: objective, assessment: assess, plan: log && log.homework ? 'Home practice: ' + log.homework : '' };
+    }
+    if (type === 'conclusion') {
+      const logs = (ctx.logs || []).slice().sort(function (x, y) { return x.date < y.date ? -1 : 1; });
+      const summary = logs.length ? logs.length + ' sessions between ' + formatDate(logs[0].date, { day: 'numeric', month: 'short', year: 'numeric' }) +
+        ' and ' + formatDate(logs[logs.length - 1].date, { day: 'numeric', month: 'short', year: 'numeric' }) + '.' : 'No sessions logged.';
+      const outcomes = goals.map(function (g) {
+        const series = goalSeries(g.id, logs);
+        const st = goalStats(series, g.targetAccuracy);
+        if (!series.length) return '• ' + g.title + ': no data';
+        return '• ' + g.title + ': ' + series[0].accuracy + '% → ' + st.latest + '% (target ' + g.targetAccuracy + '%) – ' + (st.metTarget ? 'met' : 'not yet met');
+      }).join('\n');
+      return { summary: summary, outcomes: outcomes, recommendations: '', discharge: '' };
+    }
+    return {};
+  }
+
+  /* Coursework progress for one case: counts by document type and status, plus the next thing to do. */
+  function caseProgress(docs, sessionsLogged) {
+    const out = {};
+    Object.keys(DOC_TYPES).forEach(function (t) { out[t] = { total: 0, approved: 0, submitted: 0, returned: 0, draft: 0 }; });
+    docs.forEach(function (d) { if (out[d.type]) { out[d.type].total++; out[d.type][d.status]++; } });
+    let next = 'Up to date';
+    const returned = docs.filter(function (d) { return d.status === 'returned'; });
+    if (returned.length) next = 'Revise ' + DOC_TYPES[returned[0].type].label.toLowerCase();
+    else if (!out['pre-assessment'].approved) next = out['pre-assessment'].submitted ? 'Pre-assessment awaiting review' : 'Write pre-assessment';
+    else if (out['session-report'].total < (sessionsLogged || 0)) next = 'Write session report';
+    out.next = next;
+    return out;
+  }
+
   const PROGRESS_LABELS = {
     improving: 'Improving',
     steady: 'Steady',
@@ -277,7 +405,10 @@
     materialsForDay: materialsForDay, appointmentMaterialIds: appointmentMaterialIds,
     clientReport: clientReport, PROGRESS_LABELS: PROGRESS_LABELS,
     toMinutes: toMinutes, fromMinutes: fromMinutes, layoutDay: layoutDay, splitByLunch: splitByLunch,
-    CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel
+    CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel,
+    ROLES: ROLES, initials: initials, caseCode: caseCode, canSeePatient: canSeePatient, canAllot: canAllot,
+    addYears: addYears, isPastRetention: isPastRetention, DOC_TYPES: DOC_TYPES, DOC_FIELDS: DOC_FIELDS, DOC_STATUS: DOC_STATUS,
+    prefillDoc: prefillDoc, caseProgress: caseProgress
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
