@@ -20,7 +20,7 @@ Privacy → *Where your data is stored* lists each item, its size and whether it
 | Deletion receipts | Receipt number, case code, date, who erased it and why. No personal data is kept |
 | Automatic retention rule | Discharged records erased N years after therapy ends (daily check), each with a receipt |
 | Deletion test | One click: creates a fake patient, backs it up, erases it, then checks live data, stored data, the key and the old backup |
-| Access control | Individual sign-in; need-to-know by role; access log |
+| Access control | Individual sign-in (no account without a password); need-to-know screens by role, which on one device are a screen filter only, not a security barrier; enforced by the server in the clinic server and by row-level security in the hosted schema; access log |
 
 On a server, the same design carries over, with three changes:
 

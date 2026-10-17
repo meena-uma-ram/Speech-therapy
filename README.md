@@ -1,6 +1,34 @@
-# Speech TJS
+# TJS
 
 A workspace for a speech **diagnostics** department, a speech **therapy** department, and university clinics where supervisors allot cases to students. It also covers the daily work: a timetable, SMART goals, materials, session logging, progress and family reports.
+
+## Demo and clinic: two separate workspaces
+
+The first screen asks: **Try the demo** or **Set up my clinic**. Each device keeps the two completely apart.
+
+| | Demo | Clinic |
+|---|---|---|
+| Data | A full fake clinic: five staff, patients at every stage, coursework, messages | Starts **empty** |
+| Accounts | Demo accounts, password `demo1234` | You create the first supervisor with **your own password**; they add everyone else |
+| Encryption | Not needed (fake data) | A passphrase is **required before any patient can be added** |
+| Banner | "Demo – fake data only" on every screen | None |
+| Tools | **+ Generate fake patients** (Indian names, child and adult cases, waiting list → allotment → therapy → discharge, spread across every role), **Reset demo**, simulated OTP ("Demo code: 123456") | **Clean start** deletes every patient *and every account*, then asks for a new first supervisor |
+
+So you can always show TJS to people with a full, realistic demo, and your clinic's real records are never mixed with it. Switch from the sign-in screen (*Open the demo* / *Go to my clinic*). A clinic server started with `--demo` runs the demo for everyone.
+
+## Consent
+
+Consent has its own page (**Patient → Details & consent → Record consent**), and new patients go straight to it after registration.
+
+1. **Language and format:** English, Tamil, Hindi, Malayalam or Kannada; **accessible mode** (pictures, simple sentences, larger text, read aloud, a witness) for aphasia, dementia, low literacy or low vision.
+2. **Who consents:** the patient, a parent, a guardian, or a legal guardian / nominated representative of an adult, with the **legal basis** and a reference.
+3. **Answers per purpose, nothing pre-ticked.** Consent to *assessment and therapy* (clinical) is separate from each use of data: keeping records, supervised students, reports to the family, reminders, pseudonymised teaching use.
+4. **Confirmation:** signature on screen, one-time code to their phone (simulated in the demo; real SMS needs the online version and DLT approval), a photo of a signed paper form, or a thumbprint with a witness.
+5. **Sealed** into an **append-only ledger**: each entry records purpose, decision, who, relationship, recorded by, notice version, language and method, and its hash includes the previous entry's, so any later change shows. A **receipt** can be printed or copied for the family.
+
+**Withdrawal** is per purpose and takes effect at once: no students → the case comes off the student and goes back to *To allot*, students are removed as observers; no treatment → upcoming sessions are cancelled; no reminders → reminders stop; no teaching → coursework can't be copied out; no records → the supervisor is asked to review for erasure. **Ask again** is flagged when a child turns 18, the guardian changes, a new purpose is added, the notice changes, or consent predates the ledger (*Cases → Consent to ask again*).
+
+The notice text is versioned. **English is a draft for clinical and legal review; the other four languages are draft translations** that must be checked by a qualified translator. The app says so, and asks the clinician to confirm the notice was explained.
 
 ## The workflow
 
@@ -24,7 +52,7 @@ Complete & refer to therapy     a therapist takes it on                  Session
 
 ### Signing in
 
-Everyone signs in with their **email and own password** (stored only as a salted PBKDF2 hash). A supervisor creates accounts under **Privacy → People & sign-in**. The app shows a temporary password once, and the person must choose their own at first sign-in. Supervisors can reset forgotten passwords. People are signed out after the idle time set in Privacy. Demo accounts use the password `demo1234`.
+Everyone signs in with their **email and own password** (stored only as a salted PBKDF2 hash). A supervisor creates accounts under **Privacy → People & sign-in**. The app shows a temporary password once, and the person must choose their own at first sign-in. Supervisors can reset forgotten passwords. People are signed out after the idle time set in Privacy. **Every account needs a password**: there is no first sign-in without one. Demo accounts (demo workspace only) use `demo1234`.
 
 ### Inbox
 
@@ -69,14 +97,14 @@ Documents are **pre-filled** from what the app already knows. The pre-assessment
 
 | Principle | What the app does |
 |---|---|
-| Security (Art. 32) | Optional passphrase encrypts all data at rest (AES-256-GCM, PBKDF2 key); auto-lock after inactivity; lock button |
-| Data minimisation | Need-to-know access by role; case codes; coursework pseudonymised; "Hide names" for screens others can see |
+| Security (Art. 32) | Passphrase encrypts all data at rest (AES-256-GCM, PBKDF2 key), required in the clinic workspace before patients; auto-lock after inactivity; lock button |
+| Data minimisation | Need-to-know screens by role (on one device a screen filter, not a security barrier; on the clinic server, enforced by the server); case codes; coursework pseudonymised; "Hide names" for screens others can see |
 | No third parties | No web fonts, CDNs, analytics or trackers: the page makes no network requests at all; `no-referrer` |
-| Consent / permissions | Recorded per patient (therapy, student involvement, family reports, teaching). Allotment to students and family reports check it |
+| Consent | Append-only, sealed consent ledger per purpose, with notice version and language; withdrawal with immediate effect; re-consent triggers. Allotment to students, family reports, reminders and coursework export check it |
 | Accountability | Access log of opening, editing, sharing, allotting, reviewing, exporting and erasing records |
 | Right of access & portability | "Copy full record" exports everything held about a person as JSON |
 | Right to erasure | Erasing a patient removes all linked records on the device **and destroys the patient's key** (crypto-shredding), so earlier backups can no longer be read for that patient. Each erasure issues a **deletion receipt** |
-| Backups | Each patient is encrypted with their own key; keys are never in the backup. A separate key file is the recovery copy of the keys |
+| Backups | The whole file is encrypted with a backup password, and each patient again with their own key; keys are never in the backup. The key file is the recovery copy of the keys. Erased patients are never restored, and a key file older than the latest erasure is refused |
 | Deletion test | One click creates a fake patient, backs it up, erases it, and checks every place data lives on the device |
 | Storage limitation | Retention period after therapy ends; records past it are listed, or **erased automatically** by a daily rule |
 
@@ -133,7 +161,7 @@ No install or build step. Either:
 - open `index.html` directly in a browser, or
 - serve the folder: `npm start` (then visit http://localhost:8080), or any static host (GitHub Pages works).
 
-It loads demo data the first time: five people (supervisor, therapist, diagnostician, two students), patients at each stage, and coursework waiting for review. Sign in with any demo account (password `demo1234`) to see each role. **Privacy → Delete all patient data** gives you a clean start; set up your own people under **Privacy → People**.
+The first screen offers the **demo** (five people, patients at each stage, coursework waiting for review; password `demo1234`) or **your clinic** (empty; you create the first supervisor and a passphrase). See [Demo and clinic](#demo-and-clinic-two-separate-workspaces).
 
 ## Install it as an app
 
@@ -152,13 +180,26 @@ To try it locally: `npm start`, then open http://localhost:8080.
 - **Single file / static website:** only in the browser on this device (`localStorage`, encrypted if you set a passphrase). It does not sync between devices, and clearing browser data deletes it. If the passphrase is lost, the data cannot be recovered.
 - **Clinic server:** in the server's `clinic-data/` folder (encrypted with `THERAPY_DATA_PASSPHRASE`). Browsers hold records in memory only while signed in. Back up from **Privacy → Backups & keys**, not by copying the folder.
 
+## Documents
+
+| | |
+|---|---|
+| [docs/SERVER-SETUP.md](docs/SERVER-SETUP.md) | Running the clinic server on one computer, with Tailscale |
+| [docs/SYNC-OPTIONS.md](docs/SYNC-OPTIONS.md) | Nine ways to connect the computers, and the choice |
+| [docs/BACKEND-PLAN.md](docs/BACKEND-PLAN.md) | Hosted version: Supabase (Mumbai) + Cloudflare Pages, the conditions, and the status of each task |
+| [docs/LEGAL.md](docs/LEGAL.md) | Licence and data protection law in detail |
+| [docs/legal/](docs/legal/README.md) | Drafts: privacy notice, consent forms, terms, DPA, sub-processors, data map, risk assessment, retention, breach plan, GDPR position, questions for the lawyer, pentest scope |
+| [docs/SECURITY-PLAN.md](docs/SECURITY-PLAN.md) | Security design and launch plan |
+
 ## Development
 
 ```
 js/logic.js   pure helpers (accuracy, trends, materials-for-the-day, report text, free slots), unit tested
+js/consent.js consent purposes, versioned notices (5 languages), sealed ledger, re-consent triggers, unit tested
 js/sync.js    record-level changes, who sees what, who may change what (shared by browser and server), unit tested
 js/store.js   localStorage persistence, clinic-server sync, demo data
 server/       clinic server (Node.js, no dependencies), tested end to end
+supabase/     hosted backend schema with row-level security  →  npm run test:db (needs PostgreSQL)
 js/app.js     hash router, views, forms
 css/styles.css
 tests/        node --test unit and server tests  →  npm test

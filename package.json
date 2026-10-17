@@ -8,7 +8,8 @@
     "server": "node server/server.js",
     "server:demo": "node server/server.js --demo --data ./clinic-data-demo",
     "build": "node scripts/build-single.js",
-    "test": "node --test tests/logic.test.js tests/sync.test.js tests/consent.test.js tests/store.test.js tests/server.test.js"
+    "test": "node --test tests/logic.test.js tests/sync.test.js tests/consent.test.js tests/store.test.js tests/server.test.js",
+    "test:db": "sh supabase/tests/run-local.sh"
   },
   "license": "AGPL-3.0-or-later",
   "repository": {
