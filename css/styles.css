@@ -447,3 +447,36 @@ a.callout:hover { text-decoration: none; filter: brightness(.98); }
 fieldset.consent { display: block; }
 fieldset.consent label.check { margin-bottom: 6px; }
 .card > label.check { margin-bottom: 12px; }
+
+/* ---------- sign-in, inbox, leave, session tools ---------- */
+.nav-count { margin-left: auto; min-width: 20px; padding: 0 6px; border-radius: 99px; background: var(--bad); color: var(--surface); font-size: .72rem; font-weight: 700; text-align: center; line-height: 20px; }
+@media (max-width: 760px) { .nav a { position: relative; } .nav-count { position: absolute; top: 2px; right: 8px; margin: 0; } }
+.rb-me { white-space: nowrap; }
+.demo-accounts { border-top: 1px solid var(--border); margin-top: 8px; padding-top: 8px; }
+.demo-accounts ul { margin: 4px 0 0; padding-left: 18px; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--bg); padding: 1px 5px; border-radius: 4px; }
+#notice { width: min(480px, calc(100vw - 32px)); }
+.notice-list { list-style: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 10px; }
+.kind { display: inline-block; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 1px 7px; border-radius: 5px; background: var(--bg); color: var(--muted); vertical-align: middle; }
+.kind-review, .kind-submitted { background: var(--info-soft); color: var(--info); }
+.kind-referral, .kind-allotted { background: var(--primary-soft); color: var(--primary); }
+.kind-leave, .kind-cover, .kind-reschedule, .kind-attendance { background: var(--warn-soft); color: var(--warn); }
+.kind-invite { background: var(--good-soft); color: var(--good); }
+.inbox .row.unread { background: var(--primary-soft); }
+.inbox .row.unread strong { font-weight: 700; }
+.inbox .row:not(.unread) strong { font-weight: 500; }
+.msg-main { min-width: 0; }
+.msg-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msg-subject { font-size: 1.3rem; margin: 6px 0 2px; }
+.session-tools { display: flex; flex-direction: column; gap: 8px; }
+.st-row { display: flex; justify-content: space-between; align-items: center; gap: 8px 12px; flex-wrap: wrap; }
+.st-row .seg-toggle button { min-height: 32px; padding: 4px 12px; font-size: .85rem; }
+.counts strong { font-variant-numeric: tabular-nums; }
+.needs-cover.tt-block, .appt.needs-cover { outline: 2px dashed var(--warn); outline-offset: -2px; }
+.row-warn { background: var(--warn-soft); }
+.needs-cover li { color: var(--warn); }
+.leave-card .tbl select { width: auto; max-width: 100%; }
+.span-3 { grid-column: 1 / -1; }
+details summary { cursor: pointer; color: var(--primary); }
+.add-user h3 { font-size: .95rem; margin: 16px 0 8px; }
+body.locked main { max-width: none; }

@@ -101,10 +101,12 @@ test('need-to-know access by role', () => {
   assert.strictEqual(L.canSeePatient(student, mine), true);
   assert.strictEqual(L.canSeePatient(student, other), false);
   assert.strictEqual(L.canSeePatient(student, referred), false);
-  assert.strictEqual(L.canSeePatient(ther, referred), true);
+  assert.strictEqual(L.canSeePatient(ther, referred), false);
+  assert.strictEqual(L.canSeePatient(ther, { id: 'px', assignedTo: 's2' }, { px: true }), true);
   assert.strictEqual(L.canSeePatient(ther, other), false);
   assert.strictEqual(L.canSeePatient(diag, other), false);
   assert.strictEqual(L.canSeePatient(diag, { assessedBy: 'd1', status: 'active' }), true);
+  assert.strictEqual(L.canSeePatient(diag, referred), false);
   assert.strictEqual(L.canSeePatient({ role: 'supervisor' }, other), true);
 });
 
@@ -135,4 +137,26 @@ test('caseProgress names the next step', () => {
   assert.strictEqual(L.caseProgress([], 0).next, 'Write pre-assessment');
   assert.strictEqual(L.caseProgress([{ type: 'pre-assessment', status: 'approved' }], 2).next, 'Write session report');
   assert.strictEqual(L.caseProgress([{ type: 'pre-assessment', status: 'approved' }, { type: 'lesson-plan', status: 'returned' }], 0).next, 'Revise lesson plan');
+});
+
+test('session counts: attended of allotted, missed, rescheduled', () => {
+  const c = L.sessionCounts([
+    { date: '2026-10-01', status: 'attended' }, { date: '2026-10-08', status: 'completed' },
+    { date: '2026-10-15', status: 'missed', reschedules: [{}] }, { date: '2026-10-20', status: 'scheduled' },
+    { date: '2026-10-22', status: 'cancelled' }
+  ], 12, '2026-10-17');
+  assert.deepStrictEqual([c.attended, c.missed, c.cancelled, c.upcoming, c.rescheduled, c.remaining, c.attendanceRate], [2, 1, 1, 1, 1, 10, 67]);
+});
+
+test('pickCover chooses a free, allowed clinician with the lightest day', () => {
+  const users = [{ id: 'away', role: 'therapist' }, { id: 'busy', role: 'therapist' }, { id: 'free', role: 'therapist' }, { id: 'stu', role: 'student' }, { id: 'sup', role: 'supervisor' }];
+  const patientsById = { p1: { id: 'p1', assignedTo: 'away', consent: { students: false } }, p2: { id: 'p2', assignedTo: 'busy' }, p3: { id: 'p3', assignedTo: 'free' } };
+  const target = { id: 'x', patientId: 'p1', date: '2026-10-20', time: '10:00', duration: 30 };
+  const appts = [target,
+    { id: 'y', patientId: 'p2', date: '2026-10-20', time: '10:15', duration: 30 },   // busy overlaps
+    { id: 'z', patientId: 'p3', date: '2026-10-20', time: '14:00', duration: 30 }];
+  const pick = L.pickCover(target, { users, patientsById, appts, leaves: [], awayId: 'away' });
+  assert.strictEqual(pick.id, 'free');   // student excluded: no consent for students
+  const none = L.pickCover(target, { users, patientsById, appts, leaves: [{ userId: 'free', from: '2026-10-19', to: '2026-10-21' }], awayId: 'away' });
+  assert.strictEqual(none, null);
 });

@@ -77,6 +77,8 @@
     if (appt.status === 'cancelled') return '<span class="badge badge-muted">Cancelled</span>';
     if (log && log.reportSent) return '<span class="badge badge-good">Report sent</span>';
     if (log) return '<span class="badge badge-info">Logged</span>';
+    if (appt.status === 'missed') return '<span class="badge badge-warn">Did not attend</span>';
+    if (appt.status === 'attended' || appt.status === 'completed') return '<span class="badge badge-good">Attended</span>';
     return '<span class="badge">Scheduled</span>';
   }
   function dateNav(base, date, extra) {
@@ -214,11 +216,11 @@
       const p = m.patients[a.patientId] || { name: 'Unknown patient' };
       const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
       const h = (b.end - b.start) * PX_PER_MIN;
-      return '<a class="tt-block fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (h < 60 ? ' compact' : '') + '" href="#/session/' + a.id + '" ' +
+      return '<a class="tt-block fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (a.coverNeeded ? ' needs-cover' : '') + (h < 60 ? ' compact' : '') + '" href="#/session/' + a.id + '" ' +
         'style="top:' + (y(b.start) + 1) + 'px;height:' + (h - 2) + 'px;left:calc(var(--tt-gutter) + (100% - var(--tt-gutter)) * ' + b.lane + ' / ' + b.lanes + ');width:calc((100% - var(--tt-gutter)) / ' + b.lanes + ' - 4px)">' +
-        '<div class="tt-line"><span class="tt-time">' + esc(L.formatTime(a.time)) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' + statusBadge(a) + '</div>' +
+        '<div class="tt-line"><span class="tt-time">' + esc(L.formatTime(a.time)) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' + statusBadge(a) + apptBadges(a, p) + '</div>' +
         '<div class="tt-line"><strong class="tt-name">' + esc(nm(p)) + '</strong>' + caseTag(p) + '</div>' +
-        '<div class="tt-goals">' + (me().role !== 'student' && p.assignedTo ? esc(firstName(p.assignedTo)) + ' · ' : '') + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
+        '<div class="tt-goals">' + (me().role === 'supervisor' && L.clinicianFor(a, p) ? esc(firstName(L.clinicianFor(a, p))) + ' · ' : '') + (a.room ? esc(a.room) + ' · ' : '') + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</div>' +
         '</a>';
     }).join('');
     html += '</div>';
@@ -233,10 +235,10 @@
       const p = m.patients[a.patientId] || { name: 'Unknown patient' };
       const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
       const mats = L.appointmentMaterialIds(a, m.goals).map(function (id) { return m.materials[id]; }).filter(Boolean);
-      return '<li><a class="appt fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + '" href="#/session/' + a.id + '">' +
+      return '<li><a class="appt fam-' + L.conditionFamily(p.condition) + (a.status === 'cancelled' ? ' cancelled' : '') + (a.coverNeeded ? ' needs-cover' : '') + '" href="#/session/' + a.id + '">' +
         '<div class="appt-time"><strong>' + esc(L.formatTime(a.time)) + '</strong><span class="muted small">' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + '</span></div>' +
         '<div class="appt-body"><div class="appt-title"><strong>' + esc(nm(p)) + '</strong>' + caseTag(p) + statusBadge(a) + '</div>' +
-        '<div class="muted small">' + esc([me().role !== 'student' && p.assignedTo ? 'With ' + userName(p.assignedTo) : '', p.diagnosis].filter(Boolean).join(' · ')) + '</div>' +
+        '<div class="muted small">' + esc([me().role === 'supervisor' && L.clinicianFor(a, p) ? 'With ' + userName(L.clinicianFor(a, p)) : '', p.diagnosis].filter(Boolean).join(' · ')) + ' ' + apptBadges(a, p) + '</div>' +
         '<div class="appt-meta"><span class="meta-label">Goals</span> <span>' + goals.map(function (g) { return esc(g.title); }).join(' · ') + '</span></div>' +
         '<div class="appt-meta muted small"><span class="meta-label">Materials</span> ' + (mats.length ? mats.map(function (x) { return esc(x.name); }).join(', ') : 'No materials listed') + '</div>' +
         '</div><span class="chev" aria-hidden="true">›</span></a></li>';
@@ -263,7 +265,9 @@
       ' · ' + esc(a.duration || 30) + ' min' + (a.room ? ' · ' + esc(a.room) : '') + ' ' + statusBadge(a) + '</p>' +
       '<p class="small muted">' + caseTag(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p></div>' +
       '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a>' +
-      '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button></div></header>' +
+      (canRunSession(a, p) ? '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button>' : '') + '</div></header>' +
+      '<p class="small">' + apptBadges(a, p) + ' Clinician: ' + esc(userName(L.clinicianFor(a, p))) + '</p>' +
+      sessionTools(a, p) +
       tabs(base, tab, [['prep', 'Goals & materials'], ['log', log ? 'Session log ✓' : 'Log session'], ['progress', 'Progress'], ['report', 'Report']]);
 
     const goals = (a.goalIds || []).map(function (id) { return m.goals[id]; }).filter(Boolean);
@@ -394,7 +398,8 @@
     let html = '<a class="back" href="#/patients">‹ Patients</a>' +
       '<header class="page-head"><div><h1>' + esc(nm(p)) + '</h1>' +
       '<p class="muted">' + esc(p.caseCode) + ' · ' + caseTag(p) + statusPill(p) + ' ' + esc(p.diagnosis || '') + (p.dob ? ' · Age ' + L.age(p.dob) : '') + '</p>' +
-      '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p></div>' +
+      '<p class="small muted">' + esc([p.guardian, p.contact].filter(Boolean).join(' · ')) + '</p>' +
+      (p.status === 'active' || p.status === 'discharged' ? '<p class="small">' + countsLine(p) + '</p>' : '') + '</div>' +
       '<div class="head-actions">' + (canManage(p) ? '<button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' : '') +
       (p.status === 'active' && me().role !== 'diagnostician' ? '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button>' : '') +
       (isStudentCase(p) ? '<a class="btn btn-ghost" href="#/cases/' + p.id + '">Coursework</a>' : '') + '</div></header>' +
@@ -471,7 +476,7 @@
 
     if (tab === 'library') {
       const used = {};
-      S.state.goals.forEach(function (g) { (g.materialIds || []).forEach(function (id) { (used[id] = used[id] || []).push(g); }); });
+      S.state.goals.forEach(function (g) { if (!canSee(S.patient(g.patientId))) return; (g.materialIds || []).forEach(function (id) { (used[id] = used[id] || []).push(g); }); });
       const mats = S.state.materials.slice().sort(function (a, b) { return (a.category || '').localeCompare(b.category || '') || a.name.localeCompare(b.name); });
       if (!mats.length) return html + '<div class="empty"><p>No materials yet.</p></div>';
       return html + '<ul class="list">' + mats.map(function (x) {
@@ -664,11 +669,12 @@
     };
     const form = openModal(id ? 'Edit session' : 'New session',
       '<label>Patient<select name="patientId" required>' + opt('', 'Choose…') + visiblePatients().filter(function (p) { return p.status === 'active' || p.id === a.patientId; }).map(function (p) { const c = L.caseLabel(p); return opt(p.id, nm(p) + (c ? ' (' + c + ')' : ''), a.patientId === p.id); }).join('') + '</select></label>' +
-      '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
-      '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"></label>' +
+      '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(a.date) + '"' + (id ? ' readonly title="Use Reschedule to move a session"' : '') + '></label>' +
+      '<label>Time<input type="time" name="time" required value="' + esc(a.time) + '"' + (id ? ' readonly title="Use Reschedule to move a session"' : '') + '></label>' +
+      (id ? '<p class="small muted span-3">To move this session, use Reschedule on the session page so the reason is recorded.</p>' : '') +
       '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
       '<div class="grid-2"><label>Room / location<input name="room" value="' + esc(a.room) + '"></label>' +
-      '<label>Status<select name="status">' + ['scheduled', 'completed', 'cancelled'].map(function (s) { return opt(s, s, a.status === s); }).join('') + '</select></label></div>' +
+      '<label>Status<select name="status">' + [['scheduled', 'Scheduled'], ['attended', 'Attended'], ['missed', 'Did not attend'], ['cancelled', 'Cancelled']].map(function (s) { return opt(s[0], s[1], a.status === s[0] || (s[0] === 'attended' && a.status === 'completed')); }).join('') + '</select></label></div>' +
       '<fieldset class="pick"><legend>Goals to target</legend><div id="goal-checks">' + goalChecks(a.patientId, id ? a.goalIds : S.goalsForPatient(a.patientId).filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; })) + '</div></fieldset>' +
       '<fieldset class="pick"><legend>Extra materials (beyond the goals\' own)</legend>' + st.materials.map(function (x) {
         return '<label class="check"><input type="checkbox" name="extraMaterialIds" value="' + x.id + '"' + ((a.extraMaterialIds || []).indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + esc(x.name) + '</label>';
@@ -704,13 +710,15 @@
     goals: ['supervisor', 'therapist', 'student'],
     materials: ['supervisor', 'therapist', 'student'],
     reports: ['supervisor', 'therapist', 'student'],
-    privacy: ['supervisor', 'therapist', 'student', 'diagnostician']
+    privacy: ['supervisor', 'therapist', 'student', 'diagnostician'],
+    inbox: ['supervisor', 'therapist', 'student', 'diagnostician'],
+    leave: ['supervisor', 'therapist', 'student']
   };
   const SEVERITY = ['Mild', 'Mild–moderate', 'Moderate', 'Moderate–severe', 'Severe', 'Profound'];
   const PRIORITY = ['Routine', 'Soon', 'Urgent'];
 
   function me() { return S.currentUser() || { id: '', role: 'supervisor', name: '' }; }
-  function canSee(p) { return L.canSeePatient(me(), p); }
+  function canSee(p) { return L.canSeePatient(me(), p, grants()); }
   function canManage(p) {
     const u = me();
     return u.role === 'supervisor' || (u.role === 'therapist' && p.assignedTo === u.id) || (u.role === 'diagnostician' && p.status === 'waiting');
@@ -724,8 +732,12 @@
   function firstName(id) { return userName(id).replace(/^Dr\.\s*/, '').split(' ')[0]; }
   function visiblePatients() { return S.state.patients.filter(canSee); }
   function visibleAppts(list) {
-    const pm = S.byId(S.state.patients);
-    return list.filter(function (a) { return canSee(pm[a.patientId]); });
+    const u = me(), pm = S.byId(S.state.patients);
+    if (u.role === 'supervisor') return list;
+    return list.filter(function (a) {
+      const p = pm[a.patientId];
+      return p && (L.clinicianFor(a, p) === u.id || p.assignedTo === u.id || observing(a, u.id));
+    });
   }
   function noAccess() {
     return '<div class="empty"><p><strong>You don\'t have access to this.</strong></p><p class="small">Records are shown on a need-to-know basis for your role (' + esc(L.ROLES[me().role].label) + ').</p></div>';
@@ -745,17 +757,23 @@
   function quickLinks(u) {
     const st = S.state;
     const pending = st.referrals.filter(function (r) { return r.status === 'pending'; }).length;
+    const since = L.addDays(L.todayISO(), -14);
     if (u.role === 'supervisor') {
+      const cover = st.appointments.filter(function (a) { return a.coverNeeded && a.date >= L.todayISO(); }).length;
+      const moved = st.appointments.reduce(function (n, a) { return n + (a.reschedules || []).filter(function (r) { return r.at.slice(0, 10) >= since; }).length; }, 0);
       return [
         { label: 'To allot', n: pending, href: '#/cases?tab=allot', alert: pending > 0 },
         { label: 'To review', n: st.documents.filter(function (d) { return d.status === 'submitted'; }).length, href: '#/cases?tab=review' },
-        { label: 'Allotted', n: st.patients.filter(function (p) { return p.status === 'active' && p.assignedTo; }).length, href: '#/cases?tab=allotted' }
+        { label: 'Needs cover', n: cover, href: '#/leave', alert: cover > 0 },
+        { label: 'Rescheduled', n: moved, href: '#/cases?tab=reschedules' }
       ];
     }
     if (u.role === 'therapist') {
+      const invites = st.appointments.filter(function (a) { return (a.observers || []).some(function (o) { return o.userId === u.id && o.status === 'invited'; }); }).length;
       return [
-        { label: 'Referrals', n: pending, href: '#/cases?tab=allot', alert: pending > 0 },
-        { label: 'My cases', n: st.patients.filter(function (p) { return p.assignedTo === u.id && p.status === 'active'; }).length, href: '#/cases?tab=allotted' }
+        { label: 'My cases', n: st.patients.filter(function (p) { return p.assignedTo === u.id && p.status === 'active'; }).length, href: '#/cases' },
+        { label: 'Covering', n: st.appointments.filter(function (a) { return a.coverBy === u.id && a.date >= L.todayISO(); }).length, href: '#/schedule' },
+        { label: 'Invitations', n: invites, href: '#/inbox', alert: invites > 0 }
       ];
     }
     if (u.role === 'student') {
@@ -781,9 +799,8 @@
       '<div class="rb-right">' +
       '<button class="rb-btn" data-action="toggle-names" aria-pressed="' + !!st.settings.hideNames + '">' + (st.settings.hideNames ? 'Show names' : 'Hide names') + '</button>' +
       (S.hasPassphrase() ? '<button class="rb-btn" data-action="lock-now">Lock</button>' : '') +
-      '<label class="rb-user"><span class="rb-as">Signed in as</span><select id="user-switch" aria-label="Signed in as">' +
-      st.users.map(function (x) { return opt(x.id, x.name + ' – ' + L.ROLES[x.role].label, x.id === u.id); }).join('') +
-      '</select></label></div>';
+      '<span class="rb-me"><strong>' + esc(u.name) + '</strong><span class="muted"> · ' + esc(L.ROLES[u.role].label) + '</span></span>' +
+      '<button class="rb-btn" data-action="sign-out">Sign out</button></div>';
   }
 
   function lockScreen() {
@@ -801,7 +818,7 @@
     const tab = params.tab || 'waiting';
     const st = S.state;
     const waiting = st.patients.filter(function (p) { return p.status === 'waiting'; });
-    const done = st.assessments.filter(function (a) { return a.status === 'completed'; }).sort(function (a, b) { return b.date.localeCompare(a.date); });
+    const done = st.assessments.filter(function (a) { return a.status === 'completed' && (me().role === 'supervisor' || a.assessorId === me().id); }).sort(function (a, b) { return b.date.localeCompare(a.date); });
     let html = '<header class="page-head"><div><h1>Diagnostics</h1><p class="muted">Assess new patients and refer them to the therapy department</p></div>' +
       '<button class="btn btn-primary" data-action="new-patient">+ Register patient</button></header>' +
       tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')']]);
@@ -891,6 +908,8 @@
       S.upsert('referrals', { patientId: p.id, assessmentId: a.id, fromId: me().id, at: L.todayISO(), priority: v('priority'), notes: v('refNotes'), status: 'pending' });
       p.status = 'referred'; p.referredAt = L.todayISO();
       S.audit('Referred to therapy', p.id, v('priority') + ' priority');
+      S.send(supervisorsFor(null), { kind: 'referral', patientId: p.id, link: '#/cases?tab=allot',
+        subject: 'New referral (' + v('priority') + ') – ' + pseud(p), body: [a.diagnosis, a.severity, v('refNotes')].filter(Boolean).join(' · ') });
       toast('Referred to the therapy department');
     } else {
       p.status = 'discharged'; p.dischargedAt = L.todayISO();
@@ -908,13 +927,31 @@
     if (u.role === 'student') return studentCases();
     if (u.role === 'diagnostician') return noAccess();
     const st = S.state;
-    const tab = params.tab || 'allot';
+    const tab = u.role === 'therapist' ? 'allotted' : params.tab || 'allot';
     const pending = st.referrals.filter(function (r) { return r.status === 'pending'; });
     const allotted = st.patients.filter(function (p) { return p.status === 'active' && p.assignedTo && canSee(p); });
     const review = st.documents.filter(function (d) { return d.status === 'submitted'; });
-    const t = [['allot', 'To allot (' + pending.length + ')'], ['allotted', (u.role === 'therapist' ? 'My cases' : 'Allotted cases') + ' (' + allotted.length + ')']];
-    if (u.role === 'supervisor') t.push(['review', 'To review (' + review.length + ')']);
-    let html = '<header class="page-head"><div><h1>Cases</h1><p class="muted">Referrals from diagnostics, allotment and student coursework</p></div></header>' + tabs('#/cases', tab, t);
+    const moves = [];
+    st.appointments.forEach(function (a) { (a.reschedules || []).forEach(function (r) { moves.push({ a: a, r: r }); }); });
+    const t = u.role === 'therapist' ? [['allotted', 'My cases (' + allotted.length + ')']]
+      : [['allot', 'To allot (' + pending.length + ')'], ['allotted', 'Allotted cases (' + allotted.length + ')'], ['review', 'To review (' + review.length + ')'], ['reschedules', 'Reschedules (' + moves.length + ')']];
+    let html = '<header class="page-head"><div><h1>' + (u.role === 'therapist' ? 'My cases' : 'Cases') + '</h1><p class="muted">' +
+      (u.role === 'therapist' ? 'Patients allotted to you' : 'Referrals from diagnostics, allotment, coursework and reschedules') + '</p></div></header>' + tabs('#/cases', tab, t);
+
+    if (tab === 'reschedules') {
+      if (!moves.length) return html + '<div class="empty"><p>No sessions have been rescheduled.</p></div>';
+      moves.sort(function (x, y) { return y.r.at.localeCompare(x.r.at); });
+      const byWho = {};
+      moves.forEach(function (x) { byWho[x.r.by] = (byWho[x.r.by] || 0) + 1; });
+      return html + '<p class="small">' + Object.keys(byWho).map(function (k) { return '<span class="badge">' + esc(k) + ': ' + byWho[k] + '</span>'; }).join(' ') + '</p>' +
+        '<div class="table-wrap"><table class="tbl"><thead><tr><th>Recorded</th><th>Patient</th><th>Clinician</th><th>Moved</th><th>By</th><th>Reason</th></tr></thead><tbody>' +
+        moves.map(function (x) {
+          const p = S.patient(x.a.patientId);
+          return '<tr><td class="nowrap">' + esc(fmtStamp(x.r.at)) + '</td><td><a href="#/session/' + x.a.id + '">' + esc(nm(p)) + '</a></td><td>' + esc(userName(L.clinicianFor(x.a, p))) + '</td>' +
+            '<td class="nowrap">' + esc(L.formatDate(x.r.fromDate, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(x.r.fromTime)) + ' → ' + esc(L.formatDate(x.r.toDate, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(x.r.toTime)) + '</td>' +
+            '<td><strong>' + esc(x.r.by) + '</strong></td><td>' + esc(x.r.reason || '') + '</td></tr>';
+        }).join('') + '</tbody></table></div>';
+    }
 
     if (tab === 'allot') {
       if (!pending.length) return html + '<div class="empty"><p>No referrals are waiting.</p></div>';
@@ -946,7 +983,7 @@
     }
 
     if (!allotted.length) return html + '<div class="empty"><p>No allotted cases.</p></div>';
-    return html + '<div class="table-wrap"><table class="tbl cases-tbl"><thead><tr><th>Case</th><th>Clinician</th><th>Pre-assessment</th><th>Lesson plans</th><th>Session reports</th><th>Conclusion</th><th>Next step</th></tr></thead><tbody>' +
+    return html + '<div class="table-wrap"><table class="tbl cases-tbl"><thead><tr><th>Case</th><th>Clinician</th><th>Sessions</th><th>Pre-assessment</th><th>Lesson plans</th><th>Session reports</th><th>Conclusion</th><th>Next step</th></tr></thead><tbody>' +
       allotted.map(function (p) {
         const student = isStudentCase(p);
         const docs = S.docsForPatient(p.id);
@@ -959,10 +996,16 @@
             (c.returned ? ' <span class="doc-chip st-returned">' + c.returned + ' returned</span>' : '') + '</td>';
         };
         return '<tr><td><a href="#/cases/' + p.id + '"><strong>' + esc(nm(p)) + '</strong></a><div>' + caseTag(p) + '</div></td>' +
-          '<td>' + esc(userName(p.assignedTo)) + (student ? '<div class="muted small">Student · supervisor ' + esc(firstName(p.supervisorId)) + '</div>' : '') + '</td>' +
+          '<td>' + esc(userName(p.assignedTo)) + (student ? '<div class="muted small">Student · supervisor ' + esc(firstName(p.supervisorId)) + '</div>' : '') + '</td>' + sessionsCell(p) +
           cell('pre-assessment') + cell('lesson-plan') + cell('session-report') + cell('conclusion') +
           '<td class="small">' + (student ? esc(prog.next) : '<span class="muted">Qualified clinician</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>';
+  }
+
+  function sessionsCell(p) {
+    const c = L.sessionCounts(S.appointmentsFor(p.id), p.sessionsAllotted);
+    return '<td class="nowrap"><strong>' + c.attended + '/' + c.allotted + '</strong> attended' + (c.missed ? '<div class="small bad">' + c.missed + ' did not attend</div>' : '') +
+      (c.rescheduled ? '<div class="small muted">' + c.rescheduled + ' rescheduled</div>' : '') + '</td>';
   }
 
   function studentCases() {
@@ -981,6 +1024,7 @@
           const c = prog[t];
           return '<div><span class="muted small">' + esc(L.DOC_TYPES[t].label) + '</span><strong>' + c.approved + '/' + c.total + '</strong></div>';
         }).join('') + '</div>' +
+        '<p class="small">' + countsLine(p) + '</p>' +
         '<p class="small"><span class="meta-label">Next</span> ' + esc(prog.next) + '</p>' +
         returned.map(function (d) {
           const fb = (d.history || []).filter(function (h) { return h.action === 'returned'; }).slice(-1)[0];
@@ -1113,6 +1157,8 @@
       d.status = 'submitted'; d.submittedAt = new Date().toISOString();
       d.history.push({ at: d.submittedAt, by: me().id, action: 'submitted' });
       S.audit('Submitted ' + L.DOC_TYPES[d.type].label.toLowerCase(), d.patientId);
+      S.send(d.reviewerId, { kind: 'submitted', patientId: d.patientId, link: '#/doc/' + d.id,
+        subject: L.DOC_TYPES[d.type].label + ' submitted – ' + pseud(S.patient(d.patientId)), body: 'Ready for your review.' });
       toast('Submitted for review');
     } else toast('Draft saved');
     S.save();
@@ -1127,6 +1173,9 @@
     d.reviewedAt = new Date().toISOString();
     d.history.push({ at: d.reviewedAt, by: me().id, action: d.status, note: note });
     S.audit((intent === 'approve' ? 'Approved ' : 'Returned ') + L.DOC_TYPES[d.type].label.toLowerCase(), d.patientId);
+    S.send(d.authorId, { kind: 'review', patientId: d.patientId, link: '#/doc/' + d.id,
+      subject: L.DOC_TYPES[d.type].label + (intent === 'approve' ? ' approved' : ' returned with comments') + ' – ' + pseud(S.patient(d.patientId)),
+      body: note || 'Approved – no further comments.' });
     S.save();
     toast(intent === 'approve' ? 'Approved' : 'Sent back with feedback');
     go('#/cases?tab=review');
@@ -1144,6 +1193,7 @@
         const blocked = x.role === 'student' && !c.students;
         return '<option value="' + x.id + '"' + (blocked ? ' disabled' : '') + '>' + esc(x.name + ' – ' + L.ROLES[x.role].label + (x.year ? ', ' + x.year : '') + ' (' + load(x.id) + ' cases)' + (blocked ? ' – no consent' : '')) + '</option>';
       }).join('') + '</select></label>' +
+      '<label>Sessions allotted<input type="number" name="sessions" min="1" max="100" value="' + (p.sessionsAllotted || 12) + '" required></label>' +
       '<label>Supervisor (for student clinicians)<select name="supervisor">' + st.users.filter(function (x) { return x.role === 'supervisor'; })
         .map(function (x) { return opt(x.id, x.name, x.id === me().id); }).join('') + '</select></label>' +
       '<p class="form-error" id="allot-error" hidden></p>',
@@ -1151,6 +1201,7 @@
         const who = S.user(fd.get('assignee'));
         const check = L.canAllot(p, who);
         if (!check.ok) { const e = document.getElementById('allot-error'); e.textContent = check.reason; e.hidden = false; return false; }
+        p.sessionsAllotted = Number(fd.get('sessions')) || 12;
         assignCase(p, who, who.role === 'student' ? fd.get('supervisor') : '');
       });
     form.querySelector('[type=submit]').textContent = 'Allot case';
@@ -1161,6 +1212,9 @@
     const r = S.state.referrals.find(function (x) { return x.patientId === p.id && x.status === 'pending'; });
     if (r) { r.status = 'allotted'; r.allottedTo = who.id; r.allottedBy = me().id; r.allottedAt = L.todayISO(); }
     S.audit('Allotted case', p.id, 'to ' + who.name);
+    const a = S.latestAssessment(p.id) || {};
+    if (who.id !== me().id) S.send(who.id, { kind: 'allotted', patientId: p.id, link: isStudentCase(p) ? '#/cases/' + p.id : '#/patients/' + p.id,
+      subject: 'New case allotted – ' + pseud(p), body: [L.caseLabel(p), a.diagnosis, a.recommendations, (p.sessionsAllotted || 12) + ' sessions allotted.'].filter(Boolean).join('\n') });
     toast('Allotted to ' + who.name);
   }
 
@@ -1176,12 +1230,12 @@
     html += '<section class="card"><h2>How patient data is protected</h2><ul class="safeguards">' +
       '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
       '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>' +
-      '<li>' + tick(true) + '<div><strong>Need-to-know access.</strong> Students see only their allotted cases; diagnostics sees only its waiting list and referrals.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Individual sign-in and need-to-know access.</strong> Supervisors see all diagnostics and therapy patients; each clinician sees only their own patients, plus sessions they cover or are invited to.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Consent recorded</strong> per patient; allotment to students and family reports check it.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
       '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records are flagged for erasure after ' + esc(set.retentionYears) + ' years' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
-      '</ul><p class="small muted">The person switcher at the top is for shared clinic devices and is not a secure login. For several people on separate devices, the app needs a server with individual accounts.</p></section>';
+      '</ul><p class="small muted">Everyone signs in with their own password, stored only as a salted hash, and is signed out after ' + esc(set.autoLockMinutes) + ' minutes idle. This protects records on a shared clinic computer. For staff on separate devices, the app needs a server with individual accounts.</p></section>';
 
     html += '<section class="card"><h2>Encryption &amp; lock</h2>';
     if (!S.cryptoAvailable()) html += '<p class="muted">This browser cannot encrypt data here. Open the app over https or from a file in an up-to-date browser.</p>';
@@ -1197,7 +1251,7 @@
 
     html += '<form class="card" id="settings-form"><h2>Settings</h2>' +
       '<label class="check"><input type="checkbox" name="hideNames"' + (set.hideNames ? ' checked' : '') + '> Hide patient names on screen (show case code and initials)</label>' +
-      '<div class="grid-3"><label>Auto-lock after (minutes)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"></label>' +
+      '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"></label>' +
       '<label>Keep discharged records (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
       '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"></label></div>' +
       '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(set.dayStart) + '"></label>' +
@@ -1219,15 +1273,7 @@
       '<button class="btn" data-action="copy-record">Copy full record</button>' +
       (isLead ? '<button class="btn btn-danger" data-action="erase-selected">Erase record</button>' : '') + '</div></section>';
 
-    if (isLead) {
-      html += '<section class="card"><h2>People</h2><ul class="list flat">' + st.users.map(function (x) {
-        const n = st.patients.filter(function (p) { return p.assignedTo === x.id; }).length;
-        return '<li><div class="row"><div><strong>' + esc(x.name) + '</strong><div class="muted small">' + esc(L.ROLES[x.role].label) + (x.year ? ' · ' + esc(x.year) : '') + ' · ' + n + ' cases</div></div>' +
-          (x.id !== u.id && !n ? '<button class="btn btn-sm btn-ghost" data-action="remove-user" data-id="' + x.id + '">Remove</button>' : '') + '</div></li>';
-      }).join('') + '</ul><form id="user-form" class="grid-3 add-user"><label>Name<input name="name" required></label>' +
-        '<label>Role<select name="role">' + Object.keys(L.ROLES).map(function (k) { return opt(k, L.ROLES[k].label, k === 'student'); }).join('') + '</select></label>' +
-        '<label>Year / group (students)<input name="year" placeholder="e.g. Year 3"></label><div class="actions"><button class="btn" type="submit">Add person</button></div></form></section>';
-    }
+    if (isLead) html += peopleSection();
 
     const log = st.audit.slice(-80).reverse();
     html += '<section class="card"><div class="card-head"><h2>Access log</h2><button class="btn btn-sm" data-action="copy-audit">Copy log</button></div>' +
@@ -1340,9 +1386,12 @@
     document.addEventListener(t, function () { lastActivity = Date.now(); }, { passive: true });
   });
   setInterval(function () {
-    if (S.isLocked() || !S.hasPassphrase()) return;
+    if (S.isLocked() || !S.currentUser()) return;
     const mins = Number(S.state.settings.autoLockMinutes) || 10;
-    if (Date.now() - lastActivity > mins * 60000) { S.audit('Auto-locked'); S.lock().then(function () { if (modal.open) modal.close(); render(); }); }
+    if (Date.now() - lastActivity < mins * 60000) return;
+    if (modal.open) modal.close();
+    S.signOut();
+    if (S.hasPassphrase()) S.lock().then(render); else render();
   }, 20000);
 
   let lastViewed = null;
@@ -1396,6 +1445,462 @@
     copyText(JSON.stringify(S.patientRecord(el.dataset.id), null, 2));
   };
 
+  /* ---------- sign-in ---------- */
+
+  let pendingNotice = false;
+  let lastInvite = null;
+
+  function loginScreen() {
+    const demo = S.state.seeded;
+    return '<div class="lock"><form id="login-form" class="card lock-card">' +
+      '<h1>Sign in to Therapy Planner</h1><p class="muted">Each person signs in with their own account and sees only the patients they need.</p>' +
+      '<label>Email or name<input name="login" id="login-name" autocomplete="username" required></label>' +
+      '<label>Password<input type="password" name="pass" autocomplete="current-password"></label>' +
+      '<p class="form-error" id="login-error" hidden></p>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Sign in</button></div>' +
+      (demo ? '<div class="demo-accounts"><p class="small"><strong>Demo accounts</strong> (password <code>' + esc(S.demoPassword) + '</code>):</p><ul class="small">' +
+        S.state.users.map(function (u) {
+          return '<li><button type="button" class="link" data-action="demo-login" data-login="' + esc(u.email || u.name) + '">' + esc(u.email || u.name) + '</button> – ' + esc(u.name) + ', ' + esc(L.ROLES[u.role].label.toLowerCase()) + '</li>';
+        }).join('') + '</ul></div>' : '<p class="muted small">Forgotten your password? Ask your clinical supervisor to reset it.</p>') +
+      '</form></div>';
+  }
+
+  function newPasswordScreen(u) {
+    return '<div class="lock"><form id="newpw-form" class="card lock-card">' +
+      '<h1>Choose your password</h1><p class="muted">Welcome, ' + esc(u.name) + '. Set a password only you know before continuing.</p>' +
+      '<label>New password<input type="password" name="p1" minlength="8" autocomplete="new-password" required></label>' +
+      '<label>Repeat password<input type="password" name="p2" minlength="8" autocomplete="new-password" required></label>' +
+      '<p class="form-error" id="newpw-error" hidden></p>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Save and continue</button></div></form></div>';
+  }
+
+  /* Unread messages pop up after signing in. */
+  function showNotices() {
+    const u = S.currentUser();
+    if (!u) return;
+    const unread = S.inbox(u.id).filter(function (m) { return !m.read; });
+    if (!unread.length) return;
+    const dlg = document.getElementById('notice');
+    dlg.innerHTML = '<form method="dialog" class="confirm-form"><h2>You have ' + unread.length + ' new message' + (unread.length === 1 ? '' : 's') + '</h2>' +
+      '<ul class="notice-list">' + unread.slice(0, 5).map(function (m) {
+        return '<li><span class="kind kind-' + esc(m.kind) + '">' + esc(KIND_LABEL[m.kind] || 'Message') + '</span> <strong>' + esc(m.subject) + '</strong><div class="muted small">' + esc(userName(m.from)) + ' · ' + esc(fmtStamp(m.at)) + '</div></li>';
+      }).join('') + '</ul><div class="actions"><button class="btn" value="later">Later</button> <button class="btn btn-primary" value="open">Open inbox</button></div></form>';
+    dlg.addEventListener('close', function done() {
+      dlg.removeEventListener('close', done);
+      if (dlg.returnValue === 'open') go('#/inbox');
+    });
+    dlg.returnValue = '';
+    dlg.showModal();
+  }
+
+  /* ---------- access for covering and observing ---------- */
+
+  function grants() {
+    const u = S.currentUser();
+    const g = {};
+    if (!u) return g;
+    S.state.appointments.forEach(function (a) {
+      if (a.coverBy === u.id || (a.observers || []).some(function (o) { return o.userId === u.id && o.status === 'accepted'; })) g[a.patientId] = true;
+    });
+    return g;
+  }
+  function observing(a, uid) { return (a.observers || []).some(function (o) { return o.userId === uid && o.status === 'accepted'; }); }
+  function supervisorsFor(p) {
+    if (p && p.supervisorId) return [p.supervisorId];
+    return S.state.users.filter(function (u) { return u.role === 'supervisor'; }).map(function (u) { return u.id; });
+  }
+  function canRunSession(a, p) {
+    const u = me();
+    return u.role === 'supervisor' || L.clinicianFor(a, p) === u.id || p.assignedTo === u.id;
+  }
+
+  function apptBadges(a, p) {
+    const u = me();
+    let h = '';
+    if (a.coverNeeded) h += '<span class="badge badge-warn">Needs cover</span>';
+    if (a.coverBy) h += '<span class="badge badge-info">' + (a.coverBy === u.id ? 'You are covering' : 'Cover: ' + esc(firstName(a.coverBy))) + '</span>';
+    if (observing(a, u.id)) h += '<span class="badge">Observing</span>';
+    if ((a.reschedules || []).length) h += '<span class="badge">Rescheduled</span>';
+    return h;
+  }
+
+  function countsLine(p) {
+    const c = L.sessionCounts(S.appointmentsFor(p.id), p.sessionsAllotted);
+    return '<span class="counts"><strong>' + c.attended + '</strong> of ' + c.allotted + ' sessions attended' +
+      (c.missed ? ' · <span class="bad">' + c.missed + ' did not attend</span>' : '') +
+      (c.cancelled ? ' · ' + c.cancelled + ' cancelled' : '') +
+      (c.rescheduled ? ' · ' + c.rescheduled + ' rescheduled' : '') +
+      ' · ' + c.upcoming + ' booked</span>';
+  }
+
+  /* ---------- session tools: attendance, reschedule, invite ---------- */
+
+  function sessionTools(a, p) {
+    const run = canRunSession(a, p);
+    const obs = (a.observers || []);
+    const st = a.status;
+    let h = '<section class="card session-tools"><div class="st-row"><div>' + countsLine(p) + '</div>' +
+      (run ? '<div class="head-actions"><button class="btn btn-sm" data-action="reschedule" data-id="' + a.id + '">Reschedule</button>' +
+        '<button class="btn btn-sm" data-action="invite" data-id="' + a.id + '">Invite to observe</button></div>' : '') + '</div>';
+    if (run) {
+      h += '<div class="st-row"><span class="meta-label">Attendance</span><div class="seg-toggle" role="group" aria-label="Attendance">' +
+        [['attended', 'Attended'], ['missed', 'Did not attend'], ['cancelled', 'Cancelled'], ['scheduled', 'Not yet']].map(function (x) {
+          return '<button class="' + (st === x[0] || (x[0] === 'attended' && st === 'completed') ? 'on' : '') + '" data-action="attend" data-id="' + a.id + '" data-status="' + x[0] + '">' + x[1] + '</button>';
+        }).join('') + '</div></div>';
+    }
+    if (a.coverBy || a.coverNeeded) {
+      h += '<p class="small">' + (a.coverBy ? 'Covered by <strong>' + esc(userName(a.coverBy)) + '</strong> while ' + esc(userName(p.assignedTo)) + ' is on leave.' : '<span class="badge badge-warn">Needs cover</span> ' + esc(userName(p.assignedTo)) + ' is on leave.') + '</p>';
+    }
+    if (obs.length) {
+      h += '<p class="small"><span class="meta-label">Invited</span> ' + obs.map(function (o) {
+        return esc(userName(o.userId)) + ' (' + esc(o.role.toLowerCase()) + ', ' + esc({ invited: 'awaiting reply', accepted: 'accepted', declined: 'declined' }[o.status]) + ')';
+      }).join(' · ') + '</p>';
+    }
+    if ((a.reschedules || []).length) {
+      h += '<details class="small"><summary>Rescheduled ' + a.reschedules.length + ' time' + (a.reschedules.length === 1 ? '' : 's') + '</summary><ul class="plain">' +
+        a.reschedules.map(function (r) {
+          return '<li>' + esc(L.formatDate(r.fromDate, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(r.fromTime)) + ' → ' + esc(L.formatDate(r.toDate, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(r.toTime)) +
+            ' · by <strong>' + esc(r.by) + '</strong>' + (r.reason ? ' – ' + esc(r.reason) : '') + ' <span class="muted">(recorded by ' + esc(userName(r.userId)) + ')</span></li>';
+        }).join('') + '</ul></details>';
+    }
+    return h + '</section>';
+  }
+
+  function rescheduleForm(id) {
+    const a = S.appointment(id), p = S.patient(a.patientId);
+    const u = me();
+    const defBy = u.role === 'supervisor' ? 'Supervisor' : 'Clinician';
+    openModal('Reschedule session',
+      '<p class="small">' + esc(pseud(p)) + ' · now ' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(a.time)) + '</p>' +
+      '<div class="grid-2"><label>New date<input type="date" name="date" required value="' + esc(a.date) + '"></label>' +
+      '<label>New time<input type="time" name="time" required value="' + esc(a.time) + '"></label></div>' +
+      '<label>Rescheduled by<select name="by">' + L.RESCHEDULED_BY.map(function (b) { return opt(b, b, b === defBy); }).join('') + '</select></label>' +
+      '<label>Reason<input name="reason" required placeholder="e.g. child unwell, clinician in training, room unavailable"></label>' +
+      '<p class="small muted">The supervisor is told about every reschedule.</p>',
+      function (fd) {
+        const entry = { at: new Date().toISOString(), userId: u.id, by: fd.get('by'), reason: fd.get('reason').trim(),
+          fromDate: a.date, fromTime: a.time, toDate: fd.get('date'), toTime: fd.get('time') };
+        a.reschedules = (a.reschedules || []).concat([entry]);
+        a.date = entry.toDate; a.time = entry.toTime;
+        if (a.status !== 'cancelled') a.status = 'scheduled';
+        S.audit('Rescheduled session', p.id, entry.by + ': ' + entry.reason);
+        S.send(supervisorsFor(p).filter(function (x) { return x !== u.id; }), {
+          kind: 'reschedule', patientId: p.id, link: '#/session/' + a.id,
+          subject: 'Session rescheduled by ' + entry.by + ' – ' + pseud(p),
+          body: L.formatDate(entry.fromDate) + ' ' + L.formatTime(entry.fromTime) + ' → ' + L.formatDate(entry.toDate) + ' ' + L.formatTime(entry.toTime) + '\nReason: ' + entry.reason
+        });
+        toast('Session moved; supervisor informed');
+      });
+  }
+
+  function inviteForm(id) {
+    const a = S.appointment(id), p = S.patient(a.patientId);
+    const u = me();
+    const taken = (a.observers || []).map(function (o) { return o.userId; }).concat([u.id, L.clinicianFor(a, p)]);
+    const people = S.state.users.filter(function (x) { return x.role !== 'diagnostician' && taken.indexOf(x.id) < 0; });
+    const form = openModal('Invite to this session',
+      '<p class="small">' + esc(pseud(p)) + ' · ' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(a.time)) + '</p>' +
+      (people.length ? '<label>Invite<select name="who" required>' + opt('', 'Choose…') + people.map(function (x) { return opt(x.id, x.name + ' – ' + L.ROLES[x.role].label); }).join('') + '</select></label>' +
+        '<label>As<select name="role">' + ['Observe', 'Co-treat', 'Supervise'].map(function (r) { return opt(r, r); }).join('') + '</select></label>' +
+        '<label>Message<textarea name="note" rows="2" placeholder="What would you like them to look at?"></textarea></label>' +
+        '<p class="small muted">If they accept, they can open this patient\'s record for the session.</p>' : '<p class="muted">Everyone has already been invited.</p>'),
+      function (fd) {
+        if (!fd.get('who')) return false;
+        a.observers = (a.observers || []).concat([{ userId: fd.get('who'), role: fd.get('role'), status: 'invited', by: u.id }]);
+        S.send(fd.get('who'), {
+          kind: 'invite', apptId: a.id, patientId: p.id, link: '#/session/' + a.id,
+          subject: 'Invitation to ' + fd.get('role').toLowerCase() + ' – ' + pseud(p) + ', ' + L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(a.time),
+          body: fd.get('note').trim() || 'Would you join this session?'
+        });
+        S.audit('Invited ' + userName(fd.get('who')) + ' to ' + fd.get('role').toLowerCase(), p.id);
+        toast('Invitation sent');
+      });
+    form.querySelector('[type=submit]').textContent = 'Send invitation';
+  }
+
+  /* ---------- inbox ---------- */
+
+  const KIND_LABEL = { review: 'Review', submitted: 'To review', referral: 'Referral', allotted: 'New case', leave: 'Leave', cover: 'Cover', reschedule: 'Reschedule', invite: 'Invitation', attendance: 'Attendance', note: 'Message' };
+
+  function viewInbox(id) {
+    const u = me();
+    const list = S.inbox(u.id);
+    let html = '<header class="page-head"><div><h1>Inbox</h1><p class="muted">' + S.unread(u.id) + ' unread · review comments, allotments, cover and reschedules</p></div>' +
+      '<button class="btn btn-primary" data-action="compose">New message</button></header>';
+    if (id) {
+      const m = list.find(function (x) { return x.id === id; });
+      if (!m) return html + '<div class="empty"><p>Message not found.</p></div>';
+      if (!m.read) { m.read = true; S.save(); }
+      const a = m.apptId && S.appointment(m.apptId);
+      const mine = a && (a.observers || []).find(function (o) { return o.userId === u.id; });
+      html = '<a class="back" href="#/inbox">‹ Inbox</a><article class="card message"><div class="card-head"><div><span class="kind kind-' + esc(m.kind) + '">' + esc(KIND_LABEL[m.kind] || 'Message') + '</span>' +
+        '<h1 class="msg-subject">' + esc(m.subject) + '</h1><p class="muted small">From ' + esc(userName(m.from)) + ' · ' + esc(fmtStamp(m.at)) + '</p></div></div>' +
+        '<p class="pre">' + esc(m.body) + '</p><div class="actions wrap">' +
+        (m.kind === 'invite' && mine && mine.status === 'invited' ? '<button class="btn btn-primary" data-action="invite-reply" data-appt="' + a.id + '" data-answer="accepted">Accept</button><button class="btn" data-action="invite-reply" data-appt="' + a.id + '" data-answer="declined">Decline</button>' : '') +
+        (mine && mine.status !== 'invited' ? '<span class="badge">' + (mine.status === 'accepted' ? 'You accepted' : 'You declined') + '</span>' : '') +
+        (m.link && (m.kind !== 'invite' || (mine && mine.status === 'accepted')) ? '<a class="btn btn-primary" href="' + esc(m.link) + '">Open</a>' : '') +
+        (m.from ? '<button class="btn" data-action="compose" data-to="' + esc(m.from) + '" data-subject="' + esc('Re: ' + m.subject) + '">Reply</button>' : '') +
+        '</div></article>';
+      return html;
+    }
+    if (!list.length) return html + '<div class="empty"><p>No messages yet.</p></div>';
+    return html + '<ul class="list inbox">' + list.map(function (m) {
+      return '<li><a class="row' + (m.read ? '' : ' unread') + '" href="#/inbox/' + m.id + '"><div class="msg-main"><span class="kind kind-' + esc(m.kind) + '">' + esc(KIND_LABEL[m.kind] || 'Message') + '</span> ' +
+        '<strong>' + esc(m.subject) + '</strong><div class="muted small msg-preview">' + esc(userName(m.from)) + ' – ' + esc((m.body || '').split('\n')[0]) + '</div></div>' +
+        '<span class="muted small nowrap">' + esc(fmtStamp(m.at)) + '</span></a></li>';
+    }).join('') + '</ul>';
+  }
+
+  function composeForm(to, subject) {
+    const u = me();
+    openModal('New message',
+      '<label>To<select name="to" required>' + opt('', 'Choose…') + S.state.users.filter(function (x) { return x.id !== u.id; })
+        .map(function (x) { return opt(x.id, x.name + ' – ' + L.ROLES[x.role].label, x.id === to); }).join('') + '</select></label>' +
+      '<label>Subject<input name="subject" required value="' + esc(subject || '') + '"></label>' +
+      '<label>Message<textarea name="body" rows="5" required></textarea></label>' +
+      '<p class="small muted">Refer to patients by case code and initials only.</p>',
+      function (fd) {
+        S.send(fd.get('to'), { kind: 'note', subject: fd.get('subject').trim(), body: fd.get('body').trim() });
+        toast('Message sent');
+      });
+    modal.querySelector('[type=submit]').textContent = 'Send';
+  }
+
+  /* ---------- leave & cover ---------- */
+
+  const LEAVE_REASONS = ['Annual leave', 'Sick leave', 'Study / exam', 'Conference / training', 'Placement elsewhere', 'Other'];
+
+  function coverCtx(awayId) {
+    return { users: S.state.users, patientsById: S.byId(S.state.patients), appts: S.state.appointments, leaves: S.state.leave, awayId: awayId };
+  }
+
+  function viewLeave() {
+    const u = me(), st = S.state;
+    const isSup = u.role === 'supervisor';
+    let html = '<header class="page-head"><div><h1>Leave &amp; cover</h1><p class="muted">' +
+      (isSup ? 'Cover the sessions of clinicians who are away' : 'Tell your supervisor when you are away, so your patients are covered') + '</p></div></header>';
+    if (isSup) {
+      html += '<form class="card" id="autocover-form"><label class="check"><input type="checkbox" name="autoCover"' + (st.settings.autoCover ? ' checked' : '') + '> ' +
+        'Assign cover automatically as soon as leave is requested (free clinicians with the lightest day; students only with patient consent)</label>' +
+        '<div class="actions"><button class="btn btn-sm" type="submit">Save</button></div></form>';
+      const reqs = st.leave.slice().sort(function (a, b) { return (a.status === 'covered') - (b.status === 'covered') || a.from.localeCompare(b.from); });
+      if (!reqs.length) return html + '<div class="empty"><p>No leave requests.</p></div>';
+      return html + reqs.map(function (l) { return leaveCard(l, true); }).join('');
+    }
+    html += '<form id="leave-form" class="card"><h2>Request leave</h2><div class="grid-3">' +
+      '<label>From<input type="date" name="from" required value="' + L.addDays(L.todayISO(), 1) + '"></label>' +
+      '<label>To<input type="date" name="to" required value="' + L.addDays(L.todayISO(), 1) + '"></label>' +
+      '<label>Reason<select name="reason">' + LEAVE_REASONS.map(function (r) { return opt(r, r); }).join('') + '</select></label></div>' +
+      '<label>Note for your supervisor<input name="note" placeholder="Optional"></label>' +
+      '<div id="leave-preview">' + leavePreview(L.addDays(L.todayISO(), 1), L.addDays(L.todayISO(), 1)) + '</div>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Send to supervisor for cover</button></div></form>';
+    const mine = st.leave.filter(function (l) { return l.userId === u.id; }).sort(function (a, b) { return b.from.localeCompare(a.from); });
+    if (mine.length) html += '<h2>Your leave</h2>' + mine.map(function (l) { return leaveCard(l, false); }).join('');
+    return html;
+  }
+
+  function leavePreview(from, to) {
+    const u = me();
+    if (!from || !to || to < from) return '<p class="small muted">Choose the dates you will be away.</p>';
+    const list = L.sessionsFor(u.id, S.state.appointments, S.byId(S.state.patients), from, to);
+    if (!list.length) return '<p class="small muted">You have no sessions in these dates.</p>';
+    return '<p class="small"><strong>' + list.length + ' session' + (list.length === 1 ? '' : 's') + ' will need cover:</strong></p><ul class="plain needs-cover">' + list.map(function (a) {
+      const p = S.patient(a.patientId);
+      return '<li>' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(a.time)) + ' · ' + esc(nm(p)) + ' ' + caseTag(p) + '</li>';
+    }).join('') + '</ul>';
+  }
+
+  function leaveCard(l, manage) {
+    const appts = l.apptIds.map(function (id) { return S.appointment(id); }).filter(Boolean);
+    const open = appts.filter(function (a) { return !a.coverBy; }).length;
+    const ctx = coverCtx(l.userId);
+    return '<article class="card leave-card"><div class="card-head"><div><strong>' + esc(userName(l.userId)) + '</strong> · ' +
+      esc(L.formatDate(l.from, { weekday: 'short', day: 'numeric', month: 'short' })) + (l.to !== l.from ? ' – ' + esc(L.formatDate(l.to, { weekday: 'short', day: 'numeric', month: 'short' })) : '') +
+      '<div class="muted small">' + esc(l.reason) + (l.note ? ' · ' + esc(l.note) : '') + '</div></div>' +
+      (open ? '<span class="badge badge-warn">' + open + ' need' + (open === 1 ? 's' : '') + ' cover</span>' : '<span class="badge badge-good">Covered</span>') + '</div>' +
+      (appts.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Session</th><th>Patient</th><th>Cover</th></tr></thead><tbody>' + appts.map(function (a) {
+        const p = S.patient(a.patientId);
+        let cover;
+        if (manage) {
+          const cands = L.coverCandidates(a, ctx);
+          if (a.coverBy && !cands.some(function (c) { return c.id === a.coverBy; })) cands.unshift(S.user(a.coverBy));
+          cover = '<select class="cover-select" data-appt="' + a.id + '" data-leave="' + l.id + '" aria-label="Cover clinician">' + opt('', a.coverBy ? 'Remove cover' : 'Choose cover…') +
+            cands.map(function (c, i) { return opt(c.id, c.name + ' – ' + L.ROLES[c.role].label + (i === 0 && !a.coverBy ? ' (suggested)' : ''), c.id === a.coverBy); }).join('') + '</select>' +
+            (cands.length ? '' : '<div class="small bad">No one is free at this time.</div>');
+        } else cover = a.coverBy ? esc(userName(a.coverBy)) : '<span class="badge badge-warn">Waiting for supervisor</span>';
+        return '<tr class="' + (a.coverBy ? '' : 'row-warn') + '"><td class="nowrap"><a href="#/session/' + a.id + '">' + esc(L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(a.time)) + '</a></td>' +
+          '<td>' + esc(manage ? nm(p) : pseud(p)) + ' ' + caseTag(p) + '</td><td>' + cover + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="small muted">No sessions in these dates.</p>') +
+      (manage && open ? '<div class="actions"><button class="btn btn-primary btn-sm" data-action="auto-cover" data-id="' + l.id + '">Auto-assign cover</button></div>' : '') +
+      '</article>';
+  }
+
+  function setCover(a, uid, leave) {
+    const p = S.patient(a.patientId);
+    a.coverBy = uid || null;
+    a.coverNeeded = !uid;
+    if (uid) {
+      S.send(uid, { kind: 'cover', patientId: p.id, apptId: a.id, link: '#/session/' + a.id,
+        subject: 'You are covering ' + pseud(p) + ' – ' + L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(a.time),
+        body: userName(p.assignedTo) + ' is on leave. The session plan, goals and materials are in the session page.' });
+      S.audit('Assigned cover', p.id, 'to ' + userName(uid));
+    }
+    const all = leave.apptIds.map(function (id) { return S.appointment(id); }).filter(Boolean);
+    const done = all.every(function (x) { return x.coverBy; });
+    if (done && leave.status !== 'covered') {
+      leave.status = 'covered';
+      S.send(leave.userId, { kind: 'cover', link: '#/leave', subject: 'Cover arranged for your leave',
+        body: all.map(function (x) { return L.formatDate(x.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(x.time) + ' – ' + userName(x.coverBy); }).join('\n') });
+    } else if (!done) leave.status = 'requested';
+    S.save();
+  }
+
+  function autoCover(leave) {
+    let n = 0;
+    leave.apptIds.forEach(function (id) {
+      const a = S.appointment(id);
+      if (!a || a.coverBy) return;
+      const who = L.pickCover(a, coverCtx(leave.userId));
+      if (who) { setCover(a, who.id, leave); n++; }
+    });
+    return n;
+  }
+
+  /* ---------- people: invite & reset ---------- */
+
+  function tempPassword() {
+    const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+    const r = crypto.getRandomValues(new Uint8Array(10));
+    return Array.prototype.map.call(r, function (x) { return chars[x % chars.length]; }).join('');
+  }
+
+  function peopleSection() {
+    const st = S.state, u = me();
+    let html = '<section class="card"><h2>People &amp; sign-in</h2>';
+    if (lastInvite) {
+      html += '<div class="callout"><strong>Sign-in details for ' + esc(lastInvite.name) + '</strong><span>Email: <code>' + esc(lastInvite.email) + '</code> · Temporary password: <code>' + esc(lastInvite.pass) + '</code></span>' +
+        '<span class="small muted">Share these in person or through your organisation\'s secure channel. They must choose a new password when they first sign in. This is shown only once.</span></div>';
+      lastInvite = null;
+    }
+    html += '<ul class="list flat">' + st.users.map(function (x) {
+      const n = st.patients.filter(function (p) { return p.assignedTo === x.id; }).length;
+      return '<li><div class="row"><div><strong>' + esc(x.name) + '</strong><div class="muted small">' + esc(L.ROLES[x.role].label) + (x.year ? ' · ' + esc(x.year) : '') + (x.email ? ' · ' + esc(x.email) : '') + ' · ' + n + ' cases' +
+        (x.mustChange ? ' · <span class="badge badge-warn">Invited</span>' : '') + '</div></div><div class="head-actions">' +
+        (x.id !== u.id ? '<button class="btn btn-sm btn-ghost" data-action="reset-pw" data-id="' + x.id + '">Reset password</button>' : '') +
+        (x.id !== u.id && !n ? '<button class="btn btn-sm btn-ghost" data-action="remove-user" data-id="' + x.id + '">Remove</button>' : '') + '</div></div></li>';
+    }).join('') + '</ul><form id="user-form" class="add-user"><h3>Invite someone</h3><div class="grid-4"><label>Name<input name="name" required></label>' +
+      '<label>Email<input type="email" name="email" required></label>' +
+      '<label>Role<select name="role">' + Object.keys(L.ROLES).map(function (k) { return opt(k, L.ROLES[k].label, k === 'student'); }).join('') + '</select></label>' +
+      '<label>Year / group<input name="year" placeholder="Students, e.g. Year 3"></label></div><div class="actions"><button class="btn" type="submit">Create account</button></div></form></section>';
+    return html;
+  }
+
+  /* ---------- extra actions & forms ---------- */
+
+  Object.assign(ACTIONS, {
+    'demo-login': function (el) { document.getElementById('login-name').value = el.dataset.login; document.querySelector('#login-form [name=pass]').value = S.demoPassword; },
+    'sign-out': function () { S.signOut(); route = '#/'; lastViewed = null; render(); },
+    'compose': function (el) { composeForm(el.dataset.to, el.dataset.subject); },
+    'reschedule': function (el) { rescheduleForm(el.dataset.id); },
+    'invite': function (el) { inviteForm(el.dataset.id); },
+    'attend': function (el) {
+      const a = S.appointment(el.dataset.id), p = S.patient(a.patientId);
+      a.status = el.dataset.status;
+      S.audit('Marked ' + ({ attended: 'attended', missed: 'did not attend', cancelled: 'cancelled', scheduled: 'not yet held' }[a.status]), p.id);
+      if (a.status === 'missed') {
+        S.send(supervisorsFor(p).filter(function (x) { return x !== me().id; }), { kind: 'attendance', patientId: p.id, link: '#/session/' + a.id,
+          subject: 'Did not attend – ' + pseud(p) + ', ' + L.formatDate(a.date, { day: 'numeric', month: 'short' }), body: 'Marked by ' + me().name + '.' });
+      }
+      render();
+    },
+    'invite-reply': function (el) {
+      const a = S.appointment(el.dataset.appt), p = S.patient(a.patientId);
+      const o = a.observers.find(function (x) { return x.userId === me().id; });
+      o.status = el.dataset.answer;
+      S.send(o.by, { kind: 'invite', patientId: p.id, link: '#/session/' + a.id,
+        subject: me().name + ' ' + o.status + ' your invitation – ' + pseud(p), body: o.role + ' · ' + L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(a.time) });
+      S.audit((o.status === 'accepted' ? 'Accepted' : 'Declined') + ' invitation to ' + o.role.toLowerCase(), p.id);
+      toast(o.status === 'accepted' ? 'Accepted – the session is on your schedule' : 'Declined');
+      render();
+    },
+    'auto-cover': function (el) {
+      const l = S.state.leave.find(function (x) { return x.id === el.dataset.id; });
+      const n = autoCover(l);
+      toast(n ? 'Cover assigned for ' + n + ' session' + (n === 1 ? '' : 's') : 'No one is free for the remaining sessions');
+      render();
+    },
+    'reset-pw': function (el) {
+      const x = S.user(el.dataset.id), pass = tempPassword();
+      S.setPassword(x.id, pass, true).then(function () {
+        S.audit('Reset password', null, x.name);
+        lastInvite = { name: x.name, email: x.email || x.name, pass: pass };
+        render();
+      });
+    }
+  });
+
+  Object.assign(SUBMITS, {
+    'login-form': function (form) {
+      const err = document.getElementById('login-error');
+      S.signIn(form.querySelector('[name=login]').value, form.querySelector('[name=pass]').value).then(function () {
+        lastActivity = Date.now(); lastViewed = null; route = '#/'; pendingNotice = true; render();
+      }, function (e) { err.textContent = e.message; err.hidden = false; });
+    },
+    'newpw-form': function (form) {
+      const a = form.querySelector('[name=p1]').value, b = form.querySelector('[name=p2]').value;
+      const err = document.getElementById('newpw-error');
+      if (a !== b) { err.textContent = 'The passwords don\'t match.'; err.hidden = false; return; }
+      S.setPassword(me().id, a, false).then(function () { S.audit('Set own password'); pendingNotice = true; render(); });
+    },
+    'user-form': function (form) {
+      const v = function (n) { return form.querySelector('[name=' + n + ']').value.trim(); };
+      if (S.state.users.some(function (x) { return (x.email || '').toLowerCase() === v('email').toLowerCase(); })) { toast('Someone already uses that email.'); return; }
+      const x = S.upsert('users', { name: v('name'), email: v('email'), role: v('role'), year: v('year') });
+      const pass = tempPassword();
+      S.setPassword(x.id, pass, true).then(function () {
+        S.audit('Created account', null, x.name);
+        lastInvite = { name: x.name, email: x.email, pass: pass };
+        render();
+      });
+    },
+    'leave-form': function (form) {
+      const u = me();
+      const v = function (n) { return form.querySelector('[name=' + n + ']').value.trim(); };
+      if (v('to') < v('from')) { toast('The end date is before the start date.'); return; }
+      const appts = L.sessionsFor(u.id, S.state.appointments, S.byId(S.state.patients), v('from'), v('to'));
+      appts.forEach(function (a) { a.coverNeeded = true; });
+      const l = S.upsert('leave', { userId: u.id, from: v('from'), to: v('to'), reason: v('reason'), note: v('note'), status: 'requested', createdAt: new Date().toISOString(), apptIds: appts.map(function (a) { return a.id; }) });
+      S.audit('Requested leave', null, v('from') + ' to ' + v('to'));
+      const sups = S.state.users.filter(function (x) { return x.role === 'supervisor'; }).map(function (x) { return x.id; });
+      S.send(sups, { kind: 'leave', link: '#/leave', subject: 'Leave request – ' + u.name + ', ' + L.formatDate(l.from, { weekday: 'short', day: 'numeric', month: 'short' }) + (l.to !== l.from ? ' to ' + L.formatDate(l.to, { weekday: 'short', day: 'numeric', month: 'short' }) : ''),
+        body: l.reason + (l.note ? ' – ' + l.note : '') + '\n' + appts.length + ' session' + (appts.length === 1 ? '' : 's') + ' need cover.' });
+      if (S.state.settings.autoCover && appts.length) {
+        const n = autoCover(l);
+        S.send(sups, { kind: 'cover', link: '#/leave', subject: 'Cover assigned automatically – ' + u.name, body: n + ' of ' + appts.length + ' sessions covered.' });
+      }
+      toast(appts.length ? 'Sent to your supervisor – ' + appts.length + ' session' + (appts.length === 1 ? '' : 's') + ' flagged for cover' : 'Leave recorded');
+      render();
+    },
+    'autocover-form': function (form) {
+      S.state.settings.autoCover = form.querySelector('[name=autoCover]').checked;
+      S.save(); toast('Saved');
+    }
+  });
+
+  document.addEventListener('change', function (ev) {
+    const t = ev.target;
+    if (t.classList.contains('cover-select')) {
+      const l = S.state.leave.find(function (x) { return x.id === t.dataset.leave; });
+      setCover(S.appointment(t.dataset.appt), t.value, l);
+      toast(t.value ? 'Cover assigned to ' + userName(t.value) : 'Cover removed');
+      render();
+    }
+    if (t.closest('#leave-form') && (t.name === 'from' || t.name === 'to')) {
+      const f = t.closest('#leave-form');
+      document.getElementById('leave-preview').innerHTML = leavePreview(f.querySelector('[name=from]').value, f.querySelector('[name=to]').value);
+    }
+  });
+
   /* ---------- router ---------- */
 
   function render() {
@@ -1408,6 +1913,15 @@
       if (f) f.focus();
       return;
     }
+    const cur = S.currentUser();
+    if (!cur || cur.mustChange) {
+      document.body.classList.add('locked');
+      bar.innerHTML = '';
+      view.innerHTML = cur ? newPasswordScreen(cur) : loginScreen();
+      const f = view.querySelector('input');
+      if (f) f.focus();
+      return;
+    }
     document.body.classList.remove('locked');
     const u = me();
     const r = parseHash();
@@ -1417,8 +1931,11 @@
     bar.innerHTML = rolebar();
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.hidden = NAV_ROLES[a.dataset.nav].indexOf(u.role) < 0;
-      if (a.dataset.nav === 'cases') a.lastChild.textContent = u.role === 'student' ? ' My cases' : ' Cases';
+      if (a.dataset.nav === 'cases') a.lastChild.textContent = u.role === 'student' || u.role === 'therapist' ? ' My cases' : ' Cases';
     });
+    const unread = S.unread(u.id);
+    const badge = document.querySelector('.nav-count');
+    badge.textContent = unread; badge.hidden = !unread;
     let html;
     if (NAV_ROLES[section] && NAV_ROLES[section].indexOf(u.role) < 0) html = noAccess();
     else if (section === 'diagnostics') html = viewDiagnostics(r.params);
@@ -1427,6 +1944,8 @@
     else if (section === 'cases') html = viewCases(r.params);
     else if (section === 'doc') html = viewDoc(r.parts[1]);
     else if (section === 'privacy') html = viewPrivacy();
+    else if (section === 'inbox') html = viewInbox(r.parts[1]);
+    else if (section === 'leave') html = viewLeave();
     else if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
     else if (section === 'patients') html = viewPatients(r.params);
@@ -1441,6 +1960,7 @@
       a.classList.toggle('active', a.dataset.nav === navKey);
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
+    if (pendingNotice) { pendingNotice = false; showNotices(); }
   }
 
   /* ---------- events ---------- */
@@ -1522,14 +2042,6 @@
       S.setPacked(t.dataset.date, t.dataset.id, t.checked);
       document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
     }
-    if (t.id === 'user-switch') {
-      S.state.settings.currentUserId = t.value;
-      S.audit('Switched user');
-      lastViewed = null;
-      route = '#/';
-      render();
-      return;
-    }
     if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
     if (t.closest('#patient-filters')) {
       const f = t.closest('#patient-filters');
@@ -1582,7 +2094,7 @@
       });
       delete log.reportText; // regenerate from the updated log
       S.upsert('logs', log);
-      a.status = 'completed';
+      a.status = 'attended';
       S.save();
       toast('Session saved');
       go('#/session/' + a.id + '?tab=report');

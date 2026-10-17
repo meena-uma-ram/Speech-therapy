@@ -8,14 +8,17 @@
   const KEY = 'speech-therapy-planner-v1';
   const ENC_KEY = KEY + '-encrypted';
   const AUDIT_MAX = 2000;
+  const SESSION_KEY = 'speech-therapy-planner-session';
+  const PW_ITERATIONS = 100000;
+  const DEMO_PW = { pwSalt: 'dGhlcmFweS1wbGFubmVyLWRlbW8tc2FsdA==', pwHash: 'dDoovX6na8XDoauJ0apDiDsLUMsVSr79pyCCuUXcDK4=' }; // "demo1234"
 
   const EMPTY = {
     settings: {
       therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable',
-      currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1
+      currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1, autoCover: false
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -38,7 +41,17 @@
   /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
-    ['users', 'assessments', 'referrals', 'documents', 'audit'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    s.appointments.forEach(function (a) {
+      if (a.status === 'completed') a.status = 'attended';
+      if (!a.reschedules) a.reschedules = [];
+      if (!a.observers) a.observers = [];
+    });
+    s.users.forEach(function (u) { if (!u.pwHash) u.mustChange = true; });
+    // Who is signed in belongs to this browser tab, not to the saved data.
+    let session = '';
+    try { session = sessionStorage.getItem(SESSION_KEY) || ''; } catch (e) { /* storage blocked */ }
+    s.settings.currentUserId = s.users.some(function (u) { return u.id === session; }) ? session : '';
     const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
     if (!s.users.length) {
       s.users.push({ id: 'u_me', name: s.settings.therapistName || 'Me', role: 'supervisor' });
@@ -52,6 +65,7 @@
       if (!p.status) p.status = 'active';
       if (!p.assignedTo && p.status === 'active') p.assignedTo = me;
       if (!p.consent) p.consent = { therapy: true, students: false, shareReports: false, teaching: false, recordedOn: '', givenBy: '' };
+      if (p.sessionsAllotted == null) p.sessionsAllotted = p.status === 'active' ? 12 : 0;
     });
     return s;
   }
@@ -133,6 +147,58 @@
     });
   }
 
+  /* ---------- sign-in ---------- */
+
+  function hashPassword(pass, saltB64) {
+    const salt = saltB64 ? unb64(saltB64) : crypto.getRandomValues(new Uint8Array(16));
+    return crypto.subtle.importKey('raw', enc.encode(pass), 'PBKDF2', false, ['deriveBits']).then(function (k) {
+      return crypto.subtle.deriveBits({ name: 'PBKDF2', salt: salt, iterations: PW_ITERATIONS, hash: 'SHA-256' }, k, 256);
+    }).then(function (bits) { return { pwSalt: b64(salt), pwHash: b64(new Uint8Array(bits)) }; });
+  }
+
+  function findUser(login) {
+    const q = (login || '').trim().toLowerCase();
+    return state.users.find(function (u) { return (u.email || '').toLowerCase() === q || u.name.toLowerCase() === q; });
+  }
+
+  function setSession(id) {
+    state.settings.currentUserId = id;
+    try { if (id) sessionStorage.setItem(SESSION_KEY, id); else sessionStorage.removeItem(SESSION_KEY); } catch (e) { /* storage blocked */ }
+  }
+
+  function signIn(login, pass) {
+    const u = findUser(login);
+    const fail = function () { audit('Failed sign-in', null, login); throw new Error('Email or password not recognised.'); };
+    if (!u) return Promise.resolve().then(fail);
+    if (!u.pwHash) { setSession(u.id); audit('Signed in (first time)'); return Promise.resolve(u); }
+    return hashPassword(pass, u.pwSalt).then(function (h) {
+      if (h.pwHash !== u.pwHash) fail();
+      setSession(u.id);
+      audit('Signed in');
+      return u;
+    });
+  }
+
+  function signOut() { audit('Signed out'); setSession(''); save(); }
+
+  function setPassword(userId, pass, mustChange) {
+    return hashPassword(pass).then(function (h) {
+      const u = state.users.find(function (x) { return x.id === userId; });
+      u.pwSalt = h.pwSalt; u.pwHash = h.pwHash; u.mustChange = !!mustChange;
+      save();
+    });
+  }
+
+  /* ---------- inbox ---------- */
+
+  function send(to, msg) {
+    const from = currentUser();
+    (Array.isArray(to) ? to : [to]).filter(Boolean).forEach(function (uid) {
+      state.messages.push(Object.assign({ id: L.uid('msg'), to: uid, from: from ? from.id : '', at: new Date().toISOString(), read: false, kind: 'note', body: '', link: '' }, msg));
+    });
+    save();
+  }
+
   /* ---------- records ---------- */
 
   function byId(list) {
@@ -153,7 +219,8 @@
   function remove(collection, id) {
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
-      // Erasure covers every record linked to the person.
+      // Erasure covers every record linked to the person, including messages about them.
+      state.messages = state.messages.filter(function (m) { return m.patientId !== id; });
       ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
         state[k] = state[k].filter(function (x) { return x.patientId !== id; });
       });
@@ -170,7 +237,7 @@
   }
 
   function currentUser() {
-    return state.users.find(function (u) { return u.id === state.settings.currentUserId; }) || state.users[0] || null;
+    return state.users.find(function (u) { return u.id === state.settings.currentUserId; }) || null;
   }
 
   function audit(action, patientId, detail) {
@@ -200,15 +267,14 @@
     const t = L.todayISO();
     const s = blank();
     s.seeded = true;
-    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Dr. Priya Nair', currentUserId: 'u_sup' });
+    s.settings = Object.assign({}, EMPTY.settings, { therapistName: 'Dr. Priya Nair', currentUserId: '' });
 
-    s.users.push(
-      { id: 'u_sup', name: 'Dr. Priya Nair', role: 'supervisor' },
-      { id: 'u_ther', name: 'Sam Okafor', role: 'therapist' },
-      { id: 'u_diag', name: 'Dr. Elena Rossi', role: 'diagnostician' },
-      { id: 'u_stu1', name: 'Aisha Khan', role: 'student', year: 'Year 3' },
-      { id: 'u_stu2', name: 'Tom Becker', role: 'student', year: 'Year 4' }
-    );
+    const person = function (id, name, role, email, extra) { s.users.push(Object.assign({ id: id, name: name, role: role, email: email }, DEMO_PW, extra)); };
+    person('u_sup', 'Dr. Priya Nair', 'supervisor', 'priya@clinic.example');
+    person('u_ther', 'Sam Okafor', 'therapist', 'sam@clinic.example');
+    person('u_diag', 'Dr. Elena Rossi', 'diagnostician', 'elena@clinic.example');
+    person('u_stu1', 'Aisha Khan', 'student', 'aisha@uni.example', { year: 'Year 3' });
+    person('u_stu2', 'Tom Becker', 'student', 'tom@uni.example', { year: 'Year 4' });
 
     const mat = function (id, name, category, location) { s.materials.push({ id: id, name: name, category: category, location: location }); };
     mat('m_artic', 'Articulation cards – /s/ & /r/', 'Cards', 'Shelf A, bin 2');
@@ -231,7 +297,7 @@
       s.patients.push(Object.assign({
         id: id, name: name, dob: L.addDays(t, -365 * years), ageGroup: ageGroup, condition: condition, diagnosis: diagnosis,
         guardian: guardian, contact: contact, notes: '', caseCode: L.caseCode(new Date().getFullYear(), s.settings.nextCaseNo++),
-        status: 'active', assessedBy: 'u_diag', referredAt: L.addDays(t, -63), consent: Object.assign({}, consentAll)
+        status: 'active', assessedBy: 'u_diag', referredAt: L.addDays(t, -63), consent: Object.assign({}, consentAll), sessionsAllotted: 12
       }, extra));
     };
     pat('p_ava', 'Ava Thompson', 6, 'Child', 'Speech sound disorder', 'Errors on /s/ and /r/', 'Ms. Thompson', 'thompson.family@example.com', { assignedTo: 'u_stu1', supervisorId: 'u_sup' });
@@ -243,12 +309,12 @@
     pat('p_noah', 'Noah Williams', 7, 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200', { assignedTo: 'u_ther' });
     // Referred by diagnostics, waiting to be allotted.
     pat('p_grace', 'Grace Lee', 72, 'Adult', 'Dysphagia', 'Oropharyngeal dysphagia after stroke; coughing on thin fluids', 'Daughter: Ms. Lee', 'lee.family@example.com',
-      { status: 'referred', referredAt: L.addDays(t, -2), consent: Object.assign({}, consentAll, { givenBy: 'Patient', recordedOn: L.addDays(t, -3) }) });
+      { status: 'referred', sessionsAllotted: 0, referredAt: L.addDays(t, -2), consent: Object.assign({}, consentAll, { givenBy: 'Patient', recordedOn: L.addDays(t, -3) }) });
     pat('p_ethan', 'Ethan Patel', 5, 'Child', 'DLD', 'Receptive and expressive language delay', 'Mrs. Patel', 'patel.home@example.com',
-      { status: 'referred', referredAt: L.addDays(t, -1), consent: Object.assign({}, consentAll, { students: false, recordedOn: L.addDays(t, -2) }) });
+      { status: 'referred', sessionsAllotted: 0, referredAt: L.addDays(t, -1), consent: Object.assign({}, consentAll, { students: false, recordedOn: L.addDays(t, -2) }) });
     // On the diagnostics waiting list.
     pat('p_oliver', 'Oliver Smith', 6, 'Child', 'Stammering', 'Query stammering – parent concern', 'Mr. Smith', 'smith.family@example.com',
-      { status: 'waiting', assessedBy: null, referredAt: null, consent: { therapy: true, students: true, shareReports: false, teaching: false, recordedOn: t, givenBy: 'Parent' } });
+      { status: 'waiting', sessionsAllotted: 0, assessedBy: null, referredAt: null, consent: { therapy: true, students: true, shareReports: false, teaching: false, recordedOn: t, givenBy: 'Parent' } });
 
     const assess = function (id, pid, days, fields, status) {
       s.assessments.push(Object.assign({ id: id, patientId: pid, assessorId: 'u_diag', date: L.addDays(t, -days), status: status || 'completed' }, fields));
@@ -318,7 +384,7 @@
       'Uses 3–4 automatic phrases', 'Supports independence at home', 10, 80, ['m_commbook']);
 
     const appt = function (id, patientId, date, time, goalIds, room, duration) {
-      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: duration || 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: 'scheduled', notes: '' });
+      s.appointments.push({ id: id, patientId: patientId, date: date, time: time, duration: duration || 30, room: room || 'Room 1', goalIds: goalIds, extraMaterialIds: [], status: 'scheduled', notes: '', reschedules: [], observers: [] });
     };
     appt('a_1', 'p_ava', t, '08:30', ['g_ava1', 'g_ava2']);
     appt('a_2', 'p_isla', t, '09:15', ['g_isla1', 'g_isla2'], 'Room 1', 45);
@@ -354,9 +420,20 @@
             progress: acc > prev ? 'improving' : acc < prev ? 'regressing' : 'steady', note: ''
           };
         });
-        s.logs.push({ id: 'l_' + pid + i, appointmentId: null, patientId: pid, date: date, entries: entries, notes: 'Good engagement.', homework: '' });
+        const today = s.appointments.find(function (a) { return a.patientId === pid && a.date === t; });
+        const aid = 'a_' + pid + '_' + i;
+        s.appointments.push({ id: aid, patientId: pid, date: date, time: today.time, duration: today.duration, room: today.room,
+          goalIds: byPatient[pid].slice(), extraMaterialIds: [], status: 'attended', notes: '', reschedules: [], observers: [] });
+        s.logs.push({ id: 'l_' + pid + i, appointmentId: aid, patientId: pid, date: date, entries: entries, notes: 'Good engagement.', homework: '' });
       }
     });
+    s.patients.find(function (x) { return x.id === 'p_rob'; }).sessionsAllotted = 10;
+    // A missed session, and a session the family asked to move.
+    s.appointments.push({ id: 'a_leo_dna', patientId: 'p_leo', date: L.addDays(t, -11), time: '10:30', duration: 30, room: 'Room 2', goalIds: ['g_leo1'],
+      extraMaterialIds: [], status: 'missed', notes: 'Did not attend; no call.', reschedules: [], observers: [] });
+    const moved = s.appointments.find(function (a) { return a.id === 'a_p_maya_6'; });
+    moved.reschedules.push({ at: new Date(Date.now() - 9 * 864e5).toISOString(), userId: 'u_stu2', by: 'Patient / family', reason: 'School trip',
+      fromDate: L.addDays(moved.date, -1), fromTime: '11:30', toDate: moved.date, toTime: moved.time });
 
     // Student coursework at different stages.
     const doc = function (id, type, pid, author, status, days, extra) {
@@ -382,7 +459,27 @@
     doc('d_leo_lp', 'lesson-plan', 'p_leo', 'u_stu2', 'draft', 0, { appointmentId: 'a_3', fields: L.prefillDoc('lesson-plan', { goals: s.goals.filter(function (g) { return g.patientId === 'p_leo'; }) }) });
     doc('d_maya_sr', 'session-report', 'p_maya', 'u_stu2', 'submitted', 2, { fields: { subjective: 'Maya arrived chatty and settled quickly.', objective: '• Easy onset in structured sentences: 16/20 (80%), minimal cues', assessment: 'Improving; generalising to picture description.', plan: 'Move to short monologues next week.' } });
 
-    s.audit.push({ at: new Date().toISOString(), userId: 'u_sup', user: 'Dr. Priya Nair', action: 'Loaded demo data', patientId: null, target: '', detail: '' });
+    const code = function (pid) { const p = s.patients.find(function (x) { return x.id === pid; }); return p.caseCode + ' (' + L.initials(p.name) + ')'; };
+    const msg = function (to, from, days, subject, body, link, kind, extra) {
+      s.messages.push(Object.assign({ id: 'msg_' + s.messages.length, to: to, from: from, at: new Date(Date.now() - days * 864e5).toISOString(),
+        subject: subject, body: body, link: link, kind: kind, read: false }, extra));
+    };
+    msg('u_stu1', 'u_sup', 4, 'Pre-assessment returned – ' + code('p_isla'), 'Please add a word-level baseline for /t/ /d/ and say which cueing you used.', '#/doc/d_isla_pre', 'review', { patientId: 'p_isla' });
+    msg('u_sup', 'u_stu1', 1, 'Lesson plan submitted – ' + code('p_ava'), 'Ready for your review.', '#/doc/d_ava_lp', 'submitted', { patientId: 'p_ava' });
+    msg('u_sup', 'u_stu2', 2, 'Session report submitted – ' + code('p_maya'), 'Ready for your review.', '#/doc/d_maya_sr', 'submitted', { patientId: 'p_maya' });
+    msg('u_sup', 'u_diag', 2, 'New referral (Urgent) – ' + code('p_grace'), 'Aspiration risk – please see this week.', '#/cases?tab=allot', 'referral', { patientId: 'p_grace' });
+    msg('u_sup', 'u_stu2', 9, 'Session rescheduled by Patient / family – ' + code('p_maya'), 'Reason: School trip. Moved by one day.', '#/session/a_p_maya_6', 'reschedule', { patientId: 'p_maya' });
+
+    // Tom is away tomorrow: his session needs cover.
+    s.leave.push({ id: 'lv_tom', userId: 'u_stu2', from: L.addDays(t, 1), to: L.addDays(t, 1), reason: 'University exam', note: '', status: 'requested', createdAt: new Date().toISOString(), apptIds: ['a_8'] });
+    s.appointments.find(function (a) { return a.id === 'a_8'; }).coverNeeded = true;
+    msg('u_sup', 'u_stu2', 0, 'Leave request – Tom Becker, ' + L.formatDate(L.addDays(t, 1), { weekday: 'short', day: 'numeric', month: 'short' }), 'University exam. 1 session needs cover.', '#/leave', 'leave');
+
+    // Tom has invited Sam to observe today's session.
+    s.appointments.find(function (a) { return a.id === 'a_3'; }).observers.push({ userId: 'u_ther', role: 'Observe', status: 'invited', by: 'u_stu2' });
+    msg('u_ther', 'u_stu2', 0, 'Invitation to observe – ' + code('p_leo') + ', today 10:30', 'Would you observe my session? I would value feedback on modelling.', '#/session/a_3', 'invite', { apptId: 'a_3', patientId: 'p_leo' });
+
+    s.audit.push({ at: new Date().toISOString(), userId: '', user: 'System', action: 'Loaded demo data', patientId: null, target: '', detail: '' });
     return s;
   }
 
@@ -401,6 +498,13 @@
     remove: remove,
     audit: audit,
     currentUser: currentUser,
+    signIn: signIn,
+    signOut: signOut,
+    setPassword: setPassword,
+    send: send,
+    inbox: function (uid) { return state.messages.filter(function (m) { return m.to === uid; }).sort(function (a, b) { return b.at.localeCompare(a.at); }); },
+    unread: function (uid) { return state.messages.filter(function (m) { return m.to === uid && !m.read; }).length; },
+    appointmentsFor: function (pid) { return state.appointments.filter(function (a) { return a.patientId === pid; }); },
     patientRecord: patientRecord,
     user: function (id) { return state.users.find(function (u) { return u.id === id; }); },
     patient: function (id) { return state.patients.find(function (p) { return p.id === id; }); },
@@ -439,6 +543,12 @@
       state.users = users; state.settings.currentUserId = me;
       save();
     },
-    resetDemo: function () { state = seed(); save(); }
+    demoPassword: 'demo1234',
+    resetDemo: function () {
+      const cur = state.settings.currentUserId;
+      state = seed();
+      if (state.users.some(function (u) { return u.id === cur; })) state.settings.currentUserId = cur;
+      save();
+    }
   };
 })();

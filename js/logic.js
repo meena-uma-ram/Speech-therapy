@@ -233,12 +233,17 @@
   function caseCode(year, n) { return 'SLT-' + String(year).slice(-2) + '-' + String(n).padStart(3, '0'); }
 
   /* Who may open a patient's record (need-to-know). */
-  function canSeePatient(user, p) {
+  /*
+   * Who may open a patient's record (need-to-know). Supervisors see everything.
+   * Clinicians see their own patients, plus any in `grants` (sessions they cover or observe).
+   */
+  function canSeePatient(user, p, grants) {
     if (!user || !p) return false;
+    if (grants && grants[p.id]) return true;
     switch (user.role) {
       case 'supervisor': return true;
-      case 'diagnostician': return p.status === 'waiting' || p.status === 'referred' || p.assessedBy === user.id;
-      case 'therapist': return p.assignedTo === user.id || p.status === 'referred';
+      case 'diagnostician': return p.status === 'waiting' || p.assessedBy === user.id;
+      case 'therapist':
       case 'student': return p.assignedTo === user.id;
       default: return false;
     }
@@ -345,6 +350,70 @@
     return out;
   }
 
+  /* ---------- sessions, attendance, leave and cover ---------- */
+
+  const RESCHEDULED_BY = ['Patient / family', 'Clinician', 'Supervisor', 'Other'];
+
+  /* Session counts for one patient's appointments against the number allotted. */
+  function sessionCounts(appts, allotted, today) {
+    const t = today || todayISO();
+    const c = { allotted: Number(allotted) || 0, attended: 0, missed: 0, cancelled: 0, upcoming: 0, rescheduled: 0 };
+    appts.forEach(function (a) {
+      c.rescheduled += (a.reschedules || []).length;
+      if (a.status === 'attended' || a.status === 'completed') c.attended++;
+      else if (a.status === 'missed') c.missed++;
+      else if (a.status === 'cancelled') c.cancelled++;
+      else if (a.date >= t) c.upcoming++;
+    });
+    c.remaining = Math.max(0, c.allotted - c.attended);
+    c.attendanceRate = c.attended + c.missed ? Math.round(c.attended / (c.attended + c.missed) * 100) : null;
+    return c;
+  }
+
+  function overlaps(a, b) {
+    if (a.date !== b.date) return false;
+    const s1 = toMinutes(a.time), e1 = s1 + (Number(a.duration) || 30);
+    const s2 = toMinutes(b.time), e2 = s2 + (Number(b.duration) || 30);
+    return s1 < e2 && s2 < e1;
+  }
+
+  function onLeave(userId, date, leaves) {
+    return leaves.some(function (l) { return l.userId === userId && l.from <= date && date <= l.to; });
+  }
+
+  /* Who is actually seeing the patient in this session. */
+  function clinicianFor(appt, patient) { return appt.coverBy || (patient && patient.assignedTo) || ''; }
+
+  /* A user's sessions (own patients not covered by someone else, plus sessions they cover) in a date range. */
+  function sessionsFor(userId, appts, patientsById, from, to) {
+    return appts.filter(function (a) {
+      if (a.status === 'cancelled' || (from && a.date < from) || (to && a.date > to)) return false;
+      return clinicianFor(a, patientsById[a.patientId]) === userId;
+    });
+  }
+
+  /*
+   * Pick a cover clinician for one session: not on leave, free at that time, allowed to see this patient
+   * (students only with consent), preferring the fewest sessions that day, then the lightest caseload.
+   */
+  function coverCandidates(appt, ctx) {
+    const p = ctx.patientsById[appt.patientId];
+    const busy = function (u) {
+      return ctx.appts.some(function (b) {
+        return b.id !== appt.id && b.status !== 'cancelled' && overlaps(appt, b) && clinicianFor(b, ctx.patientsById[b.patientId]) === u.id;
+      });
+    };
+    const ranked = ctx.users.filter(function (u) {
+      if (u.id === ctx.awayId || (u.role !== 'therapist' && u.role !== 'student')) return false;
+      if (u.role === 'student' && !(p.consent && p.consent.students)) return false;
+      return !onLeave(u.id, appt.date, ctx.leaves) && !busy(u);
+    }).map(function (u) {
+      return { user: u, day: sessionsFor(u.id, ctx.appts, ctx.patientsById, appt.date, appt.date).length, load: sessionsFor(u.id, ctx.appts, ctx.patientsById).length };
+    }).sort(function (a, b) { return a.day - b.day || a.load - b.load || (a.user.role === 'therapist' ? -1 : 1); });
+    return ranked.map(function (r) { return r.user; });
+  }
+  function pickCover(appt, ctx) { return coverCandidates(appt, ctx)[0] || null; }
+
   const PROGRESS_LABELS = {
     improving: 'Improving',
     steady: 'Steady',
@@ -408,7 +477,9 @@
     CONDITIONS: CONDITIONS, conditionFamily: conditionFamily, ageGroup: ageGroup, caseLabel: caseLabel,
     ROLES: ROLES, initials: initials, caseCode: caseCode, canSeePatient: canSeePatient, canAllot: canAllot,
     addYears: addYears, isPastRetention: isPastRetention, DOC_TYPES: DOC_TYPES, DOC_FIELDS: DOC_FIELDS, DOC_STATUS: DOC_STATUS,
-    prefillDoc: prefillDoc, caseProgress: caseProgress
+    prefillDoc: prefillDoc, caseProgress: caseProgress,
+    RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
+    clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

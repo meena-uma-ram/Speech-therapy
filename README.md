@@ -17,12 +17,32 @@ Complete & refer to therapy     a therapist takes it on                  Session
 
 | Role | Sees |
 |---|---|
-| **Diagnostician** | Diagnostics (waiting list, assessments, referrals), and only those patients |
-| **Speech therapist** | Referrals to take on, their own cases, schedule, goals, materials, reports |
-| **Clinical supervisor** | Everything: allotment, review queue, all cases, people, retention and erasure |
-| **Student clinician** | Only their allotted cases: My cases, schedule, coursework, goals |
+| **Clinical supervisor** | All diagnostics and all therapy patients: allotment, review queue, leave & cover, reschedules, people, retention and erasure |
+| **Diagnostician** | The waiting list and the patients they assessed |
+| **Speech therapist** | Only their own patients, plus sessions they cover or were invited to observe |
+| **Student clinician** | Only their allotted cases and coursework, plus sessions they cover or observe |
 
-A slim bar at the top shows the department, the quick links for your role with counts (e.g. *To allot 2 · To review 3 · Allotted 6*, or *Allotted cases 3 · Changes requested 1* for a student), a "Hide names" switch and the person switcher.
+### Signing in
+
+Everyone signs in with their **email and own password** (stored only as a salted PBKDF2 hash). A supervisor creates accounts under **Privacy → People & sign-in**. The app shows a temporary password once, and the person must choose their own at first sign-in. Supervisors can reset forgotten passwords. People are signed out after the idle time set in Privacy. Demo accounts use the password `demo1234`.
+
+### Inbox
+
+Review comments ("Lesson plan returned with comments"), approvals, new allotments, referrals, leave requests, cover assignments, reschedules, missed sessions and invitations arrive in the **Inbox**. Unread messages **pop up when you sign in**, and the menu shows the unread count. You can also write to a colleague. Messages refer to patients by case code and initials.
+
+### Sessions, attendance and rescheduling
+
+Each patient has **sessions allotted** (set when the case is allotted). The patient file, cases table and session page show *attended of allotted*, *did not attend*, *cancelled*, *rescheduled* and *booked*. Mark attendance on the session page. **Reschedule** asks for the new time, **who asked for it** (patient/family, clinician, supervisor, other) and the reason. The supervisor is told each time, and **Cases → Reschedules** lists them all with totals by who asked for the change.
+
+### Invite to observe
+
+From a session, **Invite to observe** (or co-treat or supervise) sends an invitation. When it is accepted, the session appears on that person's timetable and they can open the record for it.
+
+### Leave & cover
+
+A clinician enters their leave dates. The app lists the sessions that will need cover, highlights them on the timetable and sends them to the supervisor. On **Leave**, the supervisor picks cover for each session from the clinicians who are free (not on leave, no clash, students only with patient consent) or clicks **Auto-assign cover**. Supervisors can also switch on **automatic cover**, which assigns it as soon as leave is requested. Cover clinicians and the person on leave get a message.
+
+The bar at the top shows your quick links with counts, e.g. *To allot · To review · Needs cover · Rescheduled* for a supervisor, *My cases · Covering · Invitations* for a therapist, or *Allotted cases · Changes requested* for a student.
 
 Documents are **pre-filled** from what the app already knows. The pre-assessment uses the diagnostic assessment, the lesson plan uses the session's goals and materials, the session report uses the session log (SOAP), and the conclusion report uses baseline → final accuracy for each goal. They identify the patient only by case code and initials.
 
@@ -39,7 +59,7 @@ Documents are **pre-filled** from what the app already knows. The pre-assessment
 | Right to erasure | Erasing a patient removes all linked assessments, sessions, notes and coursework; the log keeps only the case code |
 | Storage limitation | Retention period for discharged records; records past it are listed for erasure |
 
-**Limits, stated plainly:** this is a single-device app. The person switcher suits a shared clinic computer, but it **is not a secure login**. For staff and students on their own devices, it needs a server with individual accounts, role-based access enforced on the server, and encrypted transport and backups. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. Backups are not encrypted.
+**Limits, stated plainly:** this is a single-device app. Sign-in protects records on a shared clinic computer, but everyone's data is on that one device. For staff and students on their own devices, it needs a server with individual accounts, role-based access enforced on the server, and encrypted transport and backups. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. Backups are not encrypted.
 
 ## Daily work
 
@@ -58,7 +78,7 @@ No install or build step. Either:
 - open `index.html` directly in a browser, or
 - serve the folder: `npm start` (then visit http://localhost:8080), or any static host (GitHub Pages works).
 
-It loads demo data the first time: five people (supervisor, therapist, diagnostician, two students), patients at each stage, and coursework waiting for review. Use the person switcher at the top to see each role. **Privacy → Delete all patient data** gives you a clean start; set up your own people under **Privacy → People**.
+It loads demo data the first time: five people (supervisor, therapist, diagnostician, two students), patients at each stage, and coursework waiting for review. Sign in with any demo account (password `demo1234`) to see each role. **Privacy → Delete all patient data** gives you a clean start; set up your own people under **Privacy → People**.
 
 ## Where the data lives
 
