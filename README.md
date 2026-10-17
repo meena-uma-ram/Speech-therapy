@@ -159,7 +159,9 @@ No install or build step. Either:
 
 - open **`tjs.html`** (everything in one file; easy to email, put on a USB stick or desktop), or
 - open `index.html` directly in a browser, or
-- serve the folder: `npm start` (then visit http://localhost:8080), or any static host (GitHub Pages works).
+- serve the folder: `npm start` opens http://localhost:8080 in your browser (needs only Node.js 18+, nothing is downloaded; if 8080 is busy it uses 8081, 8082…), or any static host (GitHub Pages works).
+
+The old file name `therapy-planner.html` still works: it forwards to `tjs.html`.
 
 The first screen offers the **demo** (five people, patients at each stage, coursework waiting for review; password `demo1234`) or **your clinic** (empty; you create the first supervisor and a passphrase). See [Demo and clinic](#demo-and-clinic-two-separate-workspaces).
 
@@ -173,7 +175,7 @@ TJS is an installable web app (PWA). Once it is served from a website address (f
 
 It then opens in its own window with its own icon, and **works offline**. The offline worker caches only the app's own files. Patient data stays in the device's local storage, exactly as before. The single `tjs.html` file still works by double-clicking, but it can't be installed (browsers only install apps served from a web address).
 
-To try it locally: `npm start`, then open http://localhost:8080.
+To try it locally: `npm start` (it opens the browser for you).
 
 ## Where the data lives
 

@@ -4,7 +4,7 @@
   "private": true,
   "description": "Speech diagnostics and therapy planner: timetable, team calendar, SMART goals, sessions, reports. Runs in one browser, or for a whole clinic from one computer.",
   "scripts": {
-    "start": "npx --yes http-server -c-1 -p 8080 .",
+    "start": "node scripts/serve.js",
     "server": "node server/server.js",
     "server:demo": "node server/server.js --demo --data ./clinic-data-demo",
     "build": "node scripts/build-single.js",
