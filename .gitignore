@@ -1,0 +1,4 @@
+clinic-data/
+clinic-data-demo/
+node_modules/
+*.tmp

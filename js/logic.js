@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* Pure helpers with no DOM or storage access, so they can be unit-tested in Node. */
 (function (root) {
   'use strict';
@@ -414,6 +415,34 @@
   }
   function pickCover(appt, ctx) { return coverCandidates(appt, ctx)[0] || null; }
 
+  /* ---------- team calendar ---------- */
+
+  /* Monday of the week containing this date. */
+  function weekStart(iso) {
+    const d = new Date(iso + 'T00:00:00');
+    return addDays(iso, -((d.getDay() + 6) % 7));
+  }
+
+  /*
+   * Times when nobody in `busy` (intervals in minutes since midnight) is booked, within the working day,
+   * leaving out lunch, keeping only gaps of at least `minMinutes`.
+   */
+  function freeSlots(busy, dayStart, dayEnd, minMinutes, lunch) {
+    const start = toMinutes(dayStart || '08:00'), end = toMinutes(dayEnd || '17:00');
+    const blocks = busy.slice();
+    if (lunch && lunch.start && lunch.end) blocks.push({ start: toMinutes(lunch.start), end: toMinutes(lunch.end) });
+    blocks.sort(function (a, b) { return a.start - b.start; });
+    const out = [];
+    let t = start;
+    blocks.forEach(function (b) {
+      if (b.end <= t) return;
+      if (b.start > t) out.push({ start: t, end: Math.min(b.start, end) });
+      t = Math.max(t, b.end);
+    });
+    if (t < end) out.push({ start: t, end: end });
+    return out.filter(function (g) { return g.end - g.start >= (minMinutes || 30); });
+  }
+
   /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
 
   const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders'];
@@ -561,6 +590,7 @@
     RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
     clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
     PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles,
+    weekStart: weekStart, freeSlots: freeSlots,
     CHANNELS: CHANNELS, reminderChannel: reminderChannel, fillTemplate: fillTemplate, templateWarnings: templateWarnings, smsParts: smsParts, maskPhone: maskPhone
   };
 

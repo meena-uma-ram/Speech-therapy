@@ -2,10 +2,20 @@
   "name": "speech-therapy-planner",
   "version": "1.0.0",
   "private": true,
-  "description": "Daily schedule, SMART goals, materials, session logs, progress and client reports for speech therapists.",
+  "description": "Speech diagnostics and therapy planner: timetable, team calendar, SMART goals, sessions, reports. Runs in one browser, or for a whole clinic from one computer.",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
+    "server": "node server/server.js",
+    "server:demo": "node server/server.js --demo --data ./clinic-data-demo",
     "build": "node scripts/build-single.js",
-    "test": "node --test tests/logic.test.js"
+    "test": "node --test tests/logic.test.js tests/sync.test.js tests/server.test.js"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/meena-uma-ram/Speech-therapy"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

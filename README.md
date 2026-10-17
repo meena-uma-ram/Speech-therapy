@@ -40,7 +40,18 @@ Under **Privacy → Appointment reminders**, a supervisor chooses **SMS only**, 
 
 ### Where the data is stored
 
-Only in **this browser on this device** (local storage). Nothing is sent anywhere. **Privacy → Where your data is stored** shows each item, its size and whether it is encrypted. Each browser and device keeps its own separate copy.
+Two ways to run it:
+
+- **On one device** (the single file, or any website): only in **this browser on this device** (local storage). Nothing is sent anywhere. Each browser and device keeps its own separate copy.
+- **For the whole clinic, from one computer** (the clinic server): the records live on that computer's disk, for example the boss's computer or a small clinic PC. Everyone signs in from their own computer, at the clinic or at home over a VPN, and sees the same records, live. See [One clinic, many computers](#one-clinic-many-computers-the-clinic-server).
+
+**Privacy → Where your data is stored** shows which mode you are in, each item, its size and whether it is encrypted.
+
+### Team calendar
+
+**Team calendar** shows colleagues' schedules side by side. Pick the people (for example Priya, Sam and two students), or use *Everyone*, *Only me* or a role. **Day** view has a column per person with sessions, meetings, lunch and leave; **Week** view has a row per person. **Free for everyone shown** lists the times when all of them are free; tap one to book a meeting with them. Meetings appear in every attendee's column and inbox.
+
+Privacy is built in: you see details only for your own patients. Other sessions show as *Session* with the time and room, leave as *Away* (the reason only to the person and supervisors), and meetings you're not invited to as *Busy*. On the clinic server this filtering is done **on the server**, so the details never reach other people's browsers.
 
 ### Invite to observe
 
@@ -69,7 +80,39 @@ Documents are **pre-filled** from what the app already knows. The pre-assessment
 | Deletion test | One click creates a fake patient, backs it up, erases it, and checks every place data lives on the device |
 | Storage limitation | Retention period after therapy ends; records past it are listed, or **erased automatically** by a daily rule |
 
-**Limits, stated plainly:** this is a single-device app. Sign-in protects records on a shared clinic computer, but everyone's data is on that one device. For staff and students on their own devices, it needs a server with individual accounts, role-based access enforced on the server, and encrypted transport and backups. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. See [docs/SECURITY-PLAN.md](docs/SECURITY-PLAN.md) for the server design, risks and launch plan.
+**Limits, stated plainly:** on its own, this is a single-device app: sign-in protects records on a shared clinic computer, but everyone's data is on that one device. For staff and students on their own devices, run the **clinic server**: individual accounts checked by the server, role-based access enforced on the server, encryption at rest, and encrypted transport through a VPN or HTTPS. It is a single-clinic server, not yet independently security-reviewed. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. See [docs/SECURITY-PLAN.md](docs/SECURITY-PLAN.md) for the server design, risks and launch plan.
+
+## One clinic, many computers: the clinic server
+
+```
+ Boss's / clinic computer                         Everyone else (clinic, home, university)
+ ┌───────────────────────────────┐   VPN         ┌──────────────────────────┐
+ │ node server/server.js         │ ◄──────────►  │ Browser → sign in        │
+ │ clinic-data/  (encrypted)     │  (Tailscale / │ sees only their role's   │
+ │  • records  • patient keys    │   WireGuard)  │ records, live updates    │
+ │  • access.log                 │               │ keeps nothing on sign-out│
+ └───────────────────────────────┘               └──────────────────────────┘
+```
+
+- **One copy** of the records, on one computer's disk. No copies on laptops.
+- **Record-level sync:** each change (a goal, a session, a message) is sent on its own, so people working at the same time don't overwrite each other. Colleagues' changes appear **live**; the pill at the top shows *Live*, *Saving…* or *Offline*.
+- **Checked by the server:** each person receives only what their role may see, and the server refuses changes they may not make. Passwords are hashed on the server and never sent to browsers.
+- **Encrypted at rest** with `THERAPY_DATA_PASSPHRASE`; per-patient keys in a separate file; an access log of sign-ins, records opened and changes.
+- **No dependencies**: Node.js 18+ only.
+
+```
+THERAPY_DATA_PASSPHRASE="a long passphrase" node server/server.js --init-admin "Dr. Priya Nair" priya@clinic.in
+THERAPY_DATA_PASSPHRASE="a long passphrase" node server/server.js --host 127.0.0.1
+tailscale serve --bg 8080        # gives everyone https://clinic-pc.<tailnet>.ts.net
+```
+
+Try it with demo data: `npm run server:demo`, then open http://localhost:8080.
+
+**How others reach it:** your VPN idea is the right transport. We compared nine options (LAN only, port forwarding, classic WireGuard/OpenVPN, mesh VPNs, tunnels, cloud hosting, shared files, peer-to-peer, hosted databases) and recommend **a dedicated always-on clinic computer + a mesh VPN (Tailscale, or the fully open-source NetBird/Headscale)** now, moving the same server to an Indian cloud region later. Details and reasons: [docs/SYNC-OPTIONS.md](docs/SYNC-OPTIONS.md). Setup, start-on-boot, Tailscale and backups: [docs/SERVER-SETUP.md](docs/SERVER-SETUP.md).
+
+## Licence
+
+**GNU Affero General Public License v3.0 or later** ([LICENSE](LICENSE)), a strong copyleft licence. Anyone may use, study, change and share Therapy Planner, but changed versions must stay under the same licence with their source code, **including when they are only offered over a network** (section 13), so nobody can turn it into a closed product or a closed hosted service. The licence covers the software, not your clinic's records. What this means for clinics, contributors and anyone who hosts or sells it, plus the data protection law for this setup (DPDP Act 2023 and Rules 2025, IT Act, CERT-In, GDPR), is in [docs/LEGAL.md](docs/LEGAL.md).
 
 ## Daily work
 
@@ -104,16 +147,19 @@ To try it locally: `npm start`, then open http://localhost:8080.
 
 ## Where the data lives
 
-Everything is stored **only in the browser on this device** (`localStorage`, encrypted if you set a passphrase). It does not sync between devices, and clearing browser data deletes it. If the passphrase is lost, the data cannot be recovered.
+- **Single file / static website:** only in the browser on this device (`localStorage`, encrypted if you set a passphrase). It does not sync between devices, and clearing browser data deletes it. If the passphrase is lost, the data cannot be recovered.
+- **Clinic server:** in the server's `clinic-data/` folder (encrypted with `THERAPY_DATA_PASSPHRASE`). Browsers hold records in memory only while signed in. Back up from **Privacy → Backups & keys**, not by copying the folder.
 
 ## Development
 
 ```
-js/logic.js   pure helpers (accuracy, trends, materials-for-the-day, report text), unit tested
-js/store.js   localStorage persistence + demo data
+js/logic.js   pure helpers (accuracy, trends, materials-for-the-day, report text, free slots), unit tested
+js/sync.js    record-level changes, who sees what, who may change what (shared by browser and server), unit tested
+js/store.js   localStorage persistence, clinic-server sync, demo data
+server/       clinic server (Node.js, no dependencies), tested end to end
 js/app.js     hash router, views, forms
 css/styles.css
-tests/        node --test unit tests  →  npm test
+tests/        node --test unit and server tests  →  npm test
 ```
 
 After changing any source file, rebuild the single-file version with `npm run build`.

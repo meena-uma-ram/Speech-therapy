@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 // Bundles index.html + CSS + JS into one self-contained file: therapy-planner.html
 // Usage: node scripts/build-single.js [--fragment out.html]
 //   --fragment writes the page without <html>/<head>/<body> wrappers (for hosts that add their own).
@@ -8,7 +9,7 @@ const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
 
 const html = read('index.html');
 const css = read('css/styles.css');
-const js = ['js/logic.js', 'js/store.js', 'js/app.js'].map(read).join('\n');
+const js = ['js/logic.js', 'js/sync.js', 'js/store.js', 'js/app.js'].map(read).join('\n');
 const fontMatch = html.match(/<link rel="preconnect"[\s\S]*?display=swap">/);
 const fonts = fontMatch ? fontMatch[0] : '';
 const body = html.slice(html.indexOf('<body>') + 6, html.indexOf('<script')).trim();
@@ -33,7 +34,7 @@ if (fragIdx > -1) {
     .replace(/  <link rel="apple-touch-icon"[^>]*>\n/, '')
     .replace('href="icons/icon.svg"', 'href="' + icon + '"')
     .replace('<link rel="stylesheet" href="css/styles.css">', '<style>\n' + css + '\n</style>')
-    .replace(/<script src="js\/logic\.js"><\/script>\s*<script src="js\/store\.js"><\/script>\s*<script src="js\/app\.js"><\/script>/,
+    .replace(/<script src="js\/logic\.js"><\/script>\s*<script src="js\/sync\.js"><\/script>\s*<script src="js\/store\.js"><\/script>\s*<script src="js\/app\.js"><\/script>/,
       () => '<script>\n' + js + '\n</script>');
   fs.writeFileSync(path.join(root, 'therapy-planner.html'), out);
   console.log('wrote therapy-planner.html');

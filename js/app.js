@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /* UI: hash router, views and forms. */
 (function () {
   'use strict';
   const L = window.Logic;
   const S = window.Store;
+  const Sync = window.Sync;
   const view = document.getElementById('view');
   const modal = document.getElementById('modal');
 
@@ -707,6 +709,7 @@
 
   const NAV_ROLES = {
     schedule: ['supervisor', 'therapist', 'student'],
+    team: ['supervisor', 'therapist', 'student', 'diagnostician'],
     diagnostics: ['supervisor', 'diagnostician'],
     cases: ['supervisor', 'therapist', 'student'],
     patients: ['supervisor', 'therapist', 'student', 'diagnostician'],
@@ -799,11 +802,26 @@
       quickLinks(u).map(function (l) {
         return '<a class="rb-link' + (l.alert ? ' alert' : '') + '" href="' + l.href + '">' + esc(l.label) + ' <span class="rb-count">' + l.n + '</span></a>';
       }).join('') + '</div>' +
-      '<div class="rb-right">' +
+      '<div class="rb-right">' + (S.isServer() ? syncPill() : '') +
       '<button class="rb-btn" data-action="toggle-names" aria-pressed="' + !!st.settings.hideNames + '">' + (st.settings.hideNames ? 'Show names' : 'Hide names') + '</button>' +
       (S.hasPassphrase() ? '<button class="rb-btn" data-action="lock-now">Lock</button>' : '') +
       '<span class="rb-me"><strong>' + esc(u.name) + '</strong><span class="muted"> · ' + esc(L.ROLES[u.role].label) + '</span></span>' +
       '<button class="rb-btn" data-action="sign-out">Sign out</button></div>';
+  }
+
+  const SYNC_LABEL = { synced: ['Live', 'Connected to the clinic server. Changes are shared as you make them.'], saving: ['Saving…', 'Sending your change to the clinic server.'],
+    offline: ['Offline', 'Can\u2019t reach the clinic server. Keep this tab open: your changes are sent when it is back.'], connecting: ['Connecting…', ''] };
+  function syncPill() {
+    const k = S.syncStatus(), l = SYNC_LABEL[k] || SYNC_LABEL.connecting;
+    return '<span class="sync-pill" id="sync-pill" data-state="' + esc(k) + '" title="' + esc(l[1]) + '" role="status"><span class="dot" aria-hidden="true"></span>' + esc(l[0]) + '</span>';
+  }
+
+  function serverScreen(kind) {
+    if (kind === 'connecting') return '<div class="lock"><div class="card lock-card"><h1>Connecting to the clinic server…</h1></div></div>';
+    return '<div class="lock"><div class="card lock-card"><h1>Can\u2019t reach the clinic server</h1>' +
+      '<p class="muted">Therapy Planner keeps your clinic\u2019s records on one computer. This device can\u2019t reach it right now.</p>' +
+      '<ul class="small plain"><li>Check that the clinic computer is switched on and the server is running.</li><li>Away from the clinic, connect to the clinic VPN (for example Tailscale) first.</li></ul>' +
+      '<div class="actions"><button class="btn btn-primary" data-action="reconnect">Try again</button></div></div></div>';
   }
 
   function lockScreen() {
@@ -1223,28 +1241,47 @@
 
   /* ---------- privacy & settings ---------- */
 
+  const SOURCE_URL = 'https://github.com/meena-uma-ram/Speech-therapy';
+
+  /* AGPL section 13: everyone who uses the app over a network can get its source code. */
+  function licenceSection() {
+    const src = S.serverInfo().source || SOURCE_URL;
+    return '<section class="card"><h2>Licence &amp; source code</h2>' +
+      '<p class="small">Therapy Planner is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later). You may use, study, change and share it. ' +
+      'If you change it and let others use it, including over a network, you must offer them your changed source code under the same licence.</p>' +
+      '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a></p>' +
+      '<p class="small muted">It comes with no warranty. The licence covers the software, not your clinic\u2019s records: those stay yours, and your obligations for them are set by data protection law.</p></section>';
+  }
+
   function viewPrivacy() {
     const st = S.state, set = st.settings, u = me();
     const lockOn = S.hasPassphrase();
     const due = st.patients.filter(function (p) { return L.isPastRetention(p, set.retentionYears); });
     const isLead = u.role === 'supervisor';
-    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data on this device</p></div></header>';
+    const srv = S.isServer(), info = S.serverInfo();
+    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + '</p></div></header>';
 
     html += storageSection();
     if (isLead) html += messagingSection();
     html += '<section class="card"><h2>How patient data is protected</h2><ul class="safeguards">' +
-      '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
-      '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>' +
+      (srv ? '<li>' + tick(true) + '<div><strong>Stays on your clinic\u2019s server.</strong> Records go only between this browser and the clinic computer, never to the app\u2019s makers or other websites. This device keeps nothing once you sign out.</div></li>' +
+        '<li>' + tick(info.encryptedAtRest) + '<div><strong>Encrypted at rest on the server</strong> ' + (info.encryptedAtRest ? '(AES-256-GCM).' : '– not yet. Start the server with THERAPY_DATA_PASSPHRASE set, and turn on full-disk encryption.') + '</div></li>' +
+        '<li>' + tick(info.https) + '<div><strong>Encrypted in transit</strong> ' + (info.https ? 'with HTTPS.' : '– only if you connect through the clinic VPN (Tailscale/WireGuard encrypt everything). Add HTTPS for the browser too.') + '</div></li>' +
+        '<li>' + tick(true) + '<div><strong>Checked on the server.</strong> The server sends each person only the records their role may see and refuses changes they may not make.</div></li>'
+      : '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
+        '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>') +
       '<li>' + tick(true) + '<div><strong>Individual sign-in and need-to-know access.</strong> Supervisors see all diagnostics and therapy patients; each clinician sees only their own patients, plus sessions they cover or are invited to.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Consent recorded</strong> per patient; allotment to students and family reports check it.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
       '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records ' + (set.autoErase ? 'are erased automatically' : 'are flagged for erasure') + ' ' + esc(set.retentionYears) + ' years after therapy ends' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Crypto-shredding.</strong> Each patient has their own key, and backups store each patient encrypted with it. Erasing a patient destroys the key, so every earlier backup becomes unreadable for that patient. Each erasure leaves a deletion receipt.</div></li>' +
-      '</ul><p class="small muted">Everyone signs in with their own password, stored only as a salted hash, and is signed out after ' + esc(set.autoLockMinutes) + ' minutes idle. This protects records on a shared clinic computer. For staff on separate devices, the app needs a server with individual accounts.</p></section>';
+      '</ul><p class="small muted">Everyone signs in with their own password, stored only as a salted hash, and is signed out after ' + esc(set.autoLockMinutes) + ' minutes idle. ' +
+      (srv ? 'Sign-ins, record views and changes are also logged on the server (access.log), out of reach of this browser.' : 'This protects records on a shared clinic computer. For staff on separate devices, run the clinic server (see docs/SERVER-SETUP.md).') + '</p></section>';
 
     html += '<section class="card"><h2>Encryption &amp; lock</h2>';
-    if (!S.cryptoAvailable()) html += '<p class="muted">This browser cannot encrypt data here. Open the app over https or from a file in an up-to-date browser.</p>';
+    if (srv) html += '<p class="small">Nothing is stored on this device, so there is nothing to encrypt here. Encryption of the records is set on the clinic server ' + (info.encryptedAtRest ? '(on).' : '(<strong>off</strong>).') + ' You are signed out after ' + esc(set.autoLockMinutes) + ' minutes idle.</p>';
+    else if (!S.cryptoAvailable()) html += '<p class="muted">This browser cannot encrypt data here. Open the app over https or from a file in an up-to-date browser.</p>';
     else if (!lockOn) {
       html += '<form id="pass-form"><p class="small">Choose a passphrase of at least 10 characters. If it is lost, the data cannot be recovered, so keep a backup.</p>' +
         '<div class="grid-2"><label>Passphrase<input type="password" name="pass" minlength="10" autocomplete="new-password" required></label>' +
@@ -1257,13 +1294,13 @@
 
     html += '<form class="card" id="settings-form"><h2>Settings</h2>' +
       '<label class="check"><input type="checkbox" name="hideNames"' + (set.hideNames ? ' checked' : '') + '> Hide patient names on screen (show case code and initials)</label>' +
-      '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"></label>' +
+      (srv && !isLead ? '<p class="small muted">Clinic-wide settings are shared by everyone, so only a supervisor can change them.</p>' : '') +
+      '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>' +
       '<label>Keep records after therapy ends (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
-      '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"></label></div>' +
-      '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(set.dayStart) + '"></label>' +
-      '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(set.lunchStart) + '"></label>' +
-      '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(set.lunchEnd) + '"></label>' +
-      '<label>Day ends<input type="time" name="dayEnd" value="' + esc(set.dayEnd) + '"></label></div>' +
+      '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"' + (srv && !isLead ? ' disabled' : '') + '></label></div>' +
+      '<div class="grid-4">' + [['dayStart', 'Day starts'], ['lunchStart', 'Lunch from'], ['lunchEnd', 'Lunch until'], ['dayEnd', 'Day ends']].map(function (f) {
+        return '<label>' + f[1] + '<input type="time" name="' + f[0] + '" value="' + esc(set[f[0]]) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>';
+      }).join('') + '</div>' +
       (isLead ? '<label class="check"><input type="checkbox" name="autoErase"' + (set.autoErase ? ' checked' : '') + '> Erase records automatically when the retention period ends (checked daily; each erasure issues a receipt)</label>' : '') +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div></form>';
 
@@ -1289,12 +1326,13 @@
         return '<tr><td class="nowrap">' + esc(fmtStamp(e.at)) + '</td><td>' + esc(e.user) + '</td><td>' + esc(e.action) + (e.detail ? ' <span class="muted">(' + esc(e.detail) + ')</span>' : '') + '</td><td>' + esc(e.target || '') + '</td></tr>';
       }).join('') + '</tbody></table></div><p class="small muted">Showing the latest ' + log.length + ' of ' + st.audit.length + ' entries.</p></section>';
 
-    html += '<section class="card"><h2>Backups &amp; keys</h2>' +
+    if (!srv || isLead) html += '<section class="card"><h2>Backups &amp; keys</h2>' +
+      (srv ? '<p class="small"><strong>On the clinic server</strong>, back up with this button rather than by copying the data folder: copies of the folder hold every patient, and keep erased patients readable.</p>' : '') +
       '<p class="small">Backups keep people, materials and settings in the clear, and <strong>each patient encrypted with their own key</strong>. The keys stay on this device and are never put in a backup. Erasing a patient destroys their key, so that patient can never be restored from any earlier backup.</p>' +
       '<div class="actions wrap"><button class="btn btn-primary" data-action="make-backup">Create backup</button><button class="btn" data-action="export">Download backup</button>' +
       '<label class="btn">Restore backup or key file<input type="file" accept="application/json,.json" id="import-file" hidden></label></div>' +
       '<div id="backup-out"></div>' +
-      '<p class="small muted">Patient keys on this device: ' + S.keyCount() + '. To restore on another device you also need the <strong>key file</strong>. It is the master copy of the keys, like a cloud key management service, so keep it in one secure place separate from backups. Replace it after every erasure: an old key file can still open erased patients in old backups.</p>' +
+      '<p class="small muted">Patient keys ' + (srv ? 'on the clinic server' : 'on this device') + ': ' + S.keyCount() + '. To restore on another device you also need the <strong>key file</strong>. It is the master copy of the keys, like a cloud key management service, so keep it in one secure place separate from backups. Replace it after every erasure: an old key file can still open erased patients in old backups.</p>' +
       (isLead ? '<div class="actions wrap"><button class="btn btn-sm" data-action="copy-keys">Copy key file</button></div>' : '') + '</section>';
 
     if (isLead) {
@@ -1316,9 +1354,12 @@
       '<li>Where a law requires records to be kept for a set number of years, set the retention period to match. Keep only what the law requires, for as long as it requires, with minimal access. Delete everything else on schedule.</li></ul>' +
       '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
-    html += '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
-      '<button class="btn" data-action="reset-demo">Load demo data</button>' +
-      '<button class="btn btn-danger" data-action="clear-all">Delete all patient data</button></div></section>';
+    if (!srv || isLead) {
+      html += '<section class="card"><h2>Start over</h2>' + (srv ? '<p class="small"><strong>This changes the records for everyone at the clinic.</strong></p>' : '') + '<div class="actions wrap">' +
+        '<button class="btn" data-action="reset-demo">Load demo data</button>' +
+        '<button class="btn btn-danger" data-action="clear-all">Delete all patient data</button></div></section>';
+    }
+    html += licenceSection();
     return html;
   }
 
@@ -1475,8 +1516,7 @@
     const mins = Number(S.state.settings.autoLockMinutes) || 10;
     if (Date.now() - lastActivity < mins * 60000) return;
     if (modal.open) modal.close();
-    S.signOut();
-    if (S.hasPassphrase()) S.lock().then(render); else render();
+    Promise.resolve(S.signOut()).then(function () { if (S.hasPassphrase()) return S.lock(); }).then(render);
   }, 20000);
 
   let lastViewed = null;
@@ -1537,16 +1577,19 @@
   let lastInvite = null;
 
   function loginScreen() {
-    const demo = S.state.seeded;
+    const info = S.serverInfo();
+    const accounts = S.isServer() ? info.demoAccounts : S.state.seeded && S.state.users.map(function (u) { return { login: u.email || u.name, name: u.name, role: u.role }; });
+    const demo = !!accounts;
     return '<div class="lock"><form id="login-form" class="card lock-card">' +
       '<h1>Sign in to Therapy Planner</h1><p class="muted">Each person signs in with their own account and sees only the patients they need.</p>' +
+      (S.isServer() ? '<p class="small muted">Connected to ' + esc(info.clinic || 'your clinic') + '\u2019s server at ' + esc(location.host) + (info.https ? '' : ' (use only inside the clinic VPN)') + '.</p>' : '') +
       '<label>Email or name<input name="login" id="login-name" autocomplete="username" required></label>' +
       '<label>Password<input type="password" name="pass" autocomplete="current-password"></label>' +
       '<p class="form-error" id="login-error" hidden></p>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Sign in</button></div>' +
       (demo ? '<div class="demo-accounts"><p class="small"><strong>Demo accounts</strong> (password <code>' + esc(S.demoPassword) + '</code>):</p><ul class="small">' +
-        S.state.users.map(function (u) {
-          return '<li><button type="button" class="link" data-action="demo-login" data-login="' + esc(u.email || u.name) + '">' + esc(u.email || u.name) + '</button> – ' + esc(u.name) + ', ' + esc(L.ROLES[u.role].label.toLowerCase()) + '</li>';
+        accounts.map(function (u) {
+          return '<li><button type="button" class="link" data-action="demo-login" data-login="' + esc(u.login) + '">' + esc(u.login) + '</button> – ' + esc(u.name) + ', ' + esc(L.ROLES[u.role].label.toLowerCase()) + '</li>';
         }).join('') + '</ul></div>' : '<p class="muted small">Forgotten your password? Ask your clinical supervisor to reset it.</p>') +
       '</form></div>';
   }
@@ -1885,7 +1928,8 @@
 
   Object.assign(ACTIONS, {
     'demo-login': function (el) { document.getElementById('login-name').value = el.dataset.login; document.querySelector('#login-form [name=pass]').value = S.demoPassword; },
-    'sign-out': function () { S.signOut(); route = '#/'; lastViewed = null; render(); },
+    'sign-out': function () { route = '#/'; lastViewed = null; Promise.resolve(S.signOut()).then(render); },
+    'reconnect': function () { S.reconnect().then(render); render(); },
     'compose': function (el) { composeForm(el.dataset.to, el.dataset.subject); },
     'reschedule': function (el) { rescheduleForm(el.dataset.id); },
     'invite': function (el) { inviteForm(el.dataset.id); },
@@ -2113,15 +2157,18 @@
   function storageSection() {
     const rows = S.storageReport();
     const kb = function (n) { return n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB'; };
+    const srv = S.isServer();
     return '<section class="card"><h2>Where your data is stored</h2>' +
-      '<p class="small">Everything is stored <strong>only in this browser on this device</strong>. Nothing is sent to a server, to the app\'s makers, or to anyone else.</p>' +
+      (srv ? '<p class="small">The records are stored <strong>on your clinic\u2019s server</strong> (' + esc(location.host) + '), one shared copy for everyone. This browser holds what you may see only while you are signed in. Nothing goes to the app\u2019s makers or anyone else.</p>'
+        : '<p class="small">Everything is stored <strong>only in this browser on this device</strong>. Nothing is sent to a server, to the app\'s makers, or to anyone else.</p>') +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>What</th><th>Where</th><th>Size</th><th>Encrypted</th></tr></thead><tbody>' +
       rows.map(function (r) { return '<tr><td>' + esc(r.what) + '</td><td class="small">' + esc(r.where) + '<div class="muted"><code>' + esc(r.key) + '</code></div></td><td class="nowrap">' + kb(r.bytes) + '</td><td>' + tick(r.encrypted) + '</td></tr>'; }).join('') +
       '<tr><td>Backups and the key file</td><td class="small">Wherever you save them. Keep them apart: patients in a backup can only be read with the key file.</td><td>—</td><td>' + tick(true) + ' <span class="small muted">patients</span></td></tr>' +
       '</tbody></table></div>' +
-      '<ul class="small plain"><li>Each browser and device has its <strong>own separate copy</strong>: the downloaded file, the online link, Chrome and Edge on the same computer are all different.</li>' +
+      (srv ? '<ul class="small plain"><li>Signing out, or closing the tab, clears the records from this device.</li><li>The server keeps an access log of sign-ins, record views and changes.</li></ul></section>'
+        : '<ul class="small plain"><li>Each browser and device has its <strong>own separate copy</strong>: the downloaded file, the online link, Chrome and Edge on the same computer are all different.</li>' +
       '<li>Clearing this browser\'s site data deletes it. Make backups.</li>' +
-      '<li>To share one set of records across staff devices, the app needs the server version (see the security plan).</li></ul></section>';
+      '<li>To share one set of records across staff devices, run the clinic server on one computer (see docs/SERVER-SETUP.md).</li></ul></section>');
   }
 
   Object.assign(ACTIONS, {
@@ -2162,6 +2209,217 @@
     }
   });
 
+  /* ---------- team calendar: colleagues' schedules side by side ---------- */
+
+  const TEAM_PREF = 'speech-therapy-planner-team-';
+  const TEAM_PX = 2;
+  const ROLE_GROUPS = [['supervisor', 'Supervisors'], ['therapist', 'Therapists'], ['student', 'Students'], ['diagnostician', 'Diagnosticians']];
+
+  // Who to show is remembered per person on this device.
+  function teamPref() {
+    let o = null;
+    try { o = JSON.parse(localStorage.getItem(TEAM_PREF + me().id) || 'null'); } catch (e) { /* storage blocked */ }
+    o = o || {};
+    const ids = S.state.users.map(function (u) { return u.id; });
+    let picked = Array.isArray(o.picked) ? o.picked.filter(function (id) { return ids.indexOf(id) >= 0; }) : (ids.length <= 6 ? ids : [me().id]);
+    if (!picked.length) picked = [me().id];
+    return { picked: picked, mode: o.mode === 'week' ? 'week' : 'day' };
+  }
+  function setTeamPref(p) { try { localStorage.setItem(TEAM_PREF + me().id, JSON.stringify(p)); } catch (e) { /* storage blocked */ } }
+  function personClass(uid) { const i = S.state.users.findIndex(function (u) { return u.id === uid; }); return 'who-' + ((i < 0 ? 0 : i) % 8); }
+
+  function awayOn(uid, date) {
+    return S.state.leave.find(function (l) { return l.userId === uid && l.from <= date && date <= l.to && l.status !== 'declined' && l.status !== 'cancelled'; });
+  }
+  function canSeeEvent(e) { return me().role === 'supervisor' || (!e.busy && Sync.isAttendee(e, me().id)); }
+
+  /* One person's day: sessions they run or observe, and meetings they attend. */
+  function teamItems(uid, date) {
+    const pm = S.byId(S.state.patients), items = [];
+    S.state.appointments.forEach(function (a) {
+      if (a.date !== date || a.status === 'cancelled') return;
+      const runs = Sync.clinicianOf(a, pm) === uid;
+      const obs = (a.observers || []).some(function (o) { return o.userId === uid && o.status === 'accepted'; });
+      if (runs || obs) items.push({ kind: 'session', rec: a, time: a.time, duration: Number(a.duration) || 30, observing: !runs });
+    });
+    S.state.events.forEach(function (e) {
+      if (e.date === date && (e.attendees || []).indexOf(uid) >= 0) items.push({ kind: 'event', rec: e, time: e.time, duration: Number(e.duration) || 30 });
+    });
+    return items;
+  }
+
+  function itemLabel(it) {
+    if (it.kind === 'event') {
+      const open = canSeeEvent(it.rec);
+      return { title: open ? it.rec.title : 'Busy', sub: open ? 'Meeting' : '', cls: 'tm-event', link: open && (it.rec.createdBy === me().id || me().role === 'supervisor') ? 'edit-event' : '' };
+    }
+    const a = it.rec, p = !a.busy && S.patient(a.patientId);
+    if (p && canSee(p)) return { title: nm(p), sub: (it.observing ? 'Observing · ' : '') + L.caseLabel(p), cls: 'fam-' + L.conditionFamily(p.condition), href: '#/session/' + a.id };
+    return { title: it.observing ? 'Observing' : 'Session', sub: a.room || '', cls: 'tm-busy' };
+  }
+
+  function viewTeam(params) {
+    const date = params.date || L.todayISO();
+    const pref = teamPref();
+    const users = S.state.users;
+    const picked = users.filter(function (u) { return pref.picked.indexOf(u.id) >= 0; });
+    const step = pref.mode === 'week' ? 7 : 1;
+    const from = pref.mode === 'week' ? L.weekStart(date) : date;
+
+    let html = '<header class="page-head"><div><h1>Team calendar</h1><p class="muted">' + esc(pref.mode === 'week' ? 'Week of ' + L.formatDate(from) : L.formatDate(date)) +
+      (S.isServer() ? ' · live from the clinic server' : '') + '</p></div>' +
+      '<button class="btn btn-primary" data-action="new-event" data-date="' + date + '" data-with="' + esc(pref.picked.join(',')) + '">+ Add meeting</button></header>';
+
+    html += '<div class="toolbar"><div class="date-nav">' +
+      '<a class="btn btn-ghost" href="#/team?date=' + L.addDays(date, -step) + '" aria-label="Previous">‹</a>' +
+      '<input type="date" class="date-input" data-nav="team" value="' + date + '" aria-label="Choose date">' +
+      '<a class="btn btn-ghost" href="#/team?date=' + L.addDays(date, step) + '" aria-label="Next">›</a>' +
+      (date !== L.todayISO() ? '<a class="btn btn-ghost" href="#/team?date=' + L.todayISO() + '">Today</a>' : '') + '</div>' +
+      '<div class="seg-toggle" role="group" aria-label="Calendar layout">' +
+      ['day', 'week'].map(function (m) { return '<button class="' + (pref.mode === m ? 'on' : '') + '" data-action="team-mode" data-mode="' + m + '" aria-pressed="' + (pref.mode === m) + '">' + (m === 'day' ? 'Day' : 'Week') + '</button>'; }).join('') + '</div></div>';
+
+    html += '<section class="card team-pick"><div class="card-head"><h2>Show schedules for</h2><div class="actions wrap">' +
+      '<button class="btn btn-sm" data-action="team-set" data-ids="' + esc(users.map(function (u) { return u.id; }).join(',')) + '">Everyone</button>' +
+      '<button class="btn btn-sm" data-action="team-set" data-ids="' + esc(me().id) + '">Only me</button>' +
+      ROLE_GROUPS.filter(function (g) { return users.some(function (u) { return u.role === g[0]; }); }).map(function (g) {
+        return '<button class="btn btn-sm" data-action="team-set" data-ids="' + esc(users.filter(function (u) { return u.role === g[0]; }).map(function (u) { return u.id; }).join(',')) + '">' + esc(g[1]) + '</button>';
+      }).join('') + '</div></div><div class="pchips">' +
+      users.map(function (u) {
+        const on = pref.picked.indexOf(u.id) >= 0;
+        return '<button class="pchip ' + personClass(u.id) + (on ? ' on' : '') + '" data-action="team-toggle" data-id="' + u.id + '" aria-pressed="' + on + '"><span class="dot" aria-hidden="true"></span>' +
+          esc(u.id === me().id ? u.name + ' (you)' : u.name) + ' <span class="muted small">' + esc(L.ROLES[u.role].label) + '</span></button>';
+      }).join('') + '</div>' +
+      '<p class="small muted">You see the details of sessions for your own patients. Colleagues\' other sessions show only as <em>Session</em>, and the reason for leave only as <em>Away</em>.</p></section>';
+
+    html += pref.mode === 'week' ? teamWeek(picked, from) : teamDay(picked, date);
+    return html;
+  }
+
+  function teamDay(people, date) {
+    const st = S.state.settings;
+    const cols = people.map(function (u) {
+      const items = teamItems(u.id, date);
+      return { u: u, away: awayOn(u.id, date), lay: L.layoutDay(items, st.dayStart, st.dayEnd), items: items };
+    });
+    let start = L.toMinutes(st.dayStart), end = L.toMinutes(st.dayEnd);
+    cols.forEach(function (c) { start = Math.min(start, c.lay.start); end = Math.max(end, c.lay.end); });
+    const y = function (m) { return (m - start) * TEAM_PX; };
+    const lunchS = L.toMinutes(st.lunchStart), lunchE = L.toMinutes(st.lunchEnd);
+    const hours = [];
+    for (let t = Math.ceil(start / 60) * 60; t < end; t += 60) hours.push(t);
+
+    // Common free time for everyone shown who isn't away.
+    const present = cols.filter(function (c) { return !c.away; });
+    const busy = [];
+    present.forEach(function (c) { c.lay.blocks.forEach(function (b) { busy.push({ start: b.start, end: b.end }); }); });
+    const free = present.length ? L.freeSlots(busy, st.dayStart, st.dayEnd, 30, { start: st.lunchStart, end: st.lunchEnd }) : [];
+    const withIds = present.map(function (c) { return c.u.id; }).join(',');
+    let html = '<section class="card free-slots"><h2>Free for ' + (present.length === people.length ? 'everyone shown' : present.length + ' of ' + people.length + ' (others away)') + '</h2>' +
+      (free.length ? '<div class="pchips">' + free.map(function (g) {
+        return '<button class="slot-chip" data-action="new-event" data-date="' + date + '" data-time="' + L.fromMinutes(g.start) + '" data-end="' + L.fromMinutes(Math.min(g.end, g.start + 60)) + '" data-with="' + esc(withIds) + '">' +
+          esc(L.formatTime(L.fromMinutes(g.start)) + '–' + L.formatTime(L.fromMinutes(g.end))) + '</button>';
+      }).join('') + '</div><p class="small muted">Tap a time to book a meeting with everyone shown.</p>' : '<p class="small muted">No common free time of 30 minutes or more.</p>') + '</section>';
+
+    html += '<div class="team-scroll"><div class="team-day" style="--cols:' + Math.max(cols.length, 1) + '">' +
+      '<div class="team-gutter-head"></div>' +
+      cols.map(function (c) {
+        return '<div class="team-col-head ' + personClass(c.u.id) + '"><span class="dot" aria-hidden="true"></span><strong>' + esc(c.u.name) + '</strong>' +
+          '<span class="muted small">' + esc(L.ROLES[c.u.role].label) + ' · ' + c.items.length + ' booked</span>' + (c.away ? '<span class="badge badge-warn">Away</span>' : '') + '</div>';
+      }).join('') +
+      '<div class="team-gutter" style="height:' + y(end) + 'px">' + hours.map(function (t) { return '<span style="top:' + y(t) + 'px">' + esc(L.formatTime(L.fromMinutes(t)).replace(':00', '')) + '</span>'; }).join('') + '</div>';
+    html += cols.map(function (c) {
+      let col = '<div class="team-col' + (c.away ? ' away' : '') + '" style="height:' + y(end) + 'px">' +
+        hours.map(function (t) { return '<div class="team-hour" style="top:' + y(t) + 'px"></div>'; }).join('');
+      if (lunchE > lunchS) col += '<div class="team-lunch" style="top:' + y(Math.max(lunchS, start)) + 'px;height:' + (Math.min(lunchE, end) - Math.max(lunchS, start)) * TEAM_PX + 'px"><span>Lunch</span></div>';
+      if (c.away) col += '<div class="team-away"><span>Away' + (c.away.reason && (c.u.id === me().id || me().role === 'supervisor') ? ' · ' + esc(c.away.reason) : '') + '</span></div>';
+      col += c.lay.blocks.map(function (b) {
+        const it = b.appt, lab = itemLabel(it), h = (b.end - b.start) * TEAM_PX;
+        const style = 'top:' + (y(b.start) + 1) + 'px;height:' + (h - 2) + 'px;left:calc(100% * ' + b.lane + ' / ' + b.lanes + ' + 2px);width:calc(100% / ' + b.lanes + ' - 4px)';
+        const inner = '<span class="tm-time">' + esc(L.formatTime(L.fromMinutes(b.start))) + '–' + esc(L.formatTime(L.fromMinutes(b.end))) + '</span>' +
+          '<strong class="tm-title">' + esc(lab.title) + '</strong>' + (lab.sub && h >= 70 ? '<span class="tm-sub">' + esc(lab.sub) + '</span>' : '');
+        const cls = 'tm-block ' + lab.cls + (it.observing ? ' observing' : '') + (h < 56 ? ' compact' : '');
+        if (lab.href) return '<a class="' + cls + '" href="' + lab.href + '" style="' + style + '">' + inner + '</a>';
+        if (lab.link) return '<button class="' + cls + '" data-action="' + lab.link + '" data-id="' + it.rec.id + '" style="' + style + '">' + inner + '</button>';
+        return '<div class="' + cls + '" style="' + style + '" title="Details are shown only to the people involved">' + inner + '</div>';
+      }).join('');
+      if (date === L.todayISO()) {
+        const now = new Date(), mins = now.getHours() * 60 + now.getMinutes();
+        if (mins >= start && mins <= end) col += '<div class="tt-now team-now" style="top:' + y(mins) + 'px" aria-hidden="true"></div>';
+      }
+      return col + '</div>';
+    }).join('');
+    html += '</div></div>';
+    if (!people.length) html += '<p class="muted">Choose people above to see their schedules.</p>';
+    return html;
+  }
+
+  function teamWeek(people, from) {
+    const days = [0, 1, 2, 3, 4, 5, 6].map(function (i) { return L.addDays(from, i); });
+    let html = '<div class="table-wrap"><table class="tbl team-week"><thead><tr><th>Person</th>' + days.map(function (d) {
+      return '<th class="' + (d === L.todayISO() ? 'today' : '') + '"><button class="link" data-action="team-day" data-date="' + d + '">' + esc(L.formatDate(d, { weekday: 'short', day: 'numeric', month: 'short' })) + '</button></th>';
+    }).join('') + '</tr></thead><tbody>';
+    html += people.map(function (u) {
+      return '<tr><th class="' + personClass(u.id) + '"><span class="dot" aria-hidden="true"></span> ' + esc(u.name) + '</th>' + days.map(function (d) {
+        const away = awayOn(u.id, d);
+        const items = teamItems(u.id, d).sort(function (a, b) { return a.time.localeCompare(b.time); });
+        return '<td class="' + (away ? 'away' : '') + '">' + (away ? '<span class="badge badge-warn">Away</span>' : '') + items.map(function (it) {
+          const lab = itemLabel(it);
+          const inner = '<span class="tm-time">' + esc(L.formatTime(it.time)) + '</span> ' + esc(lab.title);
+          if (lab.href) return '<a class="tw-chip ' + lab.cls + '" href="' + lab.href + '">' + inner + '</a>';
+          if (lab.link) return '<button class="tw-chip ' + lab.cls + '" data-action="' + lab.link + '" data-id="' + it.rec.id + '">' + inner + '</button>';
+          return '<span class="tw-chip ' + lab.cls + '">' + inner + '</span>';
+        }).join('') + (!away && !items.length ? '<span class="muted small">Free</span>' : '') + '</td>';
+      }).join('') + '</tr>';
+    }).join('');
+    return html + '</tbody></table></div>';
+  }
+
+  function eventForm(id, d) {
+    const e = id ? S.state.events.find(function (x) { return x.id === id; }) : null;
+    const v = e || { title: '', date: d.date, time: d.time || '10:00', duration: d.duration || 30, attendees: d.with || [me().id], note: '' };
+    const endT = L.fromMinutes(L.toMinutes(v.time) + (Number(v.duration) || 30));
+    const body = '<label>What<input name="title" required maxlength="120" value="' + esc(v.title) + '" placeholder="e.g. Case conference, supervision, team meeting"></label>' +
+      '<div class="grid-3"><label>Date<input type="date" name="date" required value="' + esc(v.date) + '"></label>' +
+      '<label>From<input type="time" name="time" required value="' + esc(v.time) + '"></label>' +
+      '<label>Until<input type="time" name="end" required value="' + esc(d.end || endT) + '"></label></div>' +
+      '<fieldset class="checks"><legend>Who</legend>' + S.state.users.map(function (u) {
+        return '<label class="check"><input type="checkbox" name="attendees" value="' + u.id + '"' + ((v.attendees || []).indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + esc(u.name) + ' <span class="muted small">' + esc(L.ROLES[u.role].label) + '</span></label>';
+      }).join('') + '</fieldset>' +
+      '<label>Note<textarea name="note" rows="2" placeholder="Agenda or room. No patient details: use the case code.">' + esc(v.note || '') + '</textarea></label>' +
+      '<p class="small muted">People not invited see this only as <em>Busy</em>.</p>';
+    openModal(e ? 'Edit meeting' : 'New meeting', body, function (fd) {
+      const start = L.toMinutes(fd.get('time')), stop = L.toMinutes(fd.get('end'));
+      if (stop <= start) { toast('The end time is before the start time.'); return false; }
+      const who = fd.getAll('attendees');
+      if (!who.length) { toast('Choose at least one person.'); return false; }
+      const saved = S.upsert('events', Object.assign({}, e || { createdBy: me().id, createdAt: new Date().toISOString() }, {
+        title: fd.get('title').trim(), date: fd.get('date'), time: fd.get('time'), duration: stop - start, attendees: who, note: fd.get('note').trim()
+      }));
+      const when = L.formatDate(saved.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(saved.time);
+      const added = who.filter(function (uid) { return uid !== me().id && (!e || (e.attendees || []).indexOf(uid) < 0); });
+      if (added.length) S.send(added, { kind: 'invite', link: '#/team?date=' + saved.date, subject: 'Meeting: ' + saved.title + ', ' + when, body: (saved.note || '') + '\nFrom ' + me().name + '.' });
+      const clashes = who.filter(function (uid) {
+        return teamItems(uid, saved.date).some(function (it) { return !(it.kind === 'event' && it.rec.id === saved.id) && L.overlaps({ time: saved.time, duration: saved.duration }, { time: it.time, duration: it.duration }); });
+      });
+      toast(clashes.length ? 'Saved – clashes with ' + clashes.map(firstName).join(', ') : 'Meeting saved');
+    }, e ? function () { S.remove('events', e.id); toast('Meeting deleted'); } : null);
+  }
+
+  Object.assign(ACTIONS, {
+    'team-toggle': function (el) {
+      const p = teamPref(), i = p.picked.indexOf(el.dataset.id);
+      if (i >= 0) p.picked.splice(i, 1); else p.picked.push(el.dataset.id);
+      setTeamPref(p); render();
+    },
+    'team-set': function (el) { const p = teamPref(); p.picked = el.dataset.ids.split(',').filter(Boolean); setTeamPref(p); render(); },
+    'team-mode': function (el) { const p = teamPref(); p.mode = el.dataset.mode; setTeamPref(p); render(); },
+    'team-day': function (el) { const p = teamPref(); p.mode = 'day'; setTeamPref(p); go('#/team?date=' + el.dataset.date); },
+    'new-event': function (el) {
+      eventForm(null, { date: el.dataset.date || L.todayISO(), time: el.dataset.time, end: el.dataset.end, with: (el.dataset.with || me().id).split(',').filter(Boolean) });
+    },
+    'edit-event': function (el) { eventForm(el.dataset.id, {}); }
+  });
+
   /* ---------- router ---------- */
 
   function render() {
@@ -2175,6 +2433,12 @@
       return;
     }
     const cur = S.currentUser();
+    if (!cur && S.isServer() && (S.syncStatus() === 'connecting' || S.syncStatus() === 'unreachable')) {
+      document.body.classList.add('locked');
+      bar.innerHTML = '';
+      view.innerHTML = serverScreen(S.syncStatus());
+      return;
+    }
     if (!cur || cur.mustChange) {
       document.body.classList.add('locked');
       bar.innerHTML = '';
@@ -2207,6 +2471,7 @@
     else if (section === 'privacy') html = viewPrivacy();
     else if (section === 'inbox') html = viewInbox(r.parts[1]);
     else if (section === 'leave') html = viewLeave();
+    else if (section === 'team') html = viewTeam(r.params);
     else if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
     else if (section === 'patients') html = viewPatients(r.params);
@@ -2222,7 +2487,7 @@
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     if (pendingNotice) { pendingNotice = false; showNotices(); }
-    if (S.state.settings.autoErase && S.state.settings.lastRetentionRun !== L.todayISO()) {
+    if (S.state.settings.autoErase && S.state.settings.lastRetentionRun !== L.todayISO() && (!S.isServer() || u.role === 'supervisor')) {
       const erased = S.runRetention();
       if (erased.length) toast(erased.length + ' record' + (erased.length === 1 ? '' : 's') + ' erased by the retention rule – see Privacy → Deletion receipts');
     }
@@ -2403,5 +2668,27 @@
   }
 
   window.addEventListener('hashchange', function () { if (location.hash.indexOf('#/') === 0 && location.hash !== route) go(location.hash); });
+
+  /* Clinic server: colleagues' changes arrive while you work. Never redraw under an open form or a field being typed in. */
+  S.setBusyCheck(function () {
+    const a = document.activeElement;
+    return modal.open || document.getElementById('confirm').open ||
+      !!(a && view.contains(a) && (a.tagName === 'TEXTAREA' || a.tagName === 'SELECT' || (a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|date)$/.test(a.type))));
+  });
+  S.onSync(function (type, detail) {
+    if (type === 'status') {
+      const pill = document.getElementById('sync-pill');
+      if (pill) pill.outerHTML = syncPill();
+      else if (S.isServer() && !S.currentUser()) render();
+    } else if (type === 'rejected') {
+      toast('Not saved: ' + (detail[0] && detail[0].reason || 'refused by the server') + '. The latest records have been reloaded.');
+    } else if (type === 'signedout') {
+      if (modal.open) modal.close();
+      render();
+      toast('Signed out by the clinic server. Please sign in again.');
+    } else render();
+  });
+
   render();
+  S.ready.then(function () { if (S.isServer()) { pendingNotice = !!S.currentUser(); render(); } });
 })();

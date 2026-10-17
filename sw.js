@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /*
  * Offline support for the installed app. Caches only the app's own files (code, styles, icons).
- * Patient data never passes through here: it stays in the browser's local storage.
+ * Patient data never passes through here: it stays in the browser's local storage, or on the clinic server (api/ requests are never cached).
  */
-const CACHE = 'therapy-planner-v1';
-const FILES = ['./', './index.html', './css/styles.css', './js/logic.js', './js/store.js', './js/app.js',
+const CACHE = 'therapy-planner-v2';
+const FILES = ['./', './index.html', './css/styles.css', './js/logic.js', './js/sync.js', './js/store.js', './js/app.js',
   './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (ev) {
@@ -19,7 +20,8 @@ self.addEventListener('activate', function (ev) {
 // Network first so updates arrive straight away; fall back to the cached copy when offline.
 self.addEventListener('fetch', function (ev) {
   const req = ev.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin || url.pathname.indexOf('/api/') >= 0) return;
   ev.respondWith(fetch(req).then(function (res) {
     const copy = res.clone();
     caches.open(CACHE).then(function (c) { c.put(req, copy); });

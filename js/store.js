@@ -1,16 +1,23 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
 /*
- * Local data store. Everything lives in this browser's localStorage; nothing is sent anywhere.
- * With a passphrase set, the data is encrypted at rest (AES-GCM, key derived with PBKDF2).
+ * Data store. Two modes:
+ * - On its own (a file, or any website): everything lives in this browser's localStorage; nothing is sent anywhere.
+ *   With a passphrase set, the data is encrypted at rest (AES-GCM, key derived with PBKDF2).
+ * - From a clinic server (server/server.js): the records live on the server's disk. This browser holds them in memory
+ *   only while someone is signed in, sends each change to the server and picks up colleagues' changes as they happen.
  */
 (function () {
   'use strict';
   const L = window.Logic;
+  const Sync = window.Sync;
+  const REMOTE = !!(window.document && document.querySelector('meta[name="therapy-server"]'));
   const KEY = 'speech-therapy-planner-v1';
   const ENC_KEY = KEY + '-encrypted';
   // Per-patient keys live apart from the data and are never written into a backup.
   const KEYRING_KEY = KEY + '-patient-keys';
   const AUDIT_MAX = 2000;
   const SESSION_KEY = 'speech-therapy-planner-session';
+  const PREFS_KEY = KEY + '-device-prefs';
   const PW_ITERATIONS = 100000;
   const DEMO_PW = { pwSalt: 'dGhlcmFweS1wbGFubmVyLWRlbW8tc2FsdA==', pwHash: 'dDoovX6na8XDoauJ0apDiDsLUMsVSr79pyCCuUXcDK4=' }; // "demo1234"
 
@@ -27,7 +34,7 @@
       }
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -35,7 +42,8 @@
   let cryptoKey = null, cryptoSalt = null;
   let keyring = {}; // { patientId: base64 AES-256 key }
   let writing = Promise.resolve();
-  let state = load();
+  let remoteMe = ''; // on a clinic server, who is signed in comes from the server
+  let state = REMOTE ? blank() : load();
 
   function blank() { return JSON.parse(JSON.stringify(EMPTY)); }
 
@@ -52,23 +60,26 @@
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
     s.settings.messaging = Object.assign({}, EMPTY.settings.messaging, s.settings.messaging);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    Sync.ensureIds(s);
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
       if (!a.reschedules) a.reschedules = [];
       if (!a.observers) a.observers = [];
     });
-    s.users.forEach(function (u) { if (!u.pwHash) u.mustChange = true; });
-    // Who is signed in belongs to this browser tab, not to the saved data.
-    let session = '';
-    try { session = sessionStorage.getItem(SESSION_KEY) || ''; } catch (e) { /* storage blocked */ }
-    s.settings.currentUserId = s.users.some(function (u) { return u.id === session; }) ? session : '';
+    if (!REMOTE) {
+      s.users.forEach(function (u) { if (!u.pwHash) u.mustChange = true; });
+      // Who is signed in belongs to this browser tab, not to the saved data.
+      let session = '';
+      try { session = sessionStorage.getItem(SESSION_KEY) || ''; } catch (e) { /* storage blocked */ }
+      s.settings.currentUserId = s.users.some(function (u) { return u.id === session; }) ? session : '';
+    } else s.settings.currentUserId = remoteMe;
     const demoCases = { p_ava: 'Speech sound disorder', p_leo: 'DLD', p_maya: 'Stammering', p_noah: 'Autism' };
-    if (!s.users.length) {
+    if (!s.users.length && !REMOTE) {
       s.users.push({ id: 'u_me', name: s.settings.therapistName || 'Me', role: 'supervisor' });
       s.settings.currentUserId = 'u_me';
     }
-    const me = s.settings.currentUserId || s.users[0].id;
+    const me = s.settings.currentUserId || (s.users[0] || {}).id || '';
     s.patients.forEach(function (p) {
       if (!p.ageGroup) p.ageGroup = L.ageGroup(p) || 'Child';
       if (p.condition == null) p.condition = s.seeded && demoCases[p.id] || '';
@@ -111,6 +122,7 @@
 
   function save() {
     if (locked) return;
+    if (REMOTE) { scheduleFlush(); return; }
     const json = JSON.stringify(state);
     if (cryptoKey) {
       // Writes are chained so the newest state always lands last.
@@ -129,6 +141,14 @@
   }
 
   function persistKeyring() {
+    if (REMOTE) {
+      // On a clinic server the keys live in their own file on the server, apart from the records. Only supervisors hold them.
+      const u = currentUser();
+      if (!u || u.role !== 'supervisor') return Promise.resolve();
+      const body = { keys: Object.assign({}, keyring) };
+      writing = writing.then(function () { return flush(); }).then(function () { return api('PUT', 'api/keys', body); }).catch(function (e) { console.warn('Could not save patient keys', e); });
+      return writing;
+    }
     const json = JSON.stringify(keyring), key = cryptoKey;
     writing = writing.then(function () {
       if (!key) { localStorage.setItem(KEYRING_KEY, JSON.stringify({ v: 1, keys: JSON.parse(json) })); return; }
@@ -203,9 +223,13 @@
   }
 
   function signIn(login, pass) {
+    if (REMOTE) {
+      return api('POST', 'api/login', { login: login, password: pass }).then(function () { return connect(); }).then(function () { return currentUser(); });
+    }
     const u = findUser(login);
     const fail = function () { audit('Failed sign-in', null, login); throw new Error('Email or password not recognised.'); };
     if (!u) return Promise.resolve().then(fail);
+    if (!u.pwHash && u.hasPassword) return Promise.reject(new Error('This account\u2019s password is kept on the clinic server. Ask a supervisor to set a new one here.'));
     if (!u.pwHash) { setSession(u.id); audit('Signed in (first time)'); return Promise.resolve(u); }
     return hashPassword(pass, u.pwSalt).then(function (h) {
       if (h.pwHash !== u.pwHash) fail();
@@ -215,15 +239,161 @@
     });
   }
 
-  function signOut() { audit('Signed out'); setSession(''); save(); }
+  function signOut() {
+    if (REMOTE) {
+      const done = function () { disconnect(); emit('change'); };
+      return flush().then(function () { return api('POST', 'api/logout', {}); }).then(done, done);
+    }
+    audit('Signed out'); setSession(''); save();
+  }
 
   function setPassword(userId, pass, mustChange) {
+    if (REMOTE) {
+      // The server hashes it; hashes never reach the browser.
+      return flush().then(function () { return api('POST', 'api/password', { userId: userId, password: pass, mustChange: !!mustChange }); }).then(function () {
+        [state, shadow].forEach(function (s) { const u = s && s.users.find(function (x) { return x.id === userId; }); if (u) { u.mustChange = userId === state.settings.currentUserId ? false : !!mustChange; u.hasPassword = true; } });
+      });
+    }
     return hashPassword(pass).then(function (h) {
       const u = state.users.find(function (x) { return x.id === userId; });
       u.pwSalt = h.pwSalt; u.pwHash = h.pwHash; u.mustChange = !!mustChange;
       save();
     });
   }
+
+  /* ---------- clinic server: sync ---------- */
+
+  let shadow = null;          // the state as the server last confirmed it (for working out what changed)
+  let version = 0, flushTimer = null, inflight = null, needRefresh = false, events = null, retryTimer = null;
+  let status = REMOTE ? 'connecting' : 'local';
+  let busyCheck = function () { return false; };
+  let serverInfo = {};
+  const listeners = [];
+
+  function emit(type, detail) { listeners.forEach(function (fn) { try { fn(type, detail); } catch (e) { console.warn(e); } }); }
+  function setStatus(s) { if (s !== status) { status = s; emit('status', s); } }
+
+  function api(method, url, body) {
+    return fetch(url, {
+      method: method, credentials: 'same-origin', cache: 'no-store',
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+      body: body !== undefined ? JSON.stringify(body) : undefined
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) {
+          const e = new Error(data.error || 'The clinic server refused this (' + res.status + ').');
+          e.status = res.status;
+          if (res.status === 401 && url !== 'api/login' && shadow) { disconnect(); emit('signedout'); }
+          throw e;
+        }
+        return data;
+      });
+    }, function () {
+      const e = new Error('Can’t reach the clinic server.');
+      e.status = 0;
+      throw e;
+    });
+  }
+
+  function readPrefs() { try { return JSON.parse(localStorage.getItem(PREFS_KEY) || '{}'); } catch (e) { return {}; } }
+  function writePrefs() {
+    const o = {};
+    Sync.LOCAL_SETTINGS.forEach(function (k) { if (k !== 'currentUserId') o[k] = state.settings[k]; });
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(o)); } catch (e) { /* storage blocked */ }
+  }
+
+  /* Take the server's copy. Changes made here that haven't reached the server yet are replayed on top of it. */
+  function adopt(data) {
+    const pending = shadow ? Sync.diff(shadow, state) : [];
+    remoteMe = data.me;
+    const fresh = migrate(Object.assign(blank(), data.state));
+    Object.assign(fresh.settings, readPrefs(), { currentUserId: data.me });
+    shadow = Sync.clone(fresh);
+    Sync.apply(fresh, pending);
+    state = fresh;
+    version = data.version;
+    keyring = data.keys || {};
+    if (pending.length) scheduleFlush();
+  }
+
+  function connect() {
+    return api('GET', 'api/state').then(function (data) {
+      adopt(data);
+      setStatus('synced');
+      listen();
+    });
+  }
+
+  function disconnect() {
+    if (events) { events.close(); events = null; }
+    clearTimeout(flushTimer); clearTimeout(retryTimer);
+    shadow = null; version = 0; keyring = {}; remoteMe = '';
+    state = blank();
+    setStatus('signedout');
+  }
+
+  // The server announces each new version; fetch it unless it is our own change.
+  function listen() {
+    if (events || typeof EventSource === 'undefined') return;
+    events = new EventSource('api/events');
+    events.onmessage = function (ev) {
+      let v = 0;
+      try { v = JSON.parse(ev.data).version; } catch (e) { return; }
+      if (status === 'offline') setStatus('synced');
+      if (v > version) { needRefresh = true; if (!inflight) refresh(); }
+    };
+    events.onerror = function () { if (shadow) setStatus('offline'); };
+  }
+
+  function refresh() {
+    needRefresh = false;
+    if (!shadow) return Promise.resolve();
+    // Don't swap records under someone's open form; try again shortly.
+    if (busyCheck()) { clearTimeout(retryTimer); retryTimer = setTimeout(refresh, 2500); return Promise.resolve(); }
+    return api('GET', 'api/state').then(function (data) {
+      if (!shadow) return;
+      adopt(data);
+      setStatus('synced');
+      emit('change');
+    }, function (e) { if (e.status === 0) setStatus('offline'); });
+  }
+
+  function scheduleFlush() {
+    writePrefs();
+    if (!shadow) return;
+    clearTimeout(flushTimer);
+    flushTimer = setTimeout(flush, 150);
+  }
+
+  /* Send what changed since the server last confirmed. */
+  function flush() {
+    clearTimeout(flushTimer);
+    if (inflight) return inflight.then(flush);
+    if (!shadow) return Promise.resolve();
+    const snap = Sync.clone(state);
+    const ops = Sync.diff(shadow, snap);
+    if (!ops.length) return Promise.resolve();
+    setStatus('saving');
+    inflight = api('POST', 'api/changes', { ops: ops }).then(function (r) {
+      if (!shadow) return;
+      shadow = snap;
+      if (r.version !== version + 1) needRefresh = true; // someone else saved in between
+      version = r.version;
+      if (r.rejected && r.rejected.length) { needRefresh = true; emit('rejected', r.rejected); }
+      setStatus('synced');
+    }, function (e) {
+      if (e.status === 0) { setStatus('offline'); clearTimeout(retryTimer); retryTimer = setTimeout(flush, 5000); }
+      else if (e.status !== 401) { needRefresh = true; emit('rejected', [{ reason: e.message }]); }
+    }).then(function () {
+      inflight = null;
+      if (needRefresh) return refresh();
+    });
+    return inflight;
+  }
+
+  const ready = !REMOTE ? Promise.resolve() : api('GET', 'api/info').then(function (i) { serverInfo = i; }, function () { /* offline */ })
+    .then(function () { return connect(); })
+    .catch(function (e) { setStatus(e.status === 0 ? 'unreachable' : 'signedout'); });
 
   /* ---------- inbox ---------- */
 
@@ -278,7 +448,7 @@
   function audit(action, patientId, detail) {
     const u = currentUser();
     const p = patientId && state.patients.find(function (x) { return x.id === patientId; });
-    state.audit.push({ at: new Date().toISOString(), userId: u ? u.id : '', user: u ? u.name : '', action: action,
+    state.audit.push({ id: L.uid('aud'), at: new Date().toISOString(), userId: u ? u.id : '', user: u ? u.name : '', action: action,
       patientId: patientId || null, target: p ? p.caseCode : '', detail: detail || '' });
     if (state.audit.length > AUDIT_MAX) state.audit.splice(0, state.audit.length - AUDIT_MAX);
     save();
@@ -637,12 +807,20 @@
     return s;
   }
 
-  if (!locked) keyring = readKeyringPlain();
+  if (!locked && !REMOTE) keyring = readKeyringPlain();
 
   window.Store = {
     get state() { return state; },
     isLocked: function () { return locked; },
-    hasPassphrase: function () { try { return !!cryptoKey || !!localStorage.getItem(ENC_KEY); } catch (e) { return false; } },
+    isServer: function () { return REMOTE; },
+    ready: ready,
+    syncStatus: function () { return status; },
+    serverInfo: function () { return serverInfo; },
+    onSync: function (fn) { listeners.push(fn); },
+    setBusyCheck: function (fn) { busyCheck = fn; },
+    reconnect: function () { setStatus('connecting'); return connect().catch(function (e) { setStatus(e.status === 0 ? 'unreachable' : 'signedout'); }); },
+    sync: function () { return flush(); },
+    hasPassphrase: function () { if (REMOTE) return false; try { return !!cryptoKey || !!localStorage.getItem(ENC_KEY); } catch (e) { return false; } },
     cryptoAvailable: cryptoAvailable,
     setPassphrase: setPassphrase,
     removePassphrase: removePassphrase,
@@ -698,6 +876,12 @@
     flush: function () { return writing; },
     storageReport: function () {
       const rows = [];
+      if (REMOTE) {
+        rows.push({ what: 'Patient and clinic data', where: 'The clinic server (' + location.host + '), in its data folder', key: 'clinic-data.json', bytes: new Blob([JSON.stringify(state)]).size, encrypted: !!serverInfo.encryptedAtRest });
+        rows.push({ what: 'Per-patient keys', where: 'The clinic server, in a separate file', key: 'patient-keys.json', bytes: 0, encrypted: !!serverInfo.encryptedAtRest });
+        rows.push({ what: 'On this device', where: 'Only in memory while you are signed in, plus display preferences', key: PREFS_KEY, bytes: 0, encrypted: false });
+        return rows;
+      }
       const size = function (v) { return v ? new Blob([v]).size : 0; };
       const get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
       const data = get(KEY), encData = get(ENC_KEY), ring = get(KEYRING_KEY);
@@ -737,7 +921,10 @@
       const cur = state.settings.currentUserId;
       keyring = {};
       persistKeyring();
+      const meBefore = state.users.find(function (u) { return u.id === cur; });
       state = seed();
+      // On a clinic server, keep the signed-in account so they stay signed in.
+      if (REMOTE && meBefore && !state.users.some(function (u) { return u.id === cur; })) state.users.unshift(meBefore);
       if (state.users.some(function (u) { return u.id === cur; })) state.settings.currentUserId = cur;
       save();
     }

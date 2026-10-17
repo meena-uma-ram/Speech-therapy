@@ -4,7 +4,12 @@ Working plan for taking Therapy Planner from a single-device prototype to a host
 
 ## 0. Where data is stored today
 
-The prototype stores everything **only in the browser on the device in use** (local storage). Nothing goes to a server. Each browser and device has its own separate copy. Privacy → *Where your data is stored* lists each item, its size and whether it is encrypted. Backups and the key file are wherever the user saves them. Sharing records across staff devices needs the server version described below.
+Two modes:
+
+- **Single device:** everything **only in the browser on the device in use** (local storage). Nothing goes to a server. Each browser and device has its own separate copy.
+- **Clinic server** (`server/server.js`): one shared copy on one clinic computer's disk, encrypted with a passphrase; per-patient keys in a separate file; an access log. Browsers sign in, receive only what their role may see (enforced on the server), and keep nothing after sign-out. Staff reach it over a mesh VPN. See [SYNC-OPTIONS.md](SYNC-OPTIONS.md), [SERVER-SETUP.md](SERVER-SETUP.md) and [LEGAL.md](LEGAL.md).
+
+Privacy → *Where your data is stored* lists each item, its size and whether it is encrypted. Backups and the key file are wherever the user saves them. The hosted (cloud) version described below is the next step after the clinic server: the same code, with KMS-wrapped keys, managed backups and HTTPS on the internet.
 
 ## 1. What the prototype already does (this repository)
 
