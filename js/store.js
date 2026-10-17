@@ -7,6 +7,8 @@
   const L = window.Logic;
   const KEY = 'speech-therapy-planner-v1';
   const ENC_KEY = KEY + '-encrypted';
+  // Per-patient keys live apart from the data and are never written into a backup.
+  const KEYRING_KEY = KEY + '-patient-keys';
   const AUDIT_MAX = 2000;
   const SESSION_KEY = 'speech-therapy-planner-session';
   const PW_ITERATIONS = 100000;
@@ -15,15 +17,17 @@
   const EMPTY = {
     settings: {
       therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable',
-      currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1, autoCover: false
+      currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1, autoCover: false,
+      autoErase: false, lastRetentionRun: ''
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
   let locked = false;
   let cryptoKey = null, cryptoSalt = null;
+  let keyring = {}; // { patientId: base64 AES-256 key }
   let writing = Promise.resolve();
   let state = load();
 
@@ -41,7 +45,7 @@
   /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
       if (!a.reschedules) a.reschedules = [];
@@ -109,12 +113,31 @@
     catch (e) { console.warn('Could not save to localStorage', e); }
   }
 
+  function readKeyringPlain() {
+    try {
+      const o = JSON.parse(localStorage.getItem(KEYRING_KEY) || '{}');
+      return o.enc ? {} : (o.keys || {});
+    } catch (e) { return {}; }
+  }
+
+  function persistKeyring() {
+    const json = JSON.stringify(keyring), key = cryptoKey;
+    writing = writing.then(function () {
+      if (!key) { localStorage.setItem(KEYRING_KEY, JSON.stringify({ v: 1, keys: JSON.parse(json) })); return; }
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, enc.encode(json)).then(function (ct) {
+        localStorage.setItem(KEYRING_KEY, JSON.stringify({ v: 1, enc: true, iv: b64(iv), ct: b64(new Uint8Array(ct)) }));
+      });
+    }).catch(function (e) { console.warn('Could not save patient keys', e); });
+    return writing;
+  }
+
   function setPassphrase(pass) {
     cryptoSalt = crypto.getRandomValues(new Uint8Array(16));
     return deriveKey(pass, cryptoSalt).then(function (key) {
       cryptoKey = key;
       save();
-      return writing;
+      return persistKeyring();
     });
   }
 
@@ -123,6 +146,7 @@
       cryptoKey = null; cryptoSalt = null;
       localStorage.removeItem(ENC_KEY);
       save();
+      return persistKeyring();
     });
   }
 
@@ -134,6 +158,9 @@
         cryptoKey = key; cryptoSalt = salt;
         state = migrate(Object.assign(blank(), JSON.parse(dec.decode(plain))));
         locked = false;
+        const o = JSON.parse(localStorage.getItem(KEYRING_KEY) || '{}');
+        if (!o.enc) { keyring = o.keys || {}; return; }
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(o.iv) }, key, unb64(o.ct)).then(function (k) { keyring = JSON.parse(dec.decode(k)); });
       }, function () { throw new Error('That passphrase is not correct.'); });
     });
   }
@@ -143,6 +170,7 @@
       if (!cryptoKey) return;
       cryptoKey = null;
       state = blank();
+      keyring = {};
       locked = true;
     });
   }
@@ -259,6 +287,116 @@
       appointments: pick('appointments'), sessionLogs: pick('logs'), documents: pick('documents'),
       accessLog: state.audit.filter(function (e) { return e.patientId === pid; })
     };
+  }
+
+  /* ---------- crypto-shredding: per-patient keys, backups, erasure ---------- */
+
+  function aesKey(rawB64) { return crypto.subtle.importKey('raw', unb64(rawB64), 'AES-GCM', false, ['encrypt', 'decrypt']); }
+
+  /*
+   * Backup format v2: people, materials and settings in the clear; each patient's records encrypted with
+   * that patient's own key (AES-256-GCM, patient id bound as associated data). The keys are NOT included.
+   */
+  function exportBackup() {
+    const split = L.splitForBackup(state);
+    const ids = Object.keys(split.bundles);
+    let added = false;
+    ids.forEach(function (pid) { if (!keyring[pid]) { keyring[pid] = b64(crypto.getRandomValues(new Uint8Array(32))); added = true; } });
+    return (added ? persistKeyring() : Promise.resolve()).then(function () {
+      return Promise.all(ids.map(function (pid) {
+        return aesKey(keyring[pid]).then(function (k) {
+          const iv = crypto.getRandomValues(new Uint8Array(12));
+          return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(pid) }, k, enc.encode(JSON.stringify(split.bundles[pid])))
+            .then(function (ct) { return { pid: pid, caseCode: split.bundles[pid].patient.caseCode, iv: b64(iv), ct: b64(new Uint8Array(ct)) }; });
+        });
+      }));
+    }).then(function (patients) {
+      const shared = Object.assign({}, split.shared, { settings: Object.assign({}, split.shared.settings, { currentUserId: '' }) });
+      return JSON.stringify({ format: 'therapy-planner-backup', v: 2, createdAt: new Date().toISOString(),
+        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients });
+    });
+  }
+
+  function openBundle(b) {
+    const raw = keyring[b.pid];
+    if (!raw) return Promise.resolve(null); // key destroyed: crypto-shredded
+    return aesKey(raw).then(function (k) {
+      return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(b.iv), additionalData: enc.encode(b.pid) }, k, unb64(b.ct));
+    }).then(function (pt) { return JSON.parse(dec.decode(pt)); }, function () { return null; });
+  }
+
+  function importBackup(text) {
+    const data = JSON.parse(text);
+    if (data.format === 'therapy-planner-keys') return importKeyFile(data);
+    if (data.format !== 'therapy-planner-backup') {
+      if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
+      const receipts = state.deletionReceipts;
+      state = migrate(Object.assign(blank(), data));
+      state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
+      save();
+      return Promise.resolve({ restored: state.patients.length, shredded: [], legacy: true });
+    }
+    return Promise.all(data.patients.map(openBundle)).then(function (opened) {
+      const receipts = state.deletionReceipts, session = state.settings.currentUserId;
+      const ok = opened.filter(Boolean);
+      state = migrate(Object.assign(blank(), L.mergeBundles(data.shared, ok)));
+      state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
+      state.settings.currentUserId = session;
+      save();
+      return { restored: ok.length, shredded: data.patients.filter(function (b, i) { return !opened[i]; }).map(function (b) { return b.caseCode; }) };
+    });
+  }
+
+  function mergeReceipts(a, b) {
+    const seen = {};
+    return (a || []).concat(b || []).filter(function (r) { if (seen[r.id]) return false; seen[r.id] = true; return true; });
+  }
+
+  /* The key file is the disaster-recovery copy of the key ring. Keep it apart from backups. */
+  function exportKeyFile() {
+    return JSON.stringify({ format: 'therapy-planner-keys', v: 1, exportedAt: new Date().toISOString(), keys: keyring });
+  }
+  function importKeyFile(data) {
+    const erased = {};
+    state.deletionReceipts.forEach(function (r) { erased[r.recordId] = true; });
+    let n = 0;
+    Object.keys(data.keys || {}).forEach(function (pid) { if (!erased[pid] && !keyring[pid]) { keyring[pid] = data.keys[pid]; n++; } });
+    return persistKeyring().then(function () { return { keysAdded: n, keysRefused: Object.keys(data.keys || {}).filter(function (pid) { return erased[pid]; }).length }; });
+  }
+
+  /* Erase a patient everywhere on this device and destroy their key, then issue a deletion receipt. */
+  function erasePatient(pid, reason, by, isTest) {
+    const p = state.patients.find(function (x) { return x.id === pid; });
+    if (!p) return null;
+    const counted = {};
+    L.PATIENT_COLLECTIONS.forEach(function (k) { counted[k] = state[k].filter(function (x) { return x.patientId === pid; }).length; });
+    const hadKey = !!keyring[pid];
+    remove('patients', pid);
+    delete keyring[pid];
+    persistKeyring();
+    const now = new Date();
+    const u = currentUser();
+    const receipt = {
+      id: 'DR-' + now.toISOString().slice(0, 10).replace(/-/g, '') + '-' + b64(crypto.getRandomValues(new Uint8Array(3))).replace(/[^A-Za-z0-9]/g, 'x'),
+      recordId: pid, caseCode: p.caseCode, erasedAt: now.toISOString(), erasedBy: by || (u ? u.name : 'System'), reason: reason,
+      destroyed: ['Patient record', counted.goals + ' goals', counted.appointments + ' sessions', counted.logs + ' session logs',
+        counted.assessments + ' assessments', counted.documents + ' documents', counted.messages + ' messages'],
+      keyDestroyed: hadKey ? 'Key destroyed – this patient is unreadable in every backup' : 'No backup had been made, so no key existed',
+      test: !!isTest
+    };
+    state.deletionReceipts.push(receipt);
+    audit(isTest ? 'Deletion test' : 'Erased record', null, p.caseCode + ' · receipt ' + receipt.id);
+    return receipt;
+  }
+
+  /* Automatic retention rule: erase discharged records once the retention period has passed. */
+  function runRetention(today) {
+    const years = state.settings.retentionYears;
+    const due = state.patients.filter(function (p) { return L.isPastRetention(p, years, today) && !p.legalHold; });
+    const receipts = due.map(function (p) { return erasePatient(p.id, 'Retention period ended (' + years + ' years after discharge)', 'Automatic retention rule'); });
+    state.settings.lastRetentionRun = today || L.todayISO();
+    save();
+    return receipts;
   }
 
   /* ---------- demo data ---------- */
@@ -483,6 +621,8 @@
     return s;
   }
 
+  if (!locked) keyring = readKeyringPlain();
+
   window.Store = {
     get state() { return state; },
     isLocked: function () { return locked; },
@@ -531,6 +671,20 @@
       save();
     },
     exportJSON: function () { return JSON.stringify(state, null, 2); },
+    exportBackup: exportBackup,
+    importBackup: function (text) { return Promise.resolve().then(function () { return importBackup(text); }); },
+    exportKeyFile: exportKeyFile,
+    openBundle: openBundle,
+    erasePatient: erasePatient,
+    runRetention: runRetention,
+    hasKey: function (pid) { return !!keyring[pid]; },
+    keyCount: function () { return Object.keys(keyring).length; },
+    flush: function () { return writing; },
+    rawStorage: function () {
+      const out = [];
+      try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf(KEY) === 0) out.push(localStorage.getItem(k)); } } catch (e) { /* blocked */ }
+      return out.join('\n');
+    },
     importJSON: function (text) {
       const data = JSON.parse(text);
       if (!data || !Array.isArray(data.patients) || !Array.isArray(data.goals)) throw new Error('Not a valid backup file');
@@ -538,14 +692,21 @@
       save();
     },
     clearAll: function () {
-      const users = state.users, me = state.settings.currentUserId;
+      const users = state.users, me = state.settings.currentUserId, receipts = state.deletionReceipts, n = state.patients.length;
       state = blank();
       state.users = users; state.settings.currentUserId = me;
+      keyring = {};
+      persistKeyring();
+      state.deletionReceipts = receipts.concat([{ id: 'DR-' + L.todayISO().replace(/-/g, '') + '-ALL', recordId: '*', caseCode: 'All ' + n + ' patients',
+        erasedAt: new Date().toISOString(), erasedBy: (users.find(function (u) { return u.id === me; }) || {}).name || 'System', reason: 'All patient data deleted',
+        destroyed: ['All patient records'], keyDestroyed: 'All patient keys destroyed – every backup is unreadable for patient data' }]);
       save();
     },
     demoPassword: 'demo1234',
     resetDemo: function () {
       const cur = state.settings.currentUserId;
+      keyring = {};
+      persistKeyring();
       state = seed();
       if (state.users.some(function (u) { return u.id === cur; })) state.settings.currentUserId = cur;
       save();

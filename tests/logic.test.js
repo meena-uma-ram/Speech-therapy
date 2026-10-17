@@ -160,3 +160,27 @@ test('pickCover chooses a free, allowed clinician with the lightest day', () => 
   const none = L.pickCover(target, { users, patientsById, appts, leaves: [{ userId: 'free', from: '2026-10-19', to: '2026-10-21' }], awayId: 'away' });
   assert.strictEqual(none, null);
 });
+
+test('backups split into one bundle per patient and merge back', () => {
+  const state = {
+    settings: { x: 1 }, users: [{ id: 'u' }], materials: [{ id: 'm' }], deletionReceipts: [{ id: 'DR-1' }],
+    patients: [{ id: 'p1', name: 'A' }, { id: 'p2', name: 'B' }],
+    goals: [{ id: 'g1', patientId: 'p1' }, { id: 'g2', patientId: 'p2' }],
+    appointments: [{ id: 'a1', patientId: 'p2' }], logs: [], assessments: [], referrals: [], documents: [],
+    messages: [{ id: 'm1', patientId: 'p1' }, { id: 'm2' }],
+    audit: [{ at: '2', patientId: 'p2' }, { at: '1' }]
+  };
+  const { shared, bundles } = L.splitForBackup(state);
+  assert.deepStrictEqual(Object.keys(bundles), ['p1', 'p2']);
+  assert.deepStrictEqual(shared.messages, [{ id: 'm2' }]);          // no patient data in the shared part
+  assert.strictEqual(JSON.stringify(shared).includes('"A"'), false);
+  assert.deepStrictEqual(bundles.p2.appointments, [{ id: 'a1', patientId: 'p2' }]);
+  const all = L.mergeBundles(shared, [bundles.p1, bundles.p2]);
+  assert.strictEqual(all.patients.length, 2);
+  assert.deepStrictEqual(all.audit.map(e => e.at), ['1', '2']);
+  // A shredded patient (key destroyed) simply cannot be merged back.
+  const without = L.mergeBundles(shared, [bundles.p1]);
+  assert.deepStrictEqual(without.patients.map(p => p.id), ['p1']);
+  assert.strictEqual(without.goals.some(g => g.patientId === 'p2'), false);
+  assert.deepStrictEqual(without.deletionReceipts, [{ id: 'DR-1' }]);
+});

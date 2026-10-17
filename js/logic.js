@@ -414,6 +414,42 @@
   }
   function pickCover(appt, ctx) { return coverCandidates(appt, ctx)[0] || null; }
 
+  /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
+
+  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit'];
+
+  /*
+   * Split app data into what is shared (people, materials, settings, receipts) and one bundle per patient,
+   * so each patient's bundle can be encrypted with that patient's own key.
+   */
+  function splitForBackup(state) {
+    const shared = {};
+    Object.keys(state).forEach(function (k) {
+      if (k === 'patients') return;
+      shared[k] = PATIENT_COLLECTIONS.indexOf(k) >= 0 ? (state[k] || []).filter(function (x) { return !x.patientId; }) : state[k];
+    });
+    const bundles = {};
+    (state.patients || []).forEach(function (p) {
+      const b = { patient: p };
+      PATIENT_COLLECTIONS.forEach(function (k) { b[k] = (state[k] || []).filter(function (x) { return x.patientId === p.id; }); });
+      bundles[p.id] = b;
+    });
+    return { shared: shared, bundles: bundles };
+  }
+
+  /* Rebuild app data from the shared part and whichever patient bundles could be decrypted. */
+  function mergeBundles(shared, bundles) {
+    const s = JSON.parse(JSON.stringify(shared));
+    s.patients = [];
+    PATIENT_COLLECTIONS.forEach(function (k) { s[k] = s[k] || []; });
+    bundles.forEach(function (b) {
+      s.patients.push(b.patient);
+      PATIENT_COLLECTIONS.forEach(function (k) { s[k] = s[k].concat(b[k] || []); });
+    });
+    s.audit.sort(function (x, y) { return x.at < y.at ? -1 : x.at > y.at ? 1 : 0; });
+    return s;
+  }
+
   const PROGRESS_LABELS = {
     improving: 'Improving',
     steady: 'Steady',
@@ -479,7 +515,8 @@
     addYears: addYears, isPastRetention: isPastRetention, DOC_TYPES: DOC_TYPES, DOC_FIELDS: DOC_FIELDS, DOC_STATUS: DOC_STATUS,
     prefillDoc: prefillDoc, caseProgress: caseProgress,
     RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
-    clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates
+    clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
+    PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

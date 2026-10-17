@@ -598,7 +598,7 @@
         } else if (JSON.stringify(p.consent || {}) !== JSON.stringify(consent)) S.audit('Updated consent', saved.id);
         else S.audit('Edited patient details', saved.id);
       },
-      id && me().role === 'supervisor' ? function () { const code = p.caseCode; S.remove('patients', id); S.audit('Erased record', null, code); go('#/patients'); } : null);
+      id && me().role === 'supervisor' ? function () { const r = S.erasePatient(id, 'Erasure request'); toast('Erased · receipt ' + r.id); go('#/patients'); } : null);
   }
 
   function goalForm(id, patientId) {
@@ -1234,7 +1234,8 @@
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Consent recorded</strong> per patient; allotment to students and family reports check it.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
-      '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records are flagged for erasure after ' + esc(set.retentionYears) + ' years' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
+      '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records ' + (set.autoErase ? 'are erased automatically' : 'are flagged for erasure') + ' ' + esc(set.retentionYears) + ' years after therapy ends' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Crypto-shredding.</strong> Each patient has their own key, and backups store each patient encrypted with it. Erasing a patient destroys the key, so every earlier backup becomes unreadable for that patient. Each erasure leaves a deletion receipt.</div></li>' +
       '</ul><p class="small muted">Everyone signs in with their own password, stored only as a salted hash, and is signed out after ' + esc(set.autoLockMinutes) + ' minutes idle. This protects records on a shared clinic computer. For staff on separate devices, the app needs a server with individual accounts.</p></section>';
 
     html += '<section class="card"><h2>Encryption &amp; lock</h2>';
@@ -1252,18 +1253,19 @@
     html += '<form class="card" id="settings-form"><h2>Settings</h2>' +
       '<label class="check"><input type="checkbox" name="hideNames"' + (set.hideNames ? ' checked' : '') + '> Hide patient names on screen (show case code and initials)</label>' +
       '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"></label>' +
-      '<label>Keep discharged records (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
+      '<label>Keep records after therapy ends (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
       '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"></label></div>' +
       '<div class="grid-4"><label>Day starts<input type="time" name="dayStart" value="' + esc(set.dayStart) + '"></label>' +
       '<label>Lunch from<input type="time" name="lunchStart" value="' + esc(set.lunchStart) + '"></label>' +
       '<label>Lunch until<input type="time" name="lunchEnd" value="' + esc(set.lunchEnd) + '"></label>' +
       '<label>Day ends<input type="time" name="dayEnd" value="' + esc(set.dayEnd) + '"></label></div>' +
+      (isLead ? '<label class="check"><input type="checkbox" name="autoErase"' + (set.autoErase ? ' checked' : '') + '> Erase records automatically when the retention period ends (checked daily; each erasure issues a receipt)</label>' : '') +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div></form>';
 
     if (due.length && isLead) {
       html += '<section class="card"><h2>Due for erasure</h2><ul class="list flat">' + due.map(function (p) {
         return '<li><div class="row"><div><strong>' + esc(pseud(p)) + '</strong><div class="muted small">Discharged ' + esc(L.formatDate(p.dischargedAt)) + '</div></div>' +
-          '<button class="btn btn-sm btn-danger" data-action="erase" data-id="' + p.id + '">Erase</button></div></li>';
+          '<button class="btn btn-sm btn-danger" data-action="erase" data-reason="Retention period ended" data-id="' + p.id + '">Erase</button></div></li>';
       }).join('') + '</ul></section>';
     }
 
@@ -1282,15 +1284,32 @@
         return '<tr><td class="nowrap">' + esc(fmtStamp(e.at)) + '</td><td>' + esc(e.user) + '</td><td>' + esc(e.action) + (e.detail ? ' <span class="muted">(' + esc(e.detail) + ')</span>' : '') + '</td><td>' + esc(e.target || '') + '</td></tr>';
       }).join('') + '</tbody></table></div><p class="small muted">Showing the latest ' + log.length + ' of ' + st.audit.length + ' entries.</p></section>';
 
-    html += '<section class="card"><h2>Backup</h2><p class="small muted">A backup contains identifiable health data and is <strong>not encrypted</strong>. Store it only in an encrypted, access-controlled location approved by your organisation.</p>' +
-      '<div class="actions wrap"><button class="btn" data-action="export">Download backup</button><button class="btn" data-action="copy-backup">Copy backup as text</button>' +
-      '<label class="btn">Restore from backup<input type="file" accept="application/json,.json" id="import-file" hidden></label></div></section>';
+    html += '<section class="card"><h2>Backups &amp; keys</h2>' +
+      '<p class="small">Backups keep people, materials and settings in the clear, and <strong>each patient encrypted with their own key</strong>. The keys stay on this device and are never put in a backup. Erasing a patient destroys their key, so that patient can never be restored from any earlier backup.</p>' +
+      '<div class="actions wrap"><button class="btn btn-primary" data-action="make-backup">Create backup</button><button class="btn" data-action="export">Download backup</button>' +
+      '<label class="btn">Restore backup or key file<input type="file" accept="application/json,.json" id="import-file" hidden></label></div>' +
+      '<div id="backup-out"></div>' +
+      '<p class="small muted">Patient keys on this device: ' + S.keyCount() + '. To restore on another device you also need the <strong>key file</strong>. It is the master copy of the keys, like a cloud key management service, so keep it in one secure place separate from backups. Replace it after every erasure: an old key file can still open erased patients in old backups.</p>' +
+      (isLead ? '<div class="actions wrap"><button class="btn btn-sm" data-action="copy-keys">Copy key file</button></div>' : '') + '</section>';
+
+    if (isLead) {
+      const receipts = (st.deletionReceipts || []).slice().reverse();
+      html += '<section class="card"><div class="card-head"><h2>Deletion receipts</h2>' + (receipts.length ? '<button class="btn btn-sm" data-action="copy-receipts">Copy receipts</button>' : '') + '</div>' +
+        '<p class="small muted">Proof of each erasure without keeping the data: receipt number, case code, date, who erased it and why.</p>' +
+        (receipts.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Receipt</th><th>Case</th><th>Erased</th><th>By</th><th>Reason</th><th>Backups</th></tr></thead><tbody>' + receipts.map(function (r) {
+          return '<tr><td class="nowrap"><code>' + esc(r.id) + '</code>' + (r.test ? ' <span class="badge">Test</span>' : '') + '</td><td class="nowrap">' + esc(r.caseCode) + '</td><td class="nowrap">' + esc(fmtStamp(r.erasedAt)) + '</td><td>' + esc(r.erasedBy) + '</td><td>' + esc(r.reason) + '</td><td class="small">' + esc(r.keyDestroyed) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<p class="muted small">No erasures yet.</p>') +
+        '<div class="actions wrap"><button class="btn" data-action="deletion-test">Run deletion test</button>' + (set.autoErase ? '' : '<button class="btn" data-action="run-retention">Apply retention rule now</button>') + '</div>' +
+        '<div id="deletion-test-out"></div></section>';
+    }
 
     html += '<section class="card"><h2>Your organisation\'s part</h2><p class="small">The app supports GDPR compliance but cannot provide it alone. Your clinic or university, as data controller, still needs to:</p><ul class="small plain">' +
       '<li>Record the lawful basis for processing health data (usually Article 6(1)(e) or (b) with Article 9(2)(h)), and complete a DPIA.</li>' +
       '<li>Give patients a privacy notice explaining how their data is used, including by student clinicians.</li>' +
       '<li>Use encrypted, managed devices, and send reports only through a secure channel (not personal email or messaging apps).</li>' +
-      '<li>Have a process for access and erasure requests (one month to respond) and for reporting breaches (within 72 hours).</li></ul></section>';
+      '<li>Have a process for access and erasure requests (one month to respond) and for reporting breaches (within 72 hours).</li>' +
+      '<li>Where a law requires records to be kept for a set number of years, set the retention period to match. Keep only what the law requires, for as long as it requires, with minimal access. Delete everything else on schedule.</li></ul>' +
+      '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
     html += '<section class="card"><h2>Start over</h2><div class="actions wrap">' +
       '<button class="btn" data-action="reset-demo">Load demo data</button>' +
@@ -1329,7 +1348,7 @@
       copyText(JSON.stringify(S.patientRecord(pid), null, 2));
     },
     'erase-selected': function () { eraseRecord(document.getElementById('sar-patient').value); },
-    'erase': function (el) { eraseRecord(el.dataset.id); },
+    'erase': function (el) { eraseRecord(el.dataset.id, el.dataset.reason); },
     'discharge': function (el) {
       const p = S.patient(el.dataset.id);
       if (p.status === 'discharged') { p.status = 'active'; p.dischargedAt = null; S.audit('Reopened case', p.id); }
@@ -1342,15 +1361,76 @@
     }
   };
 
-  function eraseRecord(pid) {
+  Object.assign(ACTIONS, {
+    'make-backup': function () {
+      S.exportBackup().then(function (text) {
+        S.audit('Created backup');
+        const parsed = JSON.parse(text);
+        document.getElementById('backup-out').innerHTML = '<p class="small">Backup created: ' + parsed.patients.length + ' patients, each encrypted with their own key. Copy it into your organisation\'s secure storage.</p>' +
+          '<textarea id="backup-text" rows="5" readonly>' + esc(text) + '</textarea><div class="actions wrap"><button class="btn btn-sm" data-action="copy-backup">Copy backup</button></div>';
+      });
+    },
+    'copy-keys': function () { S.audit('Copied key file'); copyText(S.exportKeyFile()); },
+    'copy-receipts': function () {
+      copyText(S.state.deletionReceipts.map(function (r) { return [r.id, r.caseCode, r.erasedAt, r.erasedBy, r.reason, r.keyDestroyed].join('\t'); }).join('\n'));
+    },
+    'run-retention': function () {
+      const r = S.runRetention();
+      toast(r.length ? r.length + ' record' + (r.length === 1 ? '' : 's') + ' erased by the retention rule' : 'No records have passed the retention period');
+      render();
+    },
+    'deletion-test': function () { runDeletionTest(); }
+  });
+
+  /*
+   * Deletion test: create a fake patient, back it up, erase it, then check every place data lives on this device
+   * and confirm the earlier backup can no longer be read for that patient.
+   */
+  function runDeletionTest() {
+    const out = document.getElementById('deletion-test-out');
+    out.innerHTML = '<p class="small muted">Running…</p>';
+    const marker = 'Deletion-Test ' + Math.random().toString(36).slice(2, 8);
+    const pid = 'p_test_' + Date.now().toString(36);
+    S.upsert('patients', { id: pid, name: marker, caseCode: 'TEST-' + pid.slice(-4).toUpperCase(), status: 'discharged', ageGroup: 'Adult', condition: 'Test',
+      consent: { therapy: true }, sessionsAllotted: 1, dischargedAt: L.todayISO(), notes: marker });
+    S.upsert('goals', { patientId: pid, title: marker, specific: marker, status: 'active', materialIds: [] });
+    S.upsert('appointments', { patientId: pid, date: L.todayISO(), time: '07:00', duration: 30, goalIds: [], status: 'attended', reschedules: [], observers: [] });
+    S.upsert('logs', { patientId: pid, date: L.todayISO(), entries: [], notes: marker, homework: '' });
+    S.send(me().id, { kind: 'note', patientId: pid, subject: 'Test message', body: marker });
+    S.audit('Deletion test: created test patient', pid);
+    let backup, receipt;
+    S.exportBackup().then(function (text) {
+      backup = JSON.parse(text);
+      receipt = S.erasePatient(pid, 'Deletion test', null, true);
+      return S.flush();
+    }).then(function () {
+      const bundle = backup.patients.find(function (b) { return b.pid === pid; });
+      return S.openBundle(bundle).then(function (readable) {
+        const live = JSON.stringify(Object.assign({}, S.state, { deletionReceipts: [] }));
+        const checks = [
+          ['Test patient was in the backup before erasure', !!bundle],
+          ['Gone from live records (patients, goals, sessions, logs, messages, access log)', live.indexOf(pid) < 0 && live.indexOf(marker) < 0],
+          ['Not in this device\'s stored data', S.rawStorage().indexOf(marker) < 0],
+          ['Patient key destroyed', !S.hasKey(pid)],
+          ['The earlier backup can no longer be read for this patient', readable === null],
+          ['Name not readable anywhere in the backup file', JSON.stringify(backup).indexOf(marker) < 0],
+          ['Deletion receipt issued (' + receipt.id + ')', S.state.deletionReceipts.some(function (r) { return r.id === receipt.id; })]
+        ];
+        const pass = checks.every(function (c) { return c[1]; });
+        S.audit('Deletion test ' + (pass ? 'passed' : 'FAILED'));
+        out.innerHTML = '<div class="callout ' + (pass ? 'ok' : 'warn') + '"><strong>Deletion test ' + (pass ? 'passed' : 'failed') + '</strong><ul class="plain">' +
+          checks.map(function (c) { return '<li>' + tick(c[1]) + ' ' + esc(c[0]) + '</li>'; }).join('') + '</ul></div>';
+      });
+    }).catch(function (e) { out.innerHTML = '<p class="form-error">The test could not run: ' + esc(e.message) + '</p>'; });
+  }
+
+  function eraseRecord(pid, reason) {
     const p = S.patient(pid);
     if (!p) return;
-    ask('Erase all data for ' + pseud(p) + '? This removes the record, assessments, sessions, notes and coursework. It cannot be undone.', 'Erase').then(function (ok) {
+    ask('Erase all data for ' + pseud(p) + '? This removes the record, assessments, sessions, notes and coursework from this device and destroys the patient\'s key, so earlier backups can no longer be read for this patient. It cannot be undone.', 'Erase').then(function (ok) {
       if (!ok) return;
-      const code = p.caseCode;
-      S.remove('patients', pid);
-      S.audit('Erased record', null, code);
-      toast('Record erased');
+      const r = S.erasePatient(pid, reason || 'Erasure request');
+      toast('Erased · deletion receipt ' + r.id);
       go('#/patients');
       render();
     });
@@ -1961,6 +2041,10 @@
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
     });
     if (pendingNotice) { pendingNotice = false; showNotices(); }
+    if (S.state.settings.autoErase && S.state.settings.lastRetentionRun !== L.todayISO()) {
+      const erased = S.runRetention();
+      if (erased.length) toast(erased.length + ' record' + (erased.length === 1 ? '' : 's') + ' erased by the retention rule – see Privacy → Deletion receipts');
+    }
   }
 
   /* ---------- events ---------- */
@@ -1991,7 +2075,7 @@
         }).join('\n'));
         break;
       }
-      case 'copy-backup': S.audit('Copied backup'); copyText(S.exportJSON()); break;
+      case 'copy-backup': copyText(document.getElementById('backup-text').value); break;
       case 'copy-report': {
         const log = S.state.logs.find(function (l) { return l.id === document.getElementById('report-text').dataset.log; });
         S.audit('Copied family report', log && log.patientId);
@@ -2016,13 +2100,15 @@
         break;
       }
       case 'export': {
-        S.audit('Downloaded backup');
-        const blob = new Blob([S.exportJSON()], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'speech-therapy-backup-' + L.todayISO() + '.json';
-        a.click();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        S.exportBackup().then(function (text) {
+          S.audit('Downloaded backup');
+          const blob = new Blob([text], { type: 'application/json' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = 'speech-therapy-backup-' + L.todayISO() + '.json';
+          a.click();
+          setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+        });
         break;
       }
       case 'reset-demo':
@@ -2058,8 +2144,16 @@
     }
     if (t.id === 'import-file' && t.files[0]) {
       t.files[0].text().then(function (text) {
-        try { S.importJSON(text); S.audit('Restored backup'); render(); toast('Backup restored'); }
-        catch (e) { toast('Could not restore: ' + e.message); }
+        S.importBackup(text).then(function (r) {
+          if (r.keysAdded != null) {
+            S.audit('Restored key file', null, r.keysAdded + ' keys');
+            toast(r.keysAdded + ' keys restored' + (r.keysRefused ? '; ' + r.keysRefused + ' refused (erased patients)' : ''));
+          } else {
+            S.audit('Restored backup', null, r.restored + ' patients' + (r.shredded.length ? ', ' + r.shredded.length + ' unreadable' : ''));
+            toast('Restored ' + r.restored + ' patients' + (r.shredded.length ? '. ' + r.shredded.length + ' could not be read (erased or key missing): ' + r.shredded.join(', ') : ''));
+          }
+          render();
+        }).catch(function (e) { toast('Could not restore: ' + e.message); });
       });
     }
   });
@@ -2109,6 +2203,8 @@
       const set = S.state.settings;
       set.hideNames = form.querySelector('[name=hideNames]').checked;
       set.autoLockMinutes = Number(form.querySelector('[name=autoLockMinutes]').value) || 10;
+      const ae = form.querySelector('[name=autoErase]');
+      if (ae) set.autoErase = ae.checked;
       if (!form.querySelector('[name=retentionYears]').disabled) set.retentionYears = Number(form.querySelector('[name=retentionYears]').value) || 0;
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
       ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {

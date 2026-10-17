@@ -480,3 +480,4 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; ba
 details summary { cursor: pointer; color: var(--primary); }
 .add-user h3 { font-size: .95rem; margin: 16px 0 8px; }
 body.locked main { max-width: none; }
+.callout.ok { background: var(--good-soft); } .callout.ok strong { color: var(--good); } #backup-text { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .75rem; }

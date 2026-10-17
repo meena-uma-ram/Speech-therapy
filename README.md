@@ -56,10 +56,12 @@ Documents are **pre-filled** from what the app already knows. The pre-assessment
 | Consent / permissions | Recorded per patient (therapy, student involvement, family reports, teaching). Allotment to students and family reports check it |
 | Accountability | Access log of opening, editing, sharing, allotting, reviewing, exporting and erasing records |
 | Right of access & portability | "Copy full record" exports everything held about a person as JSON |
-| Right to erasure | Erasing a patient removes all linked assessments, sessions, notes and coursework; the log keeps only the case code |
-| Storage limitation | Retention period for discharged records; records past it are listed for erasure |
+| Right to erasure | Erasing a patient removes all linked records on the device **and destroys the patient's key** (crypto-shredding), so earlier backups can no longer be read for that patient. Each erasure issues a **deletion receipt** |
+| Backups | Each patient is encrypted with their own key; keys are never in the backup. A separate key file is the recovery copy of the keys |
+| Deletion test | One click creates a fake patient, backs it up, erases it, and checks every place data lives on the device |
+| Storage limitation | Retention period after therapy ends; records past it are listed, or **erased automatically** by a daily rule |
 
-**Limits, stated plainly:** this is a single-device app. Sign-in protects records on a shared clinic computer, but everyone's data is on that one device. For staff and students on their own devices, it needs a server with individual accounts, role-based access enforced on the server, and encrypted transport and backups. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. Backups are not encrypted.
+**Limits, stated plainly:** this is a single-device app. Sign-in protects records on a shared clinic computer, but everyone's data is on that one device. For staff and students on their own devices, it needs a server with individual accounts, role-based access enforced on the server, and encrypted transport and backups. Your organisation, as data controller, still needs a DPIA, a privacy notice, a documented lawful basis (usually Art. 6(1)(e)/(b) with Art. 9(2)(h)), and processes for access requests and breaches. See [docs/SECURITY-PLAN.md](docs/SECURITY-PLAN.md) for the server design, risks and launch plan.
 
 ## Daily work
 
