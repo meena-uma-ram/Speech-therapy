@@ -416,7 +416,7 @@
 
   /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
 
-  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit'];
+  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders'];
 
   /*
    * Split app data into what is shared (people, materials, settings, receipts) and one bundle per patient,
@@ -448,6 +448,50 @@
     });
     s.audit.sort(function (x, y) { return x.at < y.at ? -1 : x.at > y.at ? 1 : 0; });
     return s;
+  }
+
+  /* ---------- appointment reminders: SMS or WhatsApp Business ---------- */
+
+  const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp Business' };
+
+  /*
+   * Which channel to use for a patient, or null with a reason.
+   * Clinic setting: 'sms', 'whatsapp' or 'both' (patient chooses). Patient preference: 'default', 'sms', 'whatsapp' or 'none'.
+   */
+  function reminderChannel(patient, messaging) {
+    const pref = patient.reminders || {};
+    if (!pref.optIn) return { channel: null, reason: 'No opt-in recorded' };
+    if (!pref.phone) return { channel: null, reason: 'No mobile number' };
+    if (pref.channel === 'none') return { channel: null, reason: 'Chose no reminders' };
+    const clinic = (messaging && messaging.channel) || 'sms';
+    let ch = pref.channel && pref.channel !== 'default' ? pref.channel : (clinic === 'both' ? (messaging.defaultChannel || 'sms') : clinic);
+    if (clinic !== 'both' && ch !== clinic) ch = clinic; // the clinic only uses one channel
+    return { channel: ch };
+  }
+
+  /* Fill a reminder template. Only neutral fields are available: no names, conditions or notes. */
+  function fillTemplate(tpl, vars) {
+    return String(tpl || '').replace(/\{(clinic|day|date|time|link)\}/g, function (m, k) { return vars[k] != null ? vars[k] : m; });
+  }
+
+  /* Words that suggest health details leaked into a reminder template. */
+  function templateWarnings(tpl) {
+    const out = [];
+    if (/\{(?!clinic|day|date|time|link\})[^}]*\}/.test(tpl)) out.push('Unknown placeholder – use {clinic}, {day}, {date}, {time} and {link} only.');
+    if (/therap|speech|stammer|stutter|autis|aphasia|stroke|cleft|dysphag|diagnos|disorder|delay/i.test(tpl)) out.push('Avoid health words in reminders – a lock screen or shared phone can show them.');
+    return out;
+  }
+
+  /* SMS length: 160 characters per part (70 if any non-GSM character such as Hindi or emoji). */
+  function smsParts(text) {
+    const gsm = /^[\x0A\x0D\x20-\x7E£¥èéùìòÇØøÅå_ÆæßÉ¡ÄÖÑÜ§¿äöñüà]*$/.test(text);
+    const single = gsm ? 160 : 70, multi = gsm ? 153 : 67;
+    return { chars: text.length, unicode: !gsm, parts: text.length <= single ? 1 : Math.ceil(text.length / multi) };
+  }
+
+  function maskPhone(phone) {
+    const d = String(phone || '').replace(/\s+/g, '');
+    return d.length > 4 ? d.slice(0, d.length - 7).replace(/./g, function (c, i) { return i < 3 ? c : '•'; }) + '•••' + d.slice(-4) : d;
   }
 
   const PROGRESS_LABELS = {
@@ -516,7 +560,8 @@
     prefillDoc: prefillDoc, caseProgress: caseProgress,
     RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
     clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
-    PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles
+    PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles,
+    CHANNELS: CHANNELS, reminderChannel: reminderChannel, fillTemplate: fillTemplate, templateWarnings: templateWarnings, smsParts: smsParts, maskPhone: maskPhone
   };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

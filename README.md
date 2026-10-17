@@ -34,6 +34,14 @@ Review comments ("Lesson plan returned with comments"), approvals, new allotment
 
 Each patient has **sessions allotted** (set when the case is allotted). The patient file, cases table and session page show *attended of allotted*, *did not attend*, *cancelled*, *rescheduled* and *booked*. Mark attendance on the session page. **Reschedule** asks for the new time, **who asked for it** (patient/family, clinician, supervisor, other) and the reason. The supervisor is told each time, and **Cases → Reschedules** lists them all with totals by who asked for the change.
 
+### Appointment reminders: SMS or WhatsApp Business
+
+Under **Privacy → Appointment reminders**, a supervisor chooses **SMS only**, **WhatsApp Business only**, or **both, with each patient choosing** (and a default). Each patient's details hold their mobile number, chosen channel and **opt-in with a timestamp**. **Reports → Appointment reminders** lists the day's sessions with the channel and message for each, plus who won't get one and why. Messages contain only the clinic name, date, time and portal link, and the app warns if a template includes health words. The app can't send messages until there's a server version; for now, *Copy SMS list* and *Copy WhatsApp list* produce a phone,message list to paste into your provider.
+
+### Where the data is stored
+
+Only in **this browser on this device** (local storage). Nothing is sent anywhere. **Privacy → Where your data is stored** shows each item, its size and whether it is encrypted. Each browser and device keeps its own separate copy.
+
 ### Invite to observe
 
 From a session, **Invite to observe** (or co-treat or supervise) sends an invitation. When it is accepted, the session appears on that person's timetable and they can open the record for it.

@@ -2,6 +2,10 @@
 
 Working plan for taking Therapy Planner from a single-device prototype to a hosted service for clinics in India. This is not legal advice: confirm retention periods, consent wording and children's-data handling with an Indian privacy lawyer.
 
+## 0. Where data is stored today
+
+The prototype stores everything **only in the browser on the device in use** (local storage). Nothing goes to a server. Each browser and device has its own separate copy. Privacy → *Where your data is stored* lists each item, its size and whether it is encrypted. Backups and the key file are wherever the user saves them. Sharing records across staff devices needs the server version described below.
+
 ## 1. What the prototype already does (this repository)
 
 | Area | Status |
@@ -84,7 +88,11 @@ Whatever the channel, it carries only a **neutral nudge and a link**, e.g. "Your
 
 Avoid for patient communication: personal WhatsApp or SMS from staff phones, Telegram (chats aren't end-to-end encrypted by default), Signal (no business API), and email attachments with reports.
 
-**Recommended stack for a pilot:** WhatsApp Business (via a provider) as the main channel, with SMS (DLT-registered) as fallback. Both only send a time plus a link to the OTP-protected portal.
+**Let each clinic choose.** The app supports **SMS only**, **WhatsApp Business only**, or **both, with each patient choosing** (and a clinic default for anyone who hasn't chosen). Each patient's mobile number, chosen channel and opt-in, with a timestamp and who agreed, are recorded in their details. Both channels send only the clinic name, date, time and a link to the OTP-protected portal. In the prototype, the Reminders tab produces a phone,message list per channel to paste into the provider. The server version sends through the provider's API.
+
+Before going live with each channel:
+- **SMS:** register on a TRAI DLT platform (entity, 6-character sender ID, content template). The template in the app must match the approved wording exactly.
+- **WhatsApp Business:** sign up through a provider, verify the business, and get the reminder template approved. Use the same template name in the app.
 
 ## 6. India: DPDPA points to confirm with the lawyer
 

@@ -481,3 +481,16 @@ details summary { cursor: pointer; color: var(--primary); }
 .add-user h3 { font-size: .95rem; margin: 16px 0 8px; }
 body.locked main { max-width: none; }
 .callout.ok { background: var(--good-soft); } .callout.ok strong { color: var(--good); } #backup-text { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: .75rem; }
+
+/* ---------- reminders & storage ---------- */
+.chan { display: inline-block; font-size: .72rem; font-weight: 700; padding: 1px 8px; border-radius: 6px; vertical-align: middle; }
+.chan-sms { background: var(--info-soft); color: var(--info); }
+.chan-whatsapp { background: var(--good-soft); color: var(--good); }
+.reminder-text { margin-top: 4px; padding: 6px 10px; background: var(--bg); border-radius: 8px; }
+.preview { background: var(--bg); border-radius: 8px; padding: 6px 10px; }
+.channels { display: flex; flex-direction: column; gap: 10px; }
+label.check.radio { align-items: flex-start; }
+label.check.radio input { margin-top: 3px; }
+.channel-cols h3 { font-size: .95rem; margin: 8px 0; }
+.channel-cols > div { min-width: 0; }
+.reminders .btn { white-space: nowrap; } .reminders .badge { text-transform: none; }

@@ -18,10 +18,16 @@
     settings: {
       therapistName: '', dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', scheduleView: 'timetable',
       currentUserId: '', hideNames: false, retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1, autoCover: false,
-      autoErase: false, lastRetentionRun: ''
+      autoErase: false, lastRetentionRun: '',
+      messaging: {
+        channel: 'both', defaultChannel: 'sms', clinicName: 'Bright Steps Clinic', portalLink: 'brightsteps.in/r', provider: '',
+        smsSenderId: 'BRSTEP', smsTemplateId: '', waTemplateName: 'appointment_reminder', hoursBefore: 24,
+        smsTemplate: '{clinic}: appointment on {day} at {time}. Details: {link}',
+        waTemplate: 'Hello, this is a reminder from {clinic} about your appointment on {day} at {time}. View details: {link}'
+      }
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -45,7 +51,8 @@
   /* Fill in fields added after earlier releases. */
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    s.settings.messaging = Object.assign({}, EMPTY.settings.messaging, s.settings.messaging);
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
       if (!a.reschedules) a.reschedules = [];
@@ -70,6 +77,7 @@
       if (!p.assignedTo && p.status === 'active') p.assignedTo = me;
       if (!p.consent) p.consent = { therapy: true, students: false, shareReports: false, teaching: false, recordedOn: '', givenBy: '' };
       if (p.sessionsAllotted == null) p.sessionsAllotted = p.status === 'active' ? 12 : 0;
+      if (!p.reminders) p.reminders = { channel: 'default', phone: '', optIn: false, optInAt: '', optInBy: '' };
     });
     return s;
   }
@@ -248,8 +256,7 @@
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
       // Erasure covers every record linked to the person, including messages about them.
-      state.messages = state.messages.filter(function (m) { return m.patientId !== id; });
-      ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
+      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents'].forEach(function (k) {
         state[k] = state[k].filter(function (x) { return x.patientId !== id; });
       });
       state.audit.forEach(function (e) { if (e.patientId === id) { e.patientId = null; e.target = '(erased record)'; } });
@@ -445,6 +452,15 @@
     pat('p_rob', 'Robert Hughes', 67, 'Adult', 'Stroke – aphasia', 'Left MCA stroke 4 months ago; anomia, good comprehension', '', 'r.hughes@example.com',
       { assignedTo: 'u_ther', consent: Object.assign({}, consentAll, { students: false, givenBy: 'Patient' }) });
     pat('p_noah', 'Noah Williams', 7, 'Child', 'Autism', 'Social communication', 'Ms. Williams', '(555) 887-1200', { assignedTo: 'u_ther' });
+    const prefs = {
+      p_ava: ['whatsapp', '+91 98450 12345', true], p_isla: ['sms', '+91 99860 22334', true], p_leo: ['default', '+91 90080 45566', true],
+      p_maya: ['whatsapp', '+91 97400 78899', true], p_rob: ['sms', '+91 94480 11223', true], p_noah: ['default', '+91 98860 33445', false]
+    };
+    s.patients.forEach(function (p) {
+      const x = prefs[p.id];
+      p.reminders = x ? { channel: x[0], phone: x[1], optIn: x[2], optInAt: x[2] ? new Date(Date.now() - 70 * 864e5).toISOString() : '', optInBy: x[2] ? (p.guardian ? 'Parent' : 'Patient') : '' }
+        : { channel: 'default', phone: '', optIn: false, optInAt: '', optInBy: '' };
+    });
     // Referred by diagnostics, waiting to be allotted.
     pat('p_grace', 'Grace Lee', 72, 'Adult', 'Dysphagia', 'Oropharyngeal dysphagia after stroke; coughing on thin fluids', 'Daughter: Ms. Lee', 'lee.family@example.com',
       { status: 'referred', sessionsAllotted: 0, referredAt: L.addDays(t, -2), consent: Object.assign({}, consentAll, { givenBy: 'Patient', recordedOn: L.addDays(t, -3) }) });
@@ -680,6 +696,20 @@
     hasKey: function (pid) { return !!keyring[pid]; },
     keyCount: function () { return Object.keys(keyring).length; },
     flush: function () { return writing; },
+    storageReport: function () {
+      const rows = [];
+      const size = function (v) { return v ? new Blob([v]).size : 0; };
+      const get = function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } };
+      const data = get(KEY), encData = get(ENC_KEY), ring = get(KEYRING_KEY);
+      rows.push({ what: 'Patient and clinic data', where: 'This browser\'s local storage', key: encData ? ENC_KEY : KEY, bytes: size(encData || data), encrypted: !!encData });
+      let ringEnc = false;
+      try { ringEnc = !!(ring && JSON.parse(ring).enc); } catch (e) { /* ignore */ }
+      rows.push({ what: 'Per-patient keys (' + Object.keys(keyring).length + ')', where: 'This browser\'s local storage, kept apart from the data', key: KEYRING_KEY, bytes: size(ring), encrypted: ringEnc });
+      let sess = null;
+      try { sess = sessionStorage.getItem(SESSION_KEY); } catch (e) { /* ignore */ }
+      rows.push({ what: 'Who is signed in', where: 'This browser tab only (cleared when the tab closes)', key: SESSION_KEY, bytes: size(sess), encrypted: false });
+      return rows;
+    },
     rawStorage: function () {
       const out = [];
       try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.indexOf(KEY) === 0) out.push(localStorage.getItem(k)); } } catch (e) { /* blocked */ }

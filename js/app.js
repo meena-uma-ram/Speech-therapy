@@ -518,10 +518,12 @@
   }
 
   function viewReports(params) {
+    if (params.tab === 'reminders') return viewReminders(params);
     const date = params.date || L.todayISO();
     const m = maps();
     const appts = visibleAppts(S.appointmentsOn(date)).filter(function (a) { return a.status !== 'cancelled'; });
-    let html = '<header class="page-head"><div><h1>Daily reports</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div></header>' + dateNav('reports', date);
+    let html = '<header class="page-head"><div><h1>Reports &amp; reminders</h1><p class="muted">' + esc(L.formatDate(date)) + '</p></div></header>' +
+      reportTabs('reports', date) + dateNav('reports', date);
     if (!appts.length) return html + '<div class="empty"><p>No sessions on this day.</p></div>';
     html += '<ul class="list">' + appts.map(function (a) {
       const p = m.patients[a.patientId] || {};
@@ -578,7 +580,7 @@
       '<label>Given by<select name="consentBy">' + ['Patient', 'Parent', 'Legal guardian', 'Carer with legal authority'].map(function (x) { return opt(x, x, c.givenBy === x); }).join('') + '</select></label></div>' +
       [['therapy', 'Assessment and therapy'], ['students', 'Supervised student clinicians may be involved'], ['shareReports', 'Session summaries may be sent to the family'], ['teaching', 'Anonymised use in teaching']].map(function (k) {
         return '<label class="check"><input type="checkbox" name="c_' + k[0] + '"' + (c[k[0]] ? ' checked' : '') + '> ' + k[1] + '</label>';
-      }).join('') + '</fieldset>',
+      }).join('') + '</fieldset>' + reminderFields(p),
       function (fd) {
         const consent = { therapy: !!fd.get('c_therapy'), students: !!fd.get('c_students'), shareReports: !!fd.get('c_shareReports'), teaching: !!fd.get('c_teaching'),
           recordedOn: fd.get('consentOn'), givenBy: fd.get('consentBy') };
@@ -587,7 +589,8 @@
         const saved = S.upsert('patients', Object.assign({}, p, {
           name: fd.get('name').trim(), dob: fd.get('dob'), diagnosis: fd.get('diagnosis').trim(),
           ageGroup: fd.get('ageGroup'), condition: fd.get('condition').trim(),
-          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes'), consent: consent
+          guardian: fd.get('guardian').trim(), contact: fd.get('contact').trim(), notes: fd.get('notes'), consent: consent,
+          reminders: readReminderFields(fd, p, consent.givenBy)
         }, fresh ? { caseCode: S.nextCaseCode(), status: u.role === 'therapist' ? 'active' : 'waiting', assignedTo: u.role === 'therapist' ? u.id : '' } : {}));
         if (fresh) {
           S.audit('Registered patient', saved.id);
@@ -1227,6 +1230,8 @@
     const isLead = u.role === 'supervisor';
     let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data on this device</p></div></header>';
 
+    html += storageSection();
+    if (isLead) html += messagingSection();
     html += '<section class="card"><h2>How patient data is protected</h2><ul class="safeguards">' +
       '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
       '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>' +
@@ -1515,6 +1520,7 @@
       '<section class="card"><div class="card-head"><h2>Consent &amp; permissions</h2>' + (canManage(p) ? '<button class="btn btn-sm btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Update</button>' : '') + '</div>' +
       '<ul class="consent-list"><li>' + tick(c.therapy) + ' Assessment and therapy</li><li>' + tick(c.students) + ' Supervised student clinicians may be involved</li>' +
       '<li>' + tick(c.shareReports) + ' Session summaries may be sent to the family</li><li>' + tick(c.teaching) + ' Anonymised use in teaching</li></ul>' +
+      '<p class="small">' + reminderLine(p) + '</p>' +
       '<p class="small muted">' + (c.recordedOn ? 'Recorded ' + esc(L.formatDate(c.recordedOn)) + (c.givenBy ? ', given by ' + esc(c.givenBy) : '') : 'Not recorded yet') + '</p></section>' +
       (manage ? '<section class="card"><h2>Data requests</h2><div class="actions wrap"><button class="btn" data-action="copy-record-one" data-id="' + p.id + '">Copy full record</button>' +
         '<button class="btn" data-action="discharge" data-id="' + p.id + '">' + (p.status === 'discharged' ? 'Reopen case' : 'Discharge') + '</button>' +
@@ -1981,6 +1987,181 @@
     }
   });
 
+  /* ---------- appointment reminders (SMS or WhatsApp Business) ---------- */
+
+  function msgSettings() { return S.state.settings.messaging; }
+
+  function reminderFields(p) {
+    const r = p.reminders || { channel: 'default' };
+    const ms = msgSettings();
+    const clinicLabel = ms.channel === 'both' ? 'Clinic default (' + L.CHANNELS[ms.defaultChannel] + ')' : 'Clinic default (' + L.CHANNELS[ms.channel] + ')';
+    const choices = [['default', clinicLabel]].concat(ms.channel === 'both' ? [['sms', 'SMS'], ['whatsapp', 'WhatsApp Business']] : []).concat([['none', 'No reminders']]);
+    return '<fieldset class="pick consent"><legend>Appointment reminders</legend>' +
+      '<div class="grid-2"><label>Mobile number<input type="tel" name="r_phone" placeholder="+91 98xxx xxxxx" value="' + esc(r.phone || '') + '"></label>' +
+      '<label>Send by<select name="r_channel">' + choices.map(function (c) { return opt(c[0], c[1], (r.channel || 'default') === c[0]); }).join('') + '</select></label></div>' +
+      (ms.channel !== 'both' ? '<p class="small muted">Your clinic sends reminders by ' + esc(L.CHANNELS[ms.channel]) + ' only. A supervisor can allow both in Privacy &amp; settings.</p>' : '') +
+      '<label class="check"><input type="checkbox" name="r_optIn"' + (r.optIn ? ' checked' : '') + '> They agreed to receive appointment reminders on this number' +
+      (r.optInAt ? ' <span class="muted small">(recorded ' + esc(fmtStamp(r.optInAt)) + ')</span>' : '') + '</label>' +
+      '<p class="small muted">Reminders contain only the clinic name, date, time and a link – never names or health details.</p></fieldset>';
+  }
+
+  function readReminderFields(fd, p, givenBy) {
+    const old = p.reminders || {};
+    const optIn = !!fd.get('r_optIn');
+    return {
+      phone: (fd.get('r_phone') || '').trim(), channel: fd.get('r_channel') || 'default', optIn: optIn,
+      optInAt: optIn ? (old.optIn ? old.optInAt : new Date().toISOString()) : '',
+      optInBy: optIn ? (old.optIn ? old.optInBy : givenBy || '') : ''
+    };
+  }
+
+  function reminderLine(p) {
+    const pick = L.reminderChannel(p, msgSettings());
+    return '<span class="meta-label">Reminders</span> ' + (pick.channel ? '<span class="chan chan-' + pick.channel + '">' + esc(L.CHANNELS[pick.channel]) + '</span> to ' + esc(L.maskPhone(p.reminders.phone)) +
+      ' · opted in ' + esc(fmtStamp(p.reminders.optInAt)) : '<span class="muted">' + esc(pick.reason) + '</span>');
+  }
+
+  function reportTabs(current, date) {
+    return '<nav class="tabs"><a class="tab' + (current === 'reports' ? ' active' : '') + '" href="#/reports?date=' + date + '">Family reports</a>' +
+      '<a class="tab' + (current === 'reminders' ? ' active' : '') + '" href="#/reports?tab=reminders&date=' + date + '">Appointment reminders</a></nav>';
+  }
+
+  function reminderText(a, channel) {
+    const ms = msgSettings();
+    return L.fillTemplate(channel === 'whatsapp' ? ms.waTemplate : ms.smsTemplate, {
+      clinic: ms.clinicName, day: L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }), date: L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' }),
+      time: L.formatTime(a.time), link: ms.portalLink
+    });
+  }
+
+  function viewReminders(params) {
+    const date = params.date || L.addDays(L.todayISO(), 1);
+    const ms = msgSettings();
+    const appts = visibleAppts(S.appointmentsOn(date)).filter(function (a) { return a.status === 'scheduled'; });
+    const rows = appts.map(function (a) {
+      const p = S.patient(a.patientId);
+      const pick = L.reminderChannel(p, ms);
+      const rec = S.state.reminders.filter(function (r) { return r.apptId === a.id && r.date === a.date && r.time === a.time; }).slice(-1)[0];
+      return { a: a, p: p, channel: pick.channel, reason: pick.reason, rec: rec, text: pick.channel ? reminderText(a, pick.channel) : '' };
+    });
+    const count = function (ch) { return rows.filter(function (r) { return r.channel === ch; }).length; };
+    const skipped = rows.filter(function (r) { return !r.channel; }).length;
+    const sent = rows.filter(function (r) { return r.rec && r.rec.status === 'sent'; }).length;
+    let html = '<header class="page-head"><div><h1>Reports &amp; reminders</h1><p class="muted">Reminders for ' + esc(L.formatDate(date)) + '</p></div></header>' +
+      reportTabs('reminders', date) + dateNav('reports', date).replace(/#\/reports\?date=/g, '#/reports?tab=reminders&date=').replace('data-nav="reports"', 'data-nav="reports-reminders"');
+    html += '<div class="summary">' +
+      '<div><span class="stat">' + count('sms') + '</span><span class="muted small">By SMS</span></div>' +
+      '<div><span class="stat">' + count('whatsapp') + '</span><span class="muted small">By WhatsApp Business</span></div>' +
+      '<div><span class="stat">' + skipped + '</span><span class="muted small">Not sent (no opt-in, number or choice)</span></div>' +
+      '<div><span class="stat">' + sent + '/' + (rows.length - skipped) + '</span><span class="muted small">Marked sent</span></div></div>';
+    html += '<p class="small muted">Clinic setting: <strong>' + esc(ms.channel === 'both' ? 'SMS or WhatsApp Business – each patient chooses' : L.CHANNELS[ms.channel] + ' only') + '</strong>' +
+      (ms.provider ? ' via ' + esc(ms.provider) : '') + '. Sending needs the server version; until then, copy the list into your SMS or WhatsApp Business provider.</p>';
+    if (!rows.length) return html + '<div class="empty"><p>No scheduled sessions on this day.</p></div>';
+    html += '<div class="actions wrap">' +
+      (count('sms') ? '<button class="btn" data-action="copy-reminders" data-channel="sms" data-date="' + date + '">Copy SMS list (' + count('sms') + ')</button>' : '') +
+      (count('whatsapp') ? '<button class="btn" data-action="copy-reminders" data-channel="whatsapp" data-date="' + date + '">Copy WhatsApp list (' + count('whatsapp') + ')</button>' : '') +
+      '<button class="btn btn-primary" data-action="mark-reminders" data-date="' + date + '">Mark all as sent</button></div>';
+    html += '<ul class="list reminders">' + rows.map(function (r) {
+      const parts = r.channel === 'sms' ? L.smsParts(r.text) : null;
+      return '<li><div class="row"><div class="msg-main"><strong>' + esc(L.formatTime(r.a.time)) + ' · ' + esc(nm(r.p)) + '</strong> ' +
+        (r.channel ? '<span class="chan chan-' + r.channel + '">' + esc(L.CHANNELS[r.channel]) + '</span> <span class="muted small">' + esc(L.maskPhone(r.p.reminders.phone)) + '</span>' : '<span class="badge badge-muted">' + esc(r.reason) + '</span>') +
+        (r.text ? '<div class="small reminder-text">' + esc(r.text) + (parts ? ' <span class="muted">(' + parts.chars + ' characters, ' + parts.parts + ' SMS)</span>' : '') + '</div>' : '') + '</div>' +
+        '<div class="head-actions">' + (r.rec && r.rec.status === 'sent' ? '<span class="badge badge-good">Sent ' + esc(fmtStamp(r.rec.sentAt)) + '</span>' : r.channel ? '<button class="btn btn-sm" data-action="mark-reminder" data-id="' + r.a.id + '">Mark sent</button>' : '') +
+        '</div></div></li>';
+    }).join('') + '</ul>';
+    return html;
+  }
+
+  function recordReminder(a, channel) {
+    const p = S.patient(a.patientId);
+    S.state.reminders.push({ id: L.uid('rem'), patientId: p.id, apptId: a.id, date: a.date, time: a.time, channel: channel,
+      status: 'sent', sentAt: new Date().toISOString(), by: me().id });
+  }
+
+  function messagingSection() {
+    const ms = msgSettings();
+    const warnS = L.templateWarnings(ms.smsTemplate), warnW = L.templateWarnings(ms.waTemplate);
+    const sample = { date: L.addDays(L.todayISO(), 1), time: '10:30' };
+    const prevS = reminderText(sample, 'sms'), prevW = reminderText(sample, 'whatsapp');
+    const parts = L.smsParts(prevS);
+    const radio = function (v, label, hint) {
+      return '<label class="check radio"><input type="radio" name="channel" value="' + v + '"' + (ms.channel === v ? ' checked' : '') + '> <span><strong>' + label + '</strong><br><span class="muted small">' + hint + '</span></span></label>';
+    };
+    return '<form class="card" id="messaging-form"><h2>Appointment reminders</h2>' +
+      '<p class="small">Choose how your clinic sends reminders. Reminders contain only the clinic name, date, time and a link to the secure portal.</p>' +
+      '<fieldset class="pick channels"><legend>Send reminders by</legend>' +
+      radio('sms', 'SMS only', 'Works on every phone. Needs TRAI DLT registration: sender ID and approved template.') +
+      radio('whatsapp', 'WhatsApp Business only', 'Through a WhatsApp Business provider, with an approved template. Not personal WhatsApp.') +
+      radio('both', 'Both – each patient chooses', 'Patients pick SMS or WhatsApp in their details; others get the default below.') +
+      '<label>Default when a patient hasn\'t chosen<select name="defaultChannel">' + opt('sms', 'SMS', ms.defaultChannel === 'sms') + opt('whatsapp', 'WhatsApp Business', ms.defaultChannel === 'whatsapp') + '</select></label></fieldset>' +
+      '<div class="grid-3"><label>Clinic name in messages<input name="clinicName" value="' + esc(ms.clinicName) + '"></label>' +
+      '<label>Portal link<input name="portalLink" value="' + esc(ms.portalLink) + '"></label>' +
+      '<label>Provider (optional)<input name="provider" placeholder="e.g. your SMS or WhatsApp provider" value="' + esc(ms.provider) + '"></label></div>' +
+      '<div class="grid-2 channel-cols"><div><h3>SMS</h3><div class="grid-2"><label>Sender ID (DLT header)<input name="smsSenderId" maxlength="6" value="' + esc(ms.smsSenderId) + '"></label>' +
+      '<label>DLT template ID<input name="smsTemplateId" value="' + esc(ms.smsTemplateId) + '"></label></div>' +
+      '<label>SMS template<textarea name="smsTemplate" rows="3">' + esc(ms.smsTemplate) + '</textarea></label>' +
+      '<p class="small preview"><span class="meta-label">Preview</span> ' + esc(prevS) + ' <span class="muted">(' + parts.chars + ' characters, ' + parts.parts + ' SMS' + (parts.unicode ? ', Unicode' : '') + ')</span></p>' +
+      warnS.map(function (w) { return '<p class="small bad">' + esc(w) + '</p>'; }).join('') + '</div>' +
+      '<div><h3>WhatsApp Business</h3><label>Approved template name<input name="waTemplateName" value="' + esc(ms.waTemplateName) + '"></label>' +
+      '<label>WhatsApp template<textarea name="waTemplate" rows="3">' + esc(ms.waTemplate) + '</textarea></label>' +
+      '<p class="small preview"><span class="meta-label">Preview</span> ' + esc(prevW) + '</p>' +
+      warnW.map(function (w) { return '<p class="small bad">' + esc(w) + '</p>'; }).join('') + '</div></div>' +
+      '<p class="small muted">Placeholders: {clinic}, {day}, {date}, {time}, {link}. The SMS wording must match your DLT-approved template exactly, and the WhatsApp wording must match your approved template.</p>' +
+      '<div class="actions"><button class="btn btn-primary" type="submit">Save reminder settings</button></div></form>';
+  }
+
+  function storageSection() {
+    const rows = S.storageReport();
+    const kb = function (n) { return n < 1024 ? n + ' B' : (n / 1024).toFixed(1) + ' KB'; };
+    return '<section class="card"><h2>Where your data is stored</h2>' +
+      '<p class="small">Everything is stored <strong>only in this browser on this device</strong>. Nothing is sent to a server, to the app\'s makers, or to anyone else.</p>' +
+      '<div class="table-wrap"><table class="tbl"><thead><tr><th>What</th><th>Where</th><th>Size</th><th>Encrypted</th></tr></thead><tbody>' +
+      rows.map(function (r) { return '<tr><td>' + esc(r.what) + '</td><td class="small">' + esc(r.where) + '<div class="muted"><code>' + esc(r.key) + '</code></div></td><td class="nowrap">' + kb(r.bytes) + '</td><td>' + tick(r.encrypted) + '</td></tr>'; }).join('') +
+      '<tr><td>Backups and the key file</td><td class="small">Wherever you save them. Keep them apart: patients in a backup can only be read with the key file.</td><td>—</td><td>' + tick(true) + ' <span class="small muted">patients</span></td></tr>' +
+      '</tbody></table></div>' +
+      '<ul class="small plain"><li>Each browser and device has its <strong>own separate copy</strong>: the downloaded file, the online link, Chrome and Edge on the same computer are all different.</li>' +
+      '<li>Clearing this browser\'s site data deletes it. Make backups.</li>' +
+      '<li>To share one set of records across staff devices, the app needs the server version (see the security plan).</li></ul></section>';
+  }
+
+  Object.assign(ACTIONS, {
+    'copy-reminders': function (el) {
+      const date = el.dataset.date, ch = el.dataset.channel;
+      const lines = visibleAppts(S.appointmentsOn(date)).filter(function (a) { return a.status === 'scheduled'; }).map(function (a) {
+        const p = S.patient(a.patientId);
+        return L.reminderChannel(p, msgSettings()).channel === ch ? '"' + p.reminders.phone + '","' + reminderText(a, ch).replace(/"/g, '""') + '"' : null;
+      }).filter(Boolean);
+      S.audit('Copied ' + L.CHANNELS[ch] + ' reminder list', null, lines.length + ' numbers');
+      copyText('phone,message\n' + lines.join('\n'));
+    },
+    'mark-reminder': function (el) {
+      const a = S.appointment(el.dataset.id);
+      recordReminder(a, L.reminderChannel(S.patient(a.patientId), msgSettings()).channel);
+      S.save(); render();
+    },
+    'mark-reminders': function (el) {
+      let n = 0;
+      visibleAppts(S.appointmentsOn(el.dataset.date)).filter(function (a) { return a.status === 'scheduled'; }).forEach(function (a) {
+        const ch = L.reminderChannel(S.patient(a.patientId), msgSettings()).channel;
+        const done = S.state.reminders.some(function (r) { return r.apptId === a.id && r.date === a.date && r.time === a.time && r.status === 'sent'; });
+        if (ch && !done) { recordReminder(a, ch); n++; }
+      });
+      S.audit('Marked reminders sent', null, n + ' for ' + el.dataset.date);
+      S.save(); toast(n + ' reminder' + (n === 1 ? '' : 's') + ' marked as sent'); render();
+    }
+  });
+
+  Object.assign(SUBMITS, {
+    'messaging-form': function (form) {
+      const ms = msgSettings();
+      const v = function (n) { const el = form.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
+      ms.channel = (form.querySelector('[name=channel]:checked') || {}).value || ms.channel;
+      ['defaultChannel', 'clinicName', 'portalLink', 'provider', 'smsSenderId', 'smsTemplateId', 'smsTemplate', 'waTemplateName', 'waTemplate'].forEach(function (k) { ms[k] = v(k); });
+      S.audit('Changed reminder settings', null, ms.channel === 'both' ? 'SMS or WhatsApp Business' : L.CHANNELS[ms.channel] + ' only');
+      S.save(); toast('Reminder settings saved'); render();
+    }
+  });
+
   /* ---------- router ---------- */
 
   function render() {
@@ -2128,6 +2309,7 @@
       S.setPacked(t.dataset.date, t.dataset.id, t.checked);
       document.querySelectorAll('[data-action=pack][data-id="' + t.dataset.id + '"]').forEach(function (c) { c.checked = t.checked; });
     }
+    if (t.dataset.nav === 'reports-reminders' && t.value) { go('#/reports?tab=reminders&date=' + t.value); return; }
     if (t.dataset.nav && t.value) go('#/' + t.dataset.nav + '?date=' + t.value);
     if (t.closest('#patient-filters')) {
       const f = t.closest('#patient-filters');

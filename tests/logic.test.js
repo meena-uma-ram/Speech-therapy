@@ -184,3 +184,25 @@ test('backups split into one bundle per patient and merge back', () => {
   assert.strictEqual(without.goals.some(g => g.patientId === 'p2'), false);
   assert.deepStrictEqual(without.deletionReceipts, [{ id: 'DR-1' }]);
 });
+
+test('reminder channel follows clinic setting, patient choice and opt-in', () => {
+  const base = { optIn: true, phone: '+91 98765 43210' };
+  const sms = { channel: 'sms' }, wa = { channel: 'whatsapp' }, both = { channel: 'both', defaultChannel: 'whatsapp' };
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'default' } }, sms).channel, 'sms');
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'default' } }, wa).channel, 'whatsapp');
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'default' } }, both).channel, 'whatsapp');
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'sms' } }, both).channel, 'sms');
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'whatsapp' } }, sms).channel, 'sms'); // clinic uses SMS only
+  assert.strictEqual(L.reminderChannel({ reminders: { ...base, channel: 'none' } }, both).channel, null);
+  assert.strictEqual(L.reminderChannel({ reminders: { phone: '1', channel: 'sms' } }, sms).reason, 'No opt-in recorded');
+});
+
+test('reminder templates stay neutral and SMS parts are counted', () => {
+  assert.strictEqual(L.fillTemplate('{clinic}: {day} {time}. {link}', { clinic: 'Bright Steps', day: 'Tue 20 Oct', time: '10:30 AM', link: 'x.in/a' }), 'Bright Steps: Tue 20 Oct 10:30 AM. x.in/a');
+  assert.deepStrictEqual(L.templateWarnings('Your appointment at {clinic} on {day}'), []);
+  assert.strictEqual(L.templateWarnings('Speech therapy for {name}').length, 2);
+  assert.deepStrictEqual(L.smsParts('a'.repeat(160)), { chars: 160, unicode: false, parts: 1 });
+  assert.strictEqual(L.smsParts('a'.repeat(161)).parts, 2);
+  assert.strictEqual(L.smsParts('नमस्ते').unicode, true);
+  assert.strictEqual(L.maskPhone('+919876543210'), '+91••••••3210');
+});
