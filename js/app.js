@@ -1366,6 +1366,18 @@
       '<p class="small muted">It comes with no warranty. The licence covers the software, not your clinic\u2019s records: those stay yours, and your obligations for them are set by data protection law.</p></section>';
   }
 
+  /* What the clinic itself must do under the chosen country's law. Shown under the country setting, and redrawn as soon as another country is picked. */
+  function orgDuties(code) {
+    const rg = R.region(code), saved = (S.state.settings.region || 'IN') === code;
+    return '<h2>Your organisation\'s part · ' + esc(rg.name) + '</h2>' + (saved ? '' : '<div class="callout warn"><strong>Not saved yet.</strong><span>Press Save settings to switch to ' + esc(rg.name) + '.</span></div>') +
+      '<p class="small">TJS is designed to help you meet <strong>' + esc(rg.law) + '</strong>, but cannot do it alone. Your clinic or university, as the organisation responsible for the data, still needs to:</p><ul class="small plain">' +
+      rg.duties.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') +
+      '<li><strong>Breaches:</strong> ' + esc(rg.breach) + '</li>' +
+      '<li><strong>Patients can complain to:</strong> ' + esc(rg.authority) + '.</li></ul>' +
+      '<p class="small muted">Draft guidance: have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country in Settings above.</p>' +
+      '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p>';
+  }
+
   function viewPrivacy() {
     const st = S.state, set = st.settings, u = me();
     const lockOn = S.hasPassphrase();
@@ -1422,6 +1434,7 @@
       }).join('') + '</div>' +
       (isLead ? '<label class="check"><input type="checkbox" name="autoErase"' + (set.autoErase ? ' checked' : '') + '> Erase records automatically when the retention period ends (checked daily; each erasure issues a receipt)</label>' : '') +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save settings</button></div></form>';
+    html += '<section class="card" id="org-duties" aria-live="polite">' + orgDuties(set.region || 'IN') + '</section>';
 
     if (due.length && isLead) {
       html += '<section class="card"><h2>Due for erasure</h2><ul class="list flat">' + due.map(function (p) {
@@ -1467,13 +1480,6 @@
         '<div id="deletion-test-out"></div></section>';
     }
 
-    const rg = region();
-    html += '<section class="card"><h2>Your organisation\'s part · ' + esc(rg.name) + '</h2><p class="small">TJS is designed to help you meet <strong>' + esc(rg.law) + '</strong>, but cannot do it alone. Your clinic or university, as the organisation responsible for the data, still needs to:</p><ul class="small plain">' +
-      rg.duties.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') +
-      '<li><strong>Breaches:</strong> ' + esc(rg.breach) + '</li>' +
-      '<li><strong>Patients can complain to:</strong> ' + esc(rg.authority) + '.</li></ul>' +
-      '<p class="small muted">Draft guidance: have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country under Settings.</p>' +
-      '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
     if (S.isDemo() && !srv) {
       html += '<section class="card"><h2>Demo</h2><p class="small">This is the demo workspace: fake data only, kept apart from your clinic\u2019s real records.</p><div class="actions wrap">' +
@@ -2189,6 +2195,7 @@
       toast(t.value ? 'Cover assigned to ' + userName(t.value) : 'Cover removed');
       render();
     }
+    if (t.name === 'region' && t.closest('#settings-form')) document.getElementById('org-duties').innerHTML = orgDuties(t.value);
     if (t.closest('#leave-form') && (t.name === 'from' || t.name === 'to')) {
       const f = t.closest('#leave-form');
       document.getElementById('leave-preview').innerHTML = leavePreview(f.querySelector('[name=from]').value, f.querySelector('[name=to]').value);
