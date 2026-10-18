@@ -621,3 +621,5 @@ code.hash { word-break: break-all; font-size: .75rem; }
 .viewer-body { margin-top: 12px; text-align: center; }
 .viewer-body img, .viewer-body video { max-width: 100%; max-height: 70vh; border-radius: 8px; }
 .viewer-body audio { width: 100%; }
+.caution { color: var(--warn); font-weight: 700; }
+.neutral { color: var(--muted); font-weight: 700; }

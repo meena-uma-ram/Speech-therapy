@@ -751,6 +751,9 @@
     return '<a class="doc-chip st-' + d.status + '" href="#/doc/' + d.id + '">' + esc(L.DOC_STATUS[d.status]) + '</a>';
   }
   function tick(v) { return v ? '<span class="yes">✓</span>' : '<span class="no">✗</span>'; }
+  // A caution (true, but worth knowing) and a neutral note (does not apply here).
+  function caution() { return '<span class="caution" aria-label="Caution">⚠</span>'; }
+  function neutral() { return '<span class="neutral" aria-label="Not needed here">–</span>'; }
   function fmtStamp(iso) {
     const d = new Date(iso);
     return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -1295,9 +1298,11 @@
         '<li>' + tick(info.https) + '<div><strong>Encrypted in transit</strong> ' + (info.https ? 'with HTTPS.' : '– only if you connect through the clinic VPN (Tailscale/WireGuard encrypt everything). Add HTTPS for the browser too.') + '</div></li>' +
         '<li>' + tick(true) + '<div><strong>Checked on the server.</strong> The server sends each person only the records their role may see and refuses changes they may not make.</div></li>'
       : '<li>' + tick(true) + '<div><strong>Stays on this device.</strong> Nothing is uploaded, and the app makes no requests to other websites (no web fonts, analytics or trackers).</div></li>' +
-        '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>') +
+        (S.isDemo() && !lockOn
+          ? '<li>' + neutral() + '<div><strong>Encrypted at rest:</strong> not needed for the demo\u2019s fake data. In your clinic workspace a passphrase is <strong>required</strong> before any patient can be added (AES-256).</div></li>'
+          : '<li>' + tick(lockOn) + '<div><strong>Encrypted at rest</strong> ' + (lockOn ? 'with your passphrase (AES-256). Locks after ' + esc(set.autoLockMinutes) + ' minutes idle.' : '– not yet. Set a passphrase below.') + '</div></li>')) +
       (srv ? '<li>' + tick(true) + '<div><strong>Individual sign-in and need-to-know access, enforced by the server.</strong> Supervisors see all diagnostics and therapy patients; each clinician receives only their own patients, plus sessions they cover or are invited to.</div></li>'
-        : '<li>' + tick(false) + '<div><strong>Individual sign-in and need-to-know screens – not a security barrier.</strong> Each person\u2019s screens show only their own patients. But on one device all records are stored together, and anyone who can unlock this browser, or use its developer tools, can read them. For real separation between staff, run the clinic server.</div></li>') +
+        : '<li>' + caution() + '<div><strong>Individual sign-in and need-to-know screens – on one shared device, not a security barrier.</strong> Each person\u2019s screens show only their own patients. But on one device all records are stored together, and anyone who can unlock this browser, or use its developer tools, can read them. For real separation between staff, run the clinic server.</div></li>') +
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Consent ledger.</strong> Each answer per purpose, who gave it, in which language and notice version, how they confirmed it. Entries are sealed and never edited; withdrawal takes effect straight away.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
