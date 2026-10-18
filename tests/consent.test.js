@@ -89,3 +89,15 @@ test('countries: complete entries, offered languages exist, the notice names the
   assert.deepStrictEqual(C.reviewNeeded(p, L1, '2025-07-01', 16).map((r) => r.code), ['adult']);
   assert.deepStrictEqual(C.reviewNeeded(p, L1, '2025-07-01', 18), []);
 });
+
+test('a one-time code is never consent: code-only entries must be asked again; identity is shown separately', () => {
+  const p = { id: 'p', dob: '2018-01-01', guardian: 'Lakshmi Iyer' };
+  const all = C.PURPOSES.map((x) => ({ purpose: x.id, action: 'grant' }));
+  const old = [C.makeEntry([], { patientId: 'p', decisions: all, giver: { name: 'Lakshmi Iyer', relationship: 'parent' }, recordedBy: 'u', method: 'otp' })];
+  assert.ok(C.reviewNeeded(p, old, '2026-01-01').some((r) => r.code === 'otp-only'));
+  const good = [C.makeEntry([], { patientId: 'p', decisions: all, giver: { name: 'Lakshmi Iyer', relationship: 'parent' }, recordedBy: 'u', method: 'signature', evidence: { identity: { method: 'otp', phone: '+91••••2345' } } })];
+  assert.deepStrictEqual(C.reviewNeeded(p, good, '2026-01-01'), []);
+  const text = C.receiptText(good[0], C.notice('en'), { clinic: 'X', patient: 'SLT-26-001 (L.I.)' });
+  assert.match(text, /How: Signed on screen/);
+  assert.match(text, /Identity: One-time code to their registered phone/);
+});

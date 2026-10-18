@@ -89,7 +89,7 @@
 
   const METHODS = {
     signature: 'Signed on screen',
-    otp: 'Confirmed with a one-time code sent to their phone',
+    otp: 'One-time code only (recorded before identity checks were kept apart: ask again)',
     paper: 'Signed paper form (scan attached)',
     thumbprint: 'Thumbprint on a paper form, with a witness',
     witness: 'Accessible consent explained and witnessed',
@@ -100,6 +100,8 @@
   };
 
   const ACTIONS = { grant: 'Agreed', refuse: 'Declined', withdraw: 'Withdrawn' };
+  // How the person's identity was checked. Separate from consent: a code proves who has the phone, not what they chose.
+  const IDENTITY = { known: 'Known to the clinic', 'id-seen': 'ID document seen', otp: 'One-time code to their registered phone', none: 'Not checked' };
 
   /* ---------- versioned notices ---------- */
 
@@ -341,6 +343,7 @@
     const chain = forPatient(entries, p.id), last = chain[chain.length - 1], cur = current(entries, p.id), out = [];
     if (!last) return [{ code: 'none', text: 'No consent recorded in the ledger yet' }];
     if (chain.every(function (e) { return e.method === 'legacy'; })) out.push({ code: 'legacy', text: 'Recorded before the consent ledger: ask again with a notice' });
+    if (last.method === 'otp') out.push({ code: 'otp-only', text: 'Confirmed only with a one-time code, which is not consent: ask again with a signature or form' });
     const giverForChild = last.giver.relationship === 'parent' || last.giver.relationship === 'guardian';
     const age = ageOn(p.dob, today);
     const adult = adultAge || 18;
@@ -356,14 +359,14 @@
   function receiptText(e, n, ctx) {
     const lines = [ctx.clinic + ' – consent receipt ' + e.receiptId, '',
       'Patient: ' + ctx.patient, 'Given by: ' + e.giver.name + ' (' + (RELATIONSHIPS[e.giver.relationship] || e.giver.relationship) + ')' + (e.giver.basis ? ', ' + e.giver.basis + (e.giver.basisRef ? ' ' + e.giver.basisRef : '') : ''),
-      'Date: ' + new Date(e.at).toLocaleString(), 'Notice: version ' + e.notice.version + ', ' + (LANGUAGES[e.language] || LANGUAGES.en).name, 'How: ' + (METHODS[e.method] || e.method), ''];
+      'Date: ' + new Date(e.at).toLocaleString(), 'Notice: version ' + e.notice.version + ', ' + (LANGUAGES[e.language] || LANGUAGES.en).name, 'How: ' + (METHODS[e.method] || e.method)].concat(e.evidence && e.evidence.identity ? ['Identity: ' + (IDENTITY[e.evidence.identity.method] || e.evidence.identity.method)] : []).concat(['']);
     e.decisions.forEach(function (d) { lines.push((ACTIONS[d.action] || d.action) + ': ' + n.purposes[d.purpose].label); });
     lines.push('', n.rights, '', 'Seal: ' + e.hash);
     return lines.join('\n');
   }
 
   const api = {
-    sha256: sha256, PURPOSES: PURPOSES, RELATIONSHIPS: RELATIONSHIPS, ON_BEHALF: ON_BEHALF, GUARDIAN_BASIS: GUARDIAN_BASIS, METHODS: METHODS, ACTIONS: ACTIONS,
+    sha256: sha256, PURPOSES: PURPOSES, RELATIONSHIPS: RELATIONSHIPS, ON_BEHALF: ON_BEHALF, GUARDIAN_BASIS: GUARDIAN_BASIS, METHODS: METHODS, IDENTITY: IDENTITY, ACTIONS: ACTIONS,
     LANGUAGES: LANGUAGES, NOTICES: NOTICES, notice: notice, makeEntry: makeEntry, verify: verify, current: current, flags: flags, forPatient: forPatient,
     reviewNeeded: reviewNeeded, receiptText: receiptText, ageOn: ageOn
   };

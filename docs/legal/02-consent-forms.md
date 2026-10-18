@@ -8,7 +8,8 @@
 - **Nothing pre-ticked.** Every item needs an explicit Yes or No. No date is filled in: the app stamps the moment of sealing.
 - **One purpose per question,** in plain language, with a simple-language version for the accessible mode.
 - **Who consents:** the patient, a parent, a guardian of a child, a legal guardian of an adult (with the legal basis and a reference), or a nominated representative.
-- **How they confirm:** signature on screen; one-time code to their phone (online version); a photo of a signed paper form; a thumbprint on paper with a witness.
+- **How they consent:** their own act: a signature on screen, a signed paper form (photo kept), or a thumbprint on paper with a witness. Later, in the online version: the person ticks the answers themselves on their own phone.
+- **Identity check, separate from consent:** known to the clinic, ID document seen (type only), or a one-time code to their registered phone. A code proves possession of the phone, not an informed choice, so it is never recorded as consent.
 - **Witness** for thumbprints and for the accessible mode: someone independent of the treating clinician.
 - **Receipt** for the person who consented, with what they agreed to, the notice version and language, and how to withdraw.
 

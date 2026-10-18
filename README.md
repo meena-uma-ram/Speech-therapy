@@ -16,7 +16,7 @@ The first screen asks: **Try the demo** or **Set up my clinic**. Each device kee
 | Accounts | Demo accounts, password `demo1234` | You create the first supervisor with **your own password**; they add everyone else |
 | Encryption | Not needed (fake data) | A passphrase is **required before any patient can be added** |
 | Banner | "Demo – fake data only" on every screen | None |
-| Tools | **+ Generate fake patients** (Indian names, child and adult cases, waiting list → allotment → therapy → discharge, spread across every role), **Reset demo**, simulated OTP ("Demo code: 123456") | **Clean start** deletes every patient *and every account*, then asks for a new first supervisor |
+| Tools | **+ Generate fake patients** (Indian names, child and adult cases, waiting list → allotment → therapy → discharge, spread across every role), **Reset demo**, simulated one-time code for identity checks ("Demo code: 123456") | **Clean start** deletes every patient *and every account*, then asks for a new first supervisor |
 
 So you can always show TJS to people with a full, realistic demo, and your clinic's real records are never mixed with it. Switch from the sign-in screen (*Open the demo* / *Go to my clinic*). A clinic server started with `--demo` runs the demo for everyone.
 
@@ -27,8 +27,9 @@ Consent has its own page (**Patient → Details & consent → Record consent**),
 1. **Language and format:** English, Tamil, Hindi, Malayalam or Kannada; **accessible mode** (pictures, simple sentences, larger text, read aloud, a witness) for aphasia, dementia, low literacy or low vision.
 2. **Who consents:** the patient, a parent, a guardian, or a legal guardian / nominated representative of an adult, with the **legal basis** and a reference.
 3. **Answers per purpose, nothing pre-ticked.** Consent to *assessment and therapy* (clinical) is separate from each use of data: keeping records, supervised students, reports to the family, reminders, pseudonymised teaching use.
-4. **Confirmation:** signature on screen, one-time code to their phone (simulated in the demo; real SMS needs the online version and DLT approval), a photo of a signed paper form, or a thumbprint with a witness.
-5. **Sealed** into an **append-only ledger**: each entry records purpose, decision, who, relationship, recorded by, notice version, language and method, and its hash includes the previous entry's, so any later change shows. A **receipt** can be printed or copied for the family.
+4. **Their consent, given by them:** signature on screen, a photo of a signed paper form, or a thumbprint with a witness. The clinician never answers for them.
+5. **Identity check, kept separate:** known to the clinic, ID document seen (type only, no number), or a one-time code to their registered phone (simulated in the demo; real SMS needs the online version). A code proves who has the phone, not what they chose, so it is never taken as consent. For a child, it helps make the parent's consent verifiable.
+6. **Sealed** into an **append-only ledger**: each entry records purpose, decision, who, relationship, recorded by, notice version, language and method, and its hash includes the previous entry's, so any later change shows. A **receipt** can be printed or copied for the family.
 
 **Withdrawal** is per purpose and takes effect at once: no students → the case comes off the student and goes back to *To allot*, students are removed as observers; no treatment → upcoming sessions are cancelled; no reminders → reminders stop; no teaching → coursework can't be copied out; no records → the supervisor is asked to review for erasure. **Ask again** is flagged when a child turns 18, the guardian changes, a new purpose is added, the notice changes, or consent predates the ledger (*Cases → Consent to ask again*).
 

@@ -2560,20 +2560,27 @@
       '<h3>' + esc(n.clinicalHead) + '</h3>' + answer(C.PURPOSES[0]) +
       '<h3>' + esc(n.dataHead) + '</h3>' + C.PURPOSES.slice(1).map(answer).join('') +
       '<p class="small">' + esc(n.rights) + '</p></section>';
-    html += '<section class="card"><h2>4. How they confirm</h2><div class="method-pick">' +
-      [['signature', 'Sign on this screen'], ['otp', 'One-time code to their phone'], ['paper', 'Signed paper form (photo)'], ['thumbprint', 'Thumbprint on paper, with a witness']].map(function (m) {
-        const off = m[0] === 'otp' && !S.isDemo();
-        return '<label class="choice"><input type="radio" name="method" value="' + m[0] + '" required' + (off ? ' disabled' : '') + '> ' + esc(m[1]) + (off ? ' <span class="muted small">(needs the online version with an SMS provider)</span>' : '') + '</label>';
+    // Consent is the person's own act (signing, a signed form, a thumbprint). A one-time code only checks who they are: step 5.
+    html += '<section class="card"><h2>4. How they give their consent</h2><p class="small muted">The person confirms the answers above themselves. The clinician does not answer for them.</p><div class="method-pick">' +
+      [['signature', 'They sign on this screen'], ['paper', 'They sign a paper form (add a photo)'], ['thumbprint', 'Thumbprint on a paper form, with a witness']].map(function (m) {
+        return '<label class="choice"><input type="radio" name="method" value="' + m[0] + '" required> ' + esc(m[1]) + '</label>';
       }).join('') + '</div>' +
       '<div class="method-panel" data-method="signature" hidden><p class="small">' + esc(n.signHere) + '</p><canvas id="sig" width="600" height="180" aria-label="Signature pad"></canvas>' +
       '<button type="button" class="btn btn-sm" data-action="sig-clear">Clear</button></div>' +
-      '<div class="method-panel" data-method="otp" hidden><div class="grid-2"><label>Mobile number<input name="otpPhone" type="tel" value="' + esc(p.reminders && p.reminders.phone || '') + '"></label>' +
-      '<div><button type="button" class="btn" data-action="otp-send">Send code</button></div></div><p class="small" id="otp-note"></p>' +
-      '<label>Code they received<input name="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label></div>' +
       '<div class="method-panel" data-method="paper thumbprint" hidden><label>Photo or scan of the signed form<input type="file" name="scanFile" accept="image/*" capture="environment"></label>' +
       '<input type="hidden" name="scan"><img class="scan-preview" alt="" hidden></div>' +
       '<div class="witness"' + (access ? '' : ' hidden') + '><h3>Witness</h3><p class="small muted">Someone independent of the treating clinician, who saw the information explained and the answers given.</p>' +
       '<div class="grid-2"><label>Witness name<input name="witnessName"></label><label>Witness role or relationship<input name="witnessRole" placeholder="e.g. nurse, family member, interpreter"></label></div></div>' +
+      '</section><section class="card"><h2>5. Identity check' + (child ? '' : ' (optional)') + '</h2>' +
+      '<p class="small muted">' + (child ? 'For a child, check that this really is the parent or guardian, so their consent is verifiable.' : 'Check who is giving consent, if they are not known to you.') + ' This confirms who they are; it is not their consent.</p>' +
+      '<div class="method-pick">' + [['known', 'Known to the clinic'], ['id-seen', 'ID document seen'], ['otp', 'One-time code to their registered phone'], ['none', 'Not checked']].map(function (m) {
+        const off = m[0] === 'otp' && !S.isDemo();
+        return '<label class="choice"><input type="radio" name="identity" value="' + m[0] + '" required' + (off ? ' disabled' : '') + '> ' + esc(m[1]) + (off ? ' <span class="muted small">(needs the online version with an SMS provider)</span>' : '') + '</label>';
+      }).join('') + '</div>' +
+      '<div class="identity-panel" data-identity="id-seen" hidden><label>Which document (type only; don\u2019t write the number)<input name="idType" placeholder="e.g. Aadhaar, passport, driving licence"></label></div>' +
+      '<div class="identity-panel" data-identity="otp" hidden><div class="grid-2"><label>Registered mobile number<input name="otpPhone" type="tel" value="' + esc(p.reminders && p.reminders.phone || '') + '"></label>' +
+      '<div><button type="button" class="btn" data-action="otp-send">Send code</button></div></div><p class="small" id="otp-note"></p>' +
+      '<label>Code they received<input name="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label></div>' +
       (draft && n.status === 'draft-translation' ? '<label class="check"><input type="checkbox" name="interpreter"> I explained this in ' + esc(C.LANGUAGES[lang].name) + ' (or an interpreter did) and checked it was understood</label>' : '') +
       '<p class="form-error" id="consent-error" hidden></p>' +
       '<div class="actions end"><button class="btn btn-primary" type="submit">Seal consent</button></div></section></form>';
@@ -2600,6 +2607,8 @@
     const rel = form.querySelector('[name=relationship]').value;
     form.querySelector('.guardian-basis').hidden = !(rel === 'legal-guardian' || rel === 'nominated-rep');
     form.querySelector('.witness').hidden = !(form.dataset.access === '1' || m === 'thumbprint');
+    const idm = (form.querySelector('[name=identity]:checked') || {}).value || '';
+    form.querySelectorAll('.identity-panel').forEach(function (el) { el.hidden = el.dataset.identity !== idm; });
     if (m === 'signature') initConsentPage();
   }
 
@@ -2678,10 +2687,14 @@
       if (!c.dataset.signed) return fail('Ask them to sign in the box.');
       ev.signature = c.toDataURL('image/png');
     }
-    if (method === 'otp') {
+    const idm = (form.querySelector('[name=identity]:checked') || {}).value;
+    if (!idm) return fail('Choose how you checked who is giving consent (or "Not checked").');
+    ev.identity = { method: idm };
+    if (idm === 'id-seen') { if (!v('idType')) return fail('Say which ID document you saw.'); ev.identity.document = v('idType'); }
+    if (idm === 'otp') {
       if (!form.dataset.otpSent) return fail('Send the code first.');
       if (v('otpCode') !== '123456') return fail('That code is not correct.');
-      ev.otpVerified = true; ev.otpPhone = L.maskPhone(v('otpPhone')); ev.otpSimulated = true;
+      ev.identity.phone = L.maskPhone(v('otpPhone')); ev.identity.simulated = true;
     }
     if (method === 'paper' || method === 'thumbprint') {
       if (!v('scan')) return fail('Add a photo of the signed form.');
@@ -2719,6 +2732,9 @@
       '<div><dt>Notice</dt><dd>Version ' + esc(e.notice.version) + ' · ' + esc((C.LANGUAGES[e.language] || C.LANGUAGES.en).name) + (e.accessible ? ' · accessible format' : '') + '</dd></div>' +
       '<div><dt>How</dt><dd>' + esc(C.METHODS[e.method] || e.method) + (e.evidence && e.evidence.witness ? '<div class="small">Witness: ' + esc(e.evidence.witness.name) + ', ' + esc(e.evidence.witness.role) + '</div>' : '') +
       (e.evidence && e.evidence.otpSimulated ? '<div class="small muted">Demo: simulated code, no SMS sent</div>' : '') + '</dd></div>' +
+      (e.evidence && e.evidence.identity ? '<div><dt>Identity</dt><dd>' + esc(C.IDENTITY[e.evidence.identity.method] || e.evidence.identity.method) +
+        (e.evidence.identity.document ? ' (' + esc(e.evidence.identity.document) + ')' : '') + (e.evidence.identity.phone ? ' · ' + esc(e.evidence.identity.phone) : '') +
+        (e.evidence.identity.simulated ? '<div class="small muted">Demo: simulated code, no SMS sent</div>' : '') + '</dd></div>' : '') +
       '<div><dt>Recorded by</dt><dd>' + esc(userName(e.recordedBy)) + '</dd></div></dl>' +
       '<table class="tbl"><tbody>' + e.decisions.map(function (d) {
         return '<tr><td>' + esc(n.purposes[d.purpose].label) + (e.language !== 'en' ? '<div class="small muted" lang="en">' + esc(en.purposes[d.purpose].label) + '</div>' : '') + '</td>' +

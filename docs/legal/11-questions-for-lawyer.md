@@ -9,7 +9,7 @@ What TJS does now: always asks a parent or guardian for a child, records who and
 Questions:
 1. Does the exemption cover a private speech therapy clinic, a hospital department and a university teaching clinic alike? Does it depend on registration as a clinical establishment?
 2. Which purposes does it cover: assessment and therapy only, or also records, reminders, student involvement and teaching? (Our reading: only what is *necessary* for health; we ask for the rest anyway.)
-3. What counts as "verifiable" in a clinic: an ID check at registration, a signed form, an OTP to the parent's number? Is our consent flow enough?
+3. What counts as "verifiable" in a clinic? TJS records the parent's own signature (or signed form / thumbprint with a witness) as the consent, and separately an identity check: known to the clinic, ID seen (type only), or a one-time code to their registered phone. Is that enough, and should the identity check be mandatory for children?
 4. For 16–17-year-olds, should we also ask the young person themselves?
 5. Retention for children's records: until when after they turn 18?
 
