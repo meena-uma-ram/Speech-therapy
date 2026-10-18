@@ -110,6 +110,12 @@ Two ways to run it:
 
 Privacy is built in: you see details only for your own patients. Other sessions show as *Session* with the time and room, leave as *Away* (the reason only to the person and supervisors), and meetings you're not invited to as *Busy*. On the clinic server this filtering is done **on the server**, so the details never reach other people's browsers.
 
+### Online sessions: Zoom, Google Meet, Microsoft Teams
+
+A session or meeting can be held **online**. In the session or meeting form, choose **Zoom**, **Google Meet** or **Microsoft Teams** under *Online (video call)*. Use **Create a meeting in …** to open that app's new-meeting page, then paste its join link back. TJS keeps only `https` links on that app's own domains. It doesn't sign in to Zoom, Google or Microsoft, so no patient data goes to them through TJS. Online sessions show an *Online* badge and a **Join** button, and invitations to a meeting include the link. In reminder templates, `{meeting}` puts in the join link.
+
+**Calendar sync:** each session and meeting has **Add to calendar (.ics)**, **Google Calendar** and **Outlook / Teams**. **Team calendar → Export my calendar** downloads all of your own sessions and meetings for the next 12 weeks as one `.ics` file, for Google Calendar, Outlook or Apple Calendar. Calendar entries carry only the case code, time, room, clinician and join link: never the patient's name or diagnosis. This is a one-way copy, so export again after changes.
+
 ### Invite to observe
 
 From a session, **Invite to observe** (or co-treat or supervise) sends an invitation. When it is accepted, the session appears on that person's timetable and they can open the record for it.

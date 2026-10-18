@@ -222,7 +222,7 @@ function createServer(opts) {
       const done = db.state.reminders.some((x) => x.apptId === a.id && x.date === a.date && x.time === a.time && x.status === 'sent');
       return to && !done ? { a: a, p: p, to: to } : null;
     }).filter(Boolean);
-    const vars = (a) => ({ clinic: clinicName(), day: L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }), date: L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' }), time: L.formatTime(a.time), link: ms.portalLink || '' });
+    const vars = (a) => ({ clinic: clinicName(), day: L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }), date: L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' }), time: L.formatTime(a.time), link: ms.portalLink || '', meeting: a.meetingUrl || '' });
     return jobs.reduce((pr, j) => pr.then((out) => deliver({ to: [j.to], subject: 'Appointment reminder – ' + clinicName(), text: L.fillTemplate(tpl, vars(j.a)) }).then((res) => {
       db.state.reminders.push({ id: L.uid('rem'), patientId: j.p.id, apptId: j.a.id, date: j.a.date, time: j.a.time, channel: 'email', status: 'sent', sentAt: new Date().toISOString(), by: 'system', messageId: res.messageId });
       out.sent++; return out;

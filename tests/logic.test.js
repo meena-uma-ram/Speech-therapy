@@ -206,3 +206,40 @@ test('reminder templates stay neutral and SMS parts are counted', () => {
   assert.strictEqual(L.smsParts('नमस्ते').unicode, true);
   assert.strictEqual(L.maskPhone('+919876543210'), '+91••••••3210');
 });
+
+test('meetingLink keeps only https join links from Zoom, Google Meet and Teams', () => {
+  assert.deepStrictEqual(L.meetingLink(' https://us02web.zoom.us/j/123?pwd=ab '), { app: 'zoom', url: 'https://us02web.zoom.us/j/123?pwd=ab' });
+  assert.strictEqual(L.meetingLink('https://meet.google.com/abc-defg-hij', 'meet').app, 'meet');
+  assert.strictEqual(L.meetingLink('https://teams.microsoft.com/l/meetup-join/19%3a1', 'teams').app, 'teams');
+  assert.strictEqual(L.meetingLink('https://meet.google.com/abc-defg-hij', 'zoom'), null, 'link must match the chosen app');
+  assert.strictEqual(L.meetingLink('http://zoom.us/j/1'), null);
+  assert.strictEqual(L.meetingLink('javascript:alert(1)'), null);
+  assert.strictEqual(L.meetingLink('https://zoom.us.evil.com/j/1'), null);
+  assert.strictEqual(L.meetingLink('https://evil.com/?meet.google.com'), null);
+  assert.strictEqual(L.meetingLink('not a link'), null);
+});
+
+test('icsCalendar writes escaped, folded events that end on the next day when needed', () => {
+  const ics = L.icsCalendar([{ uid: 'apt_1', date: '2026-10-18', time: '23:45', duration: 30, title: 'Session, SLT-26-001; room 2', url: 'https://meet.google.com/abc-defg-hij', description: 'Line 1\nLine 2' }], new Date(Date.UTC(2026, 9, 1)));
+  assert.match(ics, /^BEGIN:VCALENDAR\r\n/);
+  assert.match(ics, /\r\nDTSTART:20261018T234500\r\nDTEND:20261019T001500\r\n/);
+  assert.match(ics, /\r\nSUMMARY:Session\\, SLT-26-001\\; room 2\r\n/);
+  assert.match(ics, /\r\nDTSTAMP:20261001T000000Z\r\n/);
+  assert.ok(ics.split('\r\n').every((l) => l.length <= 75), 'lines folded at 75');
+  assert.match(ics.replace(/\r\n /g, ''), /DESCRIPTION:Line 1\\nLine 2\\nJoin: https:\/\/meet.google.com\/abc-defg-hij/);
+  assert.match(ics, /END:VEVENT\r\nEND:VCALENDAR\r\n$/);
+});
+
+test('calendarLinks prefill Google Calendar and Outlook', () => {
+  const c = L.calendarLinks({ date: '2026-10-18', time: '09:00', duration: 45, title: 'Supervision', url: 'https://zoom.us/j/9' });
+  assert.match(c.google, /^https:\/\/calendar\.google\.com\/calendar\/render\?action=TEMPLATE&text=Supervision&dates=20261018T090000\/20261018T094500&/);
+  assert.match(c.google, /location=https%3A%2F%2Fzoom\.us%2Fj%2F9/);
+  assert.match(c.outlook, /^https:\/\/outlook\.office\.com\/calendar\/0\/deeplink\/compose\?/);
+  assert.match(c.outlook, /startdt=2026-10-18T09%3A00%3A00&enddt=2026-10-18T09%3A45%3A00/);
+});
+
+test('reminder templates accept {meeting}', () => {
+  assert.strictEqual(L.fillTemplate('Join: {meeting}', { meeting: 'https://zoom.us/j/1' }), 'Join: https://zoom.us/j/1');
+  assert.deepStrictEqual(L.templateWarnings('{clinic} {day} {time} {meeting}'), []);
+  assert.strictEqual(L.templateWarnings('{clinic} {name}').length, 1);
+});

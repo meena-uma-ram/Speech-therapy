@@ -274,6 +274,7 @@
       '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '">Patient file</a>' +
       (canRunSession(a, p) ? '<button class="btn btn-ghost" data-action="edit-appt" data-id="' + a.id + '">Edit session</button>' : '') + '</div></header>' +
       '<p class="small">' + apptBadges(a, p) + ' Clinician: ' + esc(userName(L.clinicianFor(a, p))) + '</p>' +
+      (a.status === 'cancelled' ? '' : onlineBar(a, 'appt')) +
       sessionTools(a, p) +
       tabs(base, tab, [['prep', 'Goals & materials'], ['log', log ? 'Session log ✓' : 'Log session'], ['progress', 'Progress'], ['report', 'Report']]);
 
@@ -661,6 +662,83 @@
       id ? function () { S.remove('materials', id); } : null);
   }
 
+  /* ---------- online sessions: Zoom, Google Meet, Microsoft Teams, and calendar export ---------- */
+
+  function meetingFields(v) {
+    const app = v.meetingApp || '';
+    return '<fieldset class="pick meeting-fields"><legend>Online (video call)</legend>' +
+      '<div class="grid-2"><label>Held on<select name="meetingApp">' + opt('', 'In person', !app) +
+      Object.keys(L.MEETING_APPS).map(function (k) { return opt(k, L.MEETING_APPS[k].label, app === k); }).join('') + '</select></label>' +
+      '<label>Join link<input type="url" name="meetingUrl" value="' + esc(v.meetingUrl || '') + '" placeholder="Paste the meeting link"' + (app ? '' : ' disabled') + '></label></div>' +
+      '<p class="small muted meeting-new"' + (app ? '' : ' hidden') + '><a class="link" target="_blank" rel="noopener noreferrer" href="' + esc(app ? L.MEETING_APPS[app].newUrl : '#') + '">Create a meeting in ' + esc(app ? L.MEETING_APPS[app].label : '') + ' ↗</a>, then copy its join link here. ' +
+      'Use the case code, not the patient’s name, as the meeting title.</p></fieldset>';
+  }
+
+  function wireMeetingFields(form) {
+    const sel = form.querySelector('[name=meetingApp]'), url = form.querySelector('[name=meetingUrl]'), hint = form.querySelector('.meeting-new');
+    sel.addEventListener('change', function () {
+      const app = L.MEETING_APPS[sel.value];
+      url.disabled = !app; hint.hidden = !app;
+      if (app) { const a = hint.querySelector('a'); a.href = app.newUrl; a.textContent = 'Create a meeting in ' + app.label + ' ↗'; url.focus(); }
+    });
+  }
+
+  /* { meetingApp, meetingUrl } from the form, or null (after telling the person) when the link doesn't belong to the chosen app. */
+  function readMeeting(fd) {
+    const app = fd.get('meetingApp') || '', text = (fd.get('meetingUrl') || '').trim();
+    if (!app) return { meetingApp: '', meetingUrl: '' };
+    if (!text) return { meetingApp: app, meetingUrl: '' };
+    const link = L.meetingLink(text, app);
+    if (!link) { toast('That isn’t a ' + L.MEETING_APPS[app].label + ' link. Copy the join link (https://…) from ' + L.MEETING_APPS[app].label + '.'); return null; }
+    return { meetingApp: app, meetingUrl: link.url };
+  }
+
+  function meetingBadge(r) {
+    return r.meetingApp && L.MEETING_APPS[r.meetingApp] ? '<span class="badge badge-info">Online · ' + esc(L.MEETING_APPS[r.meetingApp].label) + '</span>' : '';
+  }
+
+  /* Calendar entries carry the case code and time only: no names or health details, as they leave TJS. */
+  function apptCalItem(a) {
+    const p = S.patient(a.patientId);
+    return { uid: a.id, date: a.date, time: a.time, duration: a.duration, title: 'Session' + (p && p.caseCode ? ' · ' + p.caseCode : ''),
+      location: a.room || '', url: a.meetingUrl || '', description: 'With ' + userName(L.clinicianFor(a, p)) };
+  }
+  function eventCalItem(e) {
+    return { uid: e.id, date: e.date, time: e.time, duration: e.duration, title: e.title, url: e.meetingUrl || '', description: e.note || '' };
+  }
+
+  function downloadIcs(items, name) {
+    const blob = new Blob([L.icsCalendar(items)], { type: 'text/calendar' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = name;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+  }
+
+  /* Join button and "add to calendar" for one session or meeting. kind: 'appt' or 'event'. */
+  function onlineBar(rec, kind) {
+    const item = kind === 'event' ? eventCalItem(rec) : apptCalItem(rec);
+    const links = L.calendarLinks(item);
+    const app = L.MEETING_APPS[rec.meetingApp];
+    return '<div class="actions wrap online-bar">' +
+      (app && rec.meetingUrl ? '<a class="btn btn-primary" target="_blank" rel="noopener noreferrer" href="' + esc(rec.meetingUrl) + '">Join on ' + esc(app.label) + ' ↗</a>'
+        : app ? '<span class="small muted">Online on ' + esc(app.label) + ': no join link yet.</span>' : '') +
+      '<button type="button" class="btn btn-sm" data-action="ics" data-kind="' + kind + '" data-id="' + rec.id + '">Add to calendar (.ics)</button>' +
+      '<a class="btn btn-sm btn-ghost" target="_blank" rel="noopener noreferrer" href="' + esc(links.google) + '">Google Calendar ↗</a>' +
+      '<a class="btn btn-sm btn-ghost" target="_blank" rel="noopener noreferrer" href="' + esc(links.outlook) + '">Outlook / Teams ↗</a></div>';
+  }
+
+  /* Everything on my own calendar from today: sessions I run, cover or observe, and meetings I'm invited to. */
+  function myCalendarItems(weeks) {
+    const today = L.todayISO(), until = L.addDays(today, 7 * weeks), uid = me().id, pm = S.byId(S.state.patients);
+    const appts = S.state.appointments.filter(function (a) {
+      return !a.busy && a.status !== 'cancelled' && a.date >= today && a.date < until &&
+        (Sync.clinicianOf(a, pm) === uid || (a.observers || []).some(function (o) { return o.userId === uid && o.status === 'accepted'; }));
+    }).map(apptCalItem);
+    const events = S.state.events.filter(function (e) { return !e.busy && e.date >= today && e.date < until && (e.attendees || []).indexOf(uid) >= 0; }).map(eventCalItem);
+    return appts.concat(events);
+  }
+
   function apptForm(id, defaults) {
     const st = S.state;
     const a = id ? S.appointment(id) : Object.assign({ date: L.todayISO(), time: '09:00', duration: 30, room: '', goalIds: [], extraMaterialIds: [], status: 'scheduled', patientId: '' }, defaults || {});
@@ -680,16 +758,19 @@
       '<label>Minutes<input type="number" min="5" step="5" name="duration" value="' + esc(a.duration) + '"></label></div>' +
       '<div class="grid-2"><label>Room / location<input name="room" value="' + esc(a.room) + '"></label>' +
       '<label>Status<select name="status">' + [['scheduled', 'Scheduled'], ['attended', 'Attended'], ['missed', 'Did not attend'], ['cancelled', 'Cancelled']].map(function (s) { return opt(s[0], s[1], a.status === s[0] || (s[0] === 'attended' && a.status === 'completed')); }).join('') + '</select></label></div>' +
+      meetingFields(a) +
       '<fieldset class="pick"><legend>Goals to target</legend><div id="goal-checks">' + goalChecks(a.patientId, id ? a.goalIds : S.goalsForPatient(a.patientId).filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; })) + '</div></fieldset>' +
       '<fieldset class="pick"><legend>Extra materials (beyond the goals\' own)</legend>' + st.materials.map(function (x) {
         return '<label class="check"><input type="checkbox" name="extraMaterialIds" value="' + x.id + '"' + ((a.extraMaterialIds || []).indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + esc(x.name) + '</label>';
       }).join('') + '</fieldset>' +
       (id ? '' : '<label>Repeat weekly for<select name="repeat">' + [1, 2, 4, 6, 8, 12].map(function (n) { return opt(n, n === 1 ? 'Just this once' : n + ' weeks'); }).join('') + '</select></label>'),
       function (fd) {
-        const base = {
+        const online = readMeeting(fd);
+        if (!online) return false;
+        const base = Object.assign({
           patientId: fd.get('patientId'), time: fd.get('time'), duration: Number(fd.get('duration')) || 30,
           room: fd.get('room').trim(), status: fd.get('status'), goalIds: fd.getAll('goalIds'), extraMaterialIds: fd.getAll('extraMaterialIds')
-        };
+        }, online);
         if (id) { S.upsert('appointments', Object.assign({}, a, base, { date: fd.get('date') })); return; }
         const n = Number(fd.get('repeat')) || 1;
         for (let i = 0; i < n; i++) S.upsert('appointments', Object.assign({ notes: '' }, base, { id: null, date: L.addDays(fd.get('date'), 7 * i) }));
@@ -699,6 +780,7 @@
         S.remove('appointments', id);
         go('#/schedule?date=' + a.date);
       } : null);
+    wireMeetingFields(form);
     form.querySelector('[name=patientId]').addEventListener('change', function (ev) {
       const pid = ev.target.value;
       form.querySelector('#goal-checks').innerHTML = goalChecks(pid, S.goalsForPatient(pid).filter(function (g) { return g.status === 'active'; }).map(function (g) { return g.id; }));
@@ -1307,7 +1389,7 @@
         : '<li>' + caution() + '<div><strong>Individual sign-in and need-to-know screens – on one shared device, not a security barrier.</strong> Each person\u2019s screens show only their own patients. But on one device all records are stored together, and anyone who can unlock this browser, or use its developer tools, can read them. For real separation between staff, run the clinic server.</div></li>') +
       '<li>' + tick(true) + '<div><strong>Pseudonymised coursework.</strong> Lesson plans and reports use the case code and initials.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Consent ledger.</strong> Each answer per purpose, who gave it, in which language and notice version, how they confirmed it. Entries are sealed and never edited; withdrawal takes effect straight away.</div></li>' +
-      '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record.</div></li>' +
+      '<li>' + tick(true) + '<div><strong>Access log</strong> of who opened, changed, shared or erased each record, seen only by supervisors.</div></li>' +
       '<li>' + tick(due.length === 0) + '<div><strong>Retention:</strong> discharged records ' + (set.autoErase ? 'are erased automatically' : 'are flagged for erasure') + ' ' + esc(set.retentionYears) + ' years after therapy ends' + (due.length ? ' – <strong>' + due.length + ' due now</strong>' : '') + '.</div></li>' +
       '<li>' + tick(true) + '<div><strong>Crypto-shredding.</strong> Each patient has their own key, and backups store each patient encrypted with it. Erasing a patient destroys the key, so every earlier backup becomes unreadable for that patient. Each erasure leaves a deletion receipt.</div></li>' +
       '</ul><p class="small muted">Everyone signs in with their own password, stored only as a salted hash, and is signed out after ' + esc(set.autoLockMinutes) + ' minutes idle. ' +
@@ -1356,8 +1438,9 @@
 
     if (isLead) html += peopleSection();
 
-    const log = st.audit.slice(-80).reverse();
-    html += '<section class="card"><div class="card-head"><h2>Access log</h2><button class="btn btn-sm" data-action="copy-audit">Copy log</button></div>' +
+    // The access log is for supervisors only (on the clinic server it is never even sent to anyone else).
+    const log = isLead ? st.audit.slice(-80).reverse() : [];
+    if (isLead) html += '<section class="card"><div class="card-head"><h2>Access log</h2><button class="btn btn-sm" data-action="copy-audit">Copy log</button></div>' +
       '<div class="table-wrap"><table class="tbl"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Record</th></tr></thead><tbody>' +
       log.map(function (e) {
         return '<tr><td class="nowrap">' + esc(fmtStamp(e.at)) + '</td><td>' + esc(e.user) + '</td><td>' + esc(e.action) + (e.detail ? ' <span class="muted">(' + esc(e.detail) + ')</span>' : '') + '</td><td>' + esc(e.target || '') + '</td></tr>';
@@ -1454,6 +1537,7 @@
     },
     'remove-user': function (el) { S.remove('users', el.dataset.id); render(); },
     'copy-audit': function () {
+      if (me().role !== 'supervisor') return;
       copyText(S.state.audit.map(function (e) { return [e.at, e.user, e.action, e.target, e.detail].join('\t'); }).join('\n'));
     }
   };
@@ -1730,7 +1814,7 @@
     if (a.coverBy) h += '<span class="badge badge-info">' + (a.coverBy === u.id ? 'You are covering' : 'Cover: ' + esc(firstName(a.coverBy))) + '</span>';
     if (observing(a, u.id)) h += '<span class="badge">Observing</span>';
     if ((a.reschedules || []).length) h += '<span class="badge">Rescheduled</span>';
-    return h;
+    return h + meetingBadge(a);
   }
 
   function countsLine(p) {
@@ -2148,7 +2232,7 @@
     const ms = msgSettings();
     return L.fillTemplate(channel === 'whatsapp' ? ms.waTemplate : ms.smsTemplate, {
       clinic: ms.clinicName, day: L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }), date: L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' }),
-      time: L.formatTime(a.time), link: ms.portalLink
+      time: L.formatTime(a.time), link: ms.portalLink, meeting: a.meetingUrl || ''
     });
   }
 
@@ -2225,7 +2309,7 @@
       '<label>WhatsApp template<textarea name="waTemplate" rows="3">' + esc(ms.waTemplate) + '</textarea></label>' +
       '<p class="small preview"><span class="meta-label">Preview</span> ' + esc(prevW) + '</p>' +
       warnW.map(function (w) { return '<p class="small bad">' + esc(w) + '</p>'; }).join('') + '</div></div>' +
-      '<p class="small muted">Placeholders: {clinic}, {day}, {date}, {time}, {link}. The SMS wording must match your DLT-approved template exactly, and the WhatsApp wording must match your approved template.</p>' +
+      '<p class="small muted">Placeholders: {clinic}, {day}, {date}, {time}, {link}, and {meeting} for the video-call link of online sessions. The SMS wording must match your DLT-approved template exactly, and the WhatsApp wording must match your approved template.</p>' +
       '<div class="actions"><button class="btn btn-primary" type="submit">Save reminder settings</button></div></form>';
   }
 
@@ -2326,7 +2410,8 @@
   function itemLabel(it) {
     if (it.kind === 'event') {
       const open = canSeeEvent(it.rec);
-      return { title: open ? it.rec.title : 'Busy', sub: open ? 'Meeting' : '', cls: 'tm-event', link: open && (it.rec.createdBy === me().id || me().role === 'supervisor') ? 'edit-event' : '' };
+      return { title: open ? it.rec.title : 'Busy', sub: open ? (it.rec.meetingApp ? 'Meeting · ' + L.MEETING_APPS[it.rec.meetingApp].label : 'Meeting') : '', cls: 'tm-event',
+        link: !open ? '' : it.rec.createdBy === me().id || me().role === 'supervisor' ? 'edit-event' : 'view-event' };
     }
     const a = it.rec, p = !a.busy && S.patient(a.patientId);
     if (p && canSee(p)) return { title: nm(p), sub: (it.observing ? 'Observing · ' : '') + L.caseLabel(p), cls: 'fam-' + L.conditionFamily(p.condition), href: '#/session/' + a.id };
@@ -2343,7 +2428,8 @@
 
     let html = '<header class="page-head"><div><h1>Team calendar</h1><p class="muted">' + esc(pref.mode === 'week' ? 'Week of ' + L.formatDate(from) : L.formatDate(date)) +
       (S.isServer() ? ' · live from the clinic server' : '') + '</p></div>' +
-      '<button class="btn btn-primary" data-action="new-event" data-date="' + date + '" data-with="' + esc(pref.picked.join(',')) + '">+ Add meeting</button></header>';
+      '<div class="head-actions"><button class="btn btn-ghost" data-action="ics-mine" title="Your sessions and meetings for the next 12 weeks, for Google Calendar, Outlook or Apple Calendar">Export my calendar</button>' +
+      '<button class="btn btn-primary" data-action="new-event" data-date="' + date + '" data-with="' + esc(pref.picked.join(',')) + '">+ Add meeting</button></div></header>';
 
     html += '<div class="toolbar"><div class="date-nav">' +
       '<a class="btn btn-ghost" href="#/team?date=' + L.addDays(date, -step) + '" aria-label="Previous">‹</a>' +
@@ -2460,24 +2546,42 @@
       '<fieldset class="checks"><legend>Who</legend>' + S.state.users.map(function (u) {
         return '<label class="check"><input type="checkbox" name="attendees" value="' + u.id + '"' + ((v.attendees || []).indexOf(u.id) >= 0 ? ' checked' : '') + '> ' + esc(u.name) + ' <span class="muted small">' + esc(L.ROLES[u.role].label) + '</span></label>';
       }).join('') + '</fieldset>' +
+      meetingFields(v) +
       '<label>Note<textarea name="note" rows="2" placeholder="Agenda or room. No patient details: use the case code.">' + esc(v.note || '') + '</textarea></label>' +
       '<p class="small muted">People not invited see this only as <em>Busy</em>.</p>';
-    openModal(e ? 'Edit meeting' : 'New meeting', body, function (fd) {
+    const form = openModal(e ? 'Edit meeting' : 'New meeting', (e ? onlineBar(e, 'event') : '') + body, function (fd) {
+      const online = readMeeting(fd);
+      if (!online) return false;
       const start = L.toMinutes(fd.get('time')), stop = L.toMinutes(fd.get('end'));
       if (stop <= start) { toast('The end time is before the start time.'); return false; }
       const who = fd.getAll('attendees');
       if (!who.length) { toast('Choose at least one person.'); return false; }
       const saved = S.upsert('events', Object.assign({}, e || { createdBy: me().id, createdAt: new Date().toISOString() }, {
         title: fd.get('title').trim(), date: fd.get('date'), time: fd.get('time'), duration: stop - start, attendees: who, note: fd.get('note').trim()
-      }));
+      }, online));
       const when = L.formatDate(saved.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' ' + L.formatTime(saved.time);
       const added = who.filter(function (uid) { return uid !== me().id && (!e || (e.attendees || []).indexOf(uid) < 0); });
-      if (added.length) S.send(added, { kind: 'invite', link: '#/team?date=' + saved.date, subject: 'Meeting: ' + saved.title + ', ' + when, body: (saved.note || '') + '\nFrom ' + me().name + '.' });
+      const joinLine = saved.meetingUrl ? '\nJoin on ' + L.MEETING_APPS[saved.meetingApp].label + ': ' + saved.meetingUrl : '';
+      if (added.length) S.send(added, { kind: 'invite', link: '#/team?date=' + saved.date, subject: 'Meeting: ' + saved.title + ', ' + when, body: (saved.note || '') + joinLine + '\nFrom ' + me().name + '.' });
       const clashes = who.filter(function (uid) {
         return teamItems(uid, saved.date).some(function (it) { return !(it.kind === 'event' && it.rec.id === saved.id) && L.overlaps({ time: saved.time, duration: saved.duration }, { time: it.time, duration: it.duration }); });
       });
       toast(clashes.length ? 'Saved – clashes with ' + clashes.map(firstName).join(', ') : 'Meeting saved');
     }, e ? function () { S.remove('events', e.id); toast('Meeting deleted'); } : null);
+    wireMeetingFields(form);
+  }
+
+  /* Invited, but not the organiser: the details, the join link and "add to calendar", without editing. */
+  function eventInfo(id) {
+    const e = S.state.events.find(function (x) { return x.id === id; });
+    if (!e || !canSeeEvent(e)) return;
+    const when = L.formatDate(e.date, { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + L.formatTime(e.time) + '–' + L.formatTime(L.fromMinutes(L.toMinutes(e.time) + (Number(e.duration) || 30)));
+    modal.innerHTML = '<div class="modal-form"><header><h2>' + esc(e.title) + '</h2><button type="button" class="btn btn-ghost" data-close aria-label="Close">✕</button></header>' +
+      '<div class="modal-body"><p>' + esc(when) + ' ' + meetingBadge(e) + '</p>' + (e.note ? '<p class="small">' + esc(e.note) + '</p>' : '') +
+      '<p class="small muted">With ' + esc((e.attendees || []).map(userName).join(', ')) + '. Organised by ' + esc(userName(e.createdBy)) + '.</p>' + onlineBar(e, 'event') + '</div>' +
+      '<footer><span></span><button type="button" class="btn" data-close>Close</button></footer></div>';
+    modal.querySelectorAll('[data-close]').forEach(function (b) { b.addEventListener('click', function () { modal.close(); }); });
+    modal.showModal();
   }
 
   Object.assign(ACTIONS, {
@@ -2492,7 +2596,18 @@
     'new-event': function (el) {
       eventForm(null, { date: el.dataset.date || L.todayISO(), time: el.dataset.time, end: el.dataset.end, with: (el.dataset.with || me().id).split(',').filter(Boolean) });
     },
-    'edit-event': function (el) { eventForm(el.dataset.id, {}); }
+    'edit-event': function (el) { eventForm(el.dataset.id, {}); },
+    'view-event': function (el) { eventInfo(el.dataset.id); },
+    'ics': function (el) {
+      const rec = el.dataset.kind === 'event' ? S.state.events.find(function (x) { return x.id === el.dataset.id; }) : S.appointment(el.dataset.id);
+      if (rec) downloadIcs([el.dataset.kind === 'event' ? eventCalItem(rec) : apptCalItem(rec)], (el.dataset.kind === 'event' ? 'meeting-' : 'session-') + rec.date + '.ics');
+    },
+    'ics-mine': function () {
+      const items = myCalendarItems(12);
+      if (!items.length) { toast('Nothing booked for you in the next 12 weeks.'); return; }
+      downloadIcs(items, 'tjs-my-calendar-' + L.todayISO() + '.ics');
+      toast(items.length + ' entries – open the file to add them to Google Calendar, Outlook or Apple Calendar');
+    }
   });
 
   /* ---------- consent: notice, per-purpose answers, confirmation, seal, receipt, withdrawal ---------- */

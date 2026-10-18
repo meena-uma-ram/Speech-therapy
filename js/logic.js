@@ -465,6 +465,77 @@
     return 'mailto:' + encodeURIComponent(to || '').replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(String(body || '').replace(/\n/g, '\r\n'));
   }
 
+  /* ---------- online sessions and calendars ---------- */
+
+  /*
+   * Video apps a session or meeting can be held on. TJS doesn't sign in to them: the clinician makes the meeting in the
+   * app (newUrl opens its "new meeting" page) and pastes the join link back. Only https links on the app's own domains are kept.
+   */
+  const MEETING_APPS = {
+    zoom: { label: 'Zoom', newUrl: 'https://zoom.us/meeting/schedule', host: /(^|\.)zoom\.(us|com)$/ },
+    meet: { label: 'Google Meet', newUrl: 'https://meet.google.com/new', host: /^meet\.google\.com$/ },
+    teams: { label: 'Microsoft Teams', newUrl: 'https://teams.microsoft.com/l/meeting/new', host: /^teams\.(microsoft|live)\.com$/ }
+  };
+
+  /* { app, url } for a join link from one of MEETING_APPS, or null (wrong app, not https, not a link at all). */
+  function meetingLink(text, app) {
+    let u;
+    try { u = new URL(String(text || '').trim()); } catch (e) { return null; }
+    if (u.protocol !== 'https:' || u.username || u.password) return null;
+    const host = u.hostname.toLowerCase();
+    const found = Object.keys(MEETING_APPS).find(function (k) { return MEETING_APPS[k].host.test(host); });
+    if (!found || (app && app !== found)) return null;
+    return { app: found, url: u.href };
+  }
+
+  function icsStamp(date, time) { return date.replace(/-/g, '') + 'T' + time.replace(':', '') + '00'; }
+  function icsText(s) { return String(s || '').replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/([,;])/g, '\\$1'); }
+  /* Lines longer than 75 octets are folded, as the iCalendar format requires (counted in characters: close enough for ASCII). */
+  function icsFold(line) {
+    const out = [];
+    while (line.length > 75) { out.push(line.slice(0, 75)); line = ' ' + line.slice(75); }
+    out.push(line);
+    return out.join('\r\n');
+  }
+  function endOf(item) {
+    const m = toMinutes(item.time) + (Number(item.duration) || 30);
+    return { date: addDays(item.date, Math.floor(m / 1440)), time: fromMinutes(m % 1440) };
+  }
+
+  /*
+   * An .ics file (Google Calendar, Outlook, Apple Calendar all import it). Items: { uid, date, time, duration, title, location, url, description }.
+   * Times are "floating": the calendar shows them at the same clock time, in its own time zone.
+   */
+  function icsCalendar(items, now) {
+    const stamp = (now || new Date()).toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//TJS//Speech therapy planner//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+    (items || []).forEach(function (it) {
+      const end = endOf(it);
+      lines.push('BEGIN:VEVENT', 'UID:' + icsText(it.uid) + '@tjs', 'DTSTAMP:' + stamp, 'DTSTART:' + icsStamp(it.date, it.time), 'DTEND:' + icsStamp(end.date, end.time),
+        'SUMMARY:' + icsText(it.title));
+      if (it.location || it.url) lines.push('LOCATION:' + icsText(it.url || it.location));
+      if (it.url) lines.push('URL:' + it.url);
+      const desc = [it.description, it.url ? 'Join: ' + it.url : ''].filter(Boolean).join('\n');
+      if (desc) lines.push('DESCRIPTION:' + icsText(desc));
+      lines.push('END:VEVENT');
+    });
+    lines.push('END:VCALENDAR');
+    return lines.map(icsFold).join('\r\n') + '\r\n';
+  }
+
+  /* "Add to calendar" links that open Google Calendar or Outlook on the web with the event filled in (nothing is sent until the person saves it). */
+  function calendarLinks(it) {
+    const end = endOf(it);
+    const desc = [it.description, it.url ? 'Join: ' + it.url : ''].filter(Boolean).join('\n');
+    const where = it.url || it.location || '';
+    const q = function (o) { return Object.keys(o).map(function (k) { return k + '=' + encodeURIComponent(o[k]); }).join('&'); };
+    return {
+      google: 'https://calendar.google.com/calendar/render?' + q({ action: 'TEMPLATE', text: it.title || '' }) + '&dates=' + icsStamp(it.date, it.time) + '/' + icsStamp(end.date, end.time) + '&' + q({ details: desc, location: where }),
+      outlook: 'https://outlook.office.com/calendar/0/deeplink/compose?' + q({ path: '/calendar/action/compose', rru: 'addevent', subject: it.title || '',
+        startdt: it.date + 'T' + it.time + ':00', enddt: end.date + 'T' + end.time + ':00', body: desc, location: where })
+    };
+  }
+
   /* ---------- team calendar ---------- */
 
   /* Monday of the week containing this date. */
@@ -552,13 +623,13 @@
 
   /* Fill a reminder template. Only neutral fields are available: no names, conditions or notes. */
   function fillTemplate(tpl, vars) {
-    return String(tpl || '').replace(/\{(clinic|day|date|time|link)\}/g, function (m, k) { return vars[k] != null ? vars[k] : m; });
+    return String(tpl || '').replace(/\{(clinic|day|date|time|link|meeting)\}/g, function (m, k) { return vars[k] != null ? vars[k] : m; });
   }
 
   /* Words that suggest health details leaked into a reminder template. */
   function templateWarnings(tpl) {
     const out = [];
-    if (/\{(?!clinic|day|date|time|link\})[^}]*\}/.test(tpl)) out.push('Unknown placeholder – use {clinic}, {day}, {date}, {time} and {link} only.');
+    if (/\{(?!(clinic|day|date|time|link|meeting)\})[^}]*\}/.test(tpl)) out.push('Unknown placeholder – use {clinic}, {day}, {date}, {time}, {link} and {meeting} only.');
     if (/therap|speech|stammer|stutter|autis|aphasia|stroke|cleft|dysphag|diagnos|disorder|delay/i.test(tpl)) out.push('Avoid health words in reminders – a lock screen or shared phone can show them.');
     return out;
   }
@@ -643,6 +714,7 @@
     clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
     PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles,
     weekStart: weekStart, freeSlots: freeSlots, CHANNEL_LABELS: CHANNEL_LABELS, LETTER_KINDS: LETTER_KINDS, letterDraft: letterDraft, mailtoLink: mailtoLink,
+    MEETING_APPS: MEETING_APPS, meetingLink: meetingLink, icsCalendar: icsCalendar, calendarLinks: calendarLinks,
     CHANNELS: CHANNELS, reminderChannel: reminderChannel, fillTemplate: fillTemplate, templateWarnings: templateWarnings, smsParts: smsParts, maskPhone: maskPhone
   };
 
