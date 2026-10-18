@@ -85,7 +85,7 @@ Much of this code was written with an AI assistant. A licence can only be enforc
 
 ## 3. India: DPDP Act 2023 and DPDP Rules 2025
 
-The **Digital Personal Data Protection Act, 2023** applies to digital personal data processed in India. The **DPDP Rules, 2025** were notified in November 2025; the Data Protection Board provisions apply first, and most duties for fiduciaries apply after an **18-month phase-in** (around May 2027). Check the current dates. Build to the rules now: patients and partners will expect it.
+The **Digital Personal Data Protection Act, 2023** applies to digital personal data processed in India. The **DPDP Rules, 2025** were notified on 13 November 2025 (G.S.R. 846(E)). The Data Protection Board provisions apply first, consent managers from about 13 November 2026, and most duties for fiduciaries after an **18-month phase-in** (about 13 May 2027). MeitY proposed shortening the window in January 2026; as of October 2026 no change had been notified. **Until then the IT Act s. 43A and SPDI Rules 2011 apply** (section 4). Build to the DPDP rules now: patients and partners will expect it.
 
 ### What the law asks, and what the app and this setup do
 

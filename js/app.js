@@ -1374,7 +1374,11 @@
       rg.duties.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') +
       '<li><strong>Breaches:</strong> ' + esc(rg.breach) + '</li>' +
       '<li><strong>Patients can complain to:</strong> ' + esc(rg.authority) + '.</li></ul>' +
-      '<p class="small muted">Draft guidance: have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country in Settings above.</p>' +
+      (rg.minRetentionYears && (Number(S.state.settings.retentionYears) || 0) < rg.minRetentionYears
+        ? '<div class="callout warn"><strong>Retention too short.</strong><span>Records are kept ' + esc(S.state.settings.retentionYears) + ' years; ' + esc(rg.name) + ' requires at least ' + rg.minRetentionYears + '. Change it in Settings above.</span></div>' : '') +
+      (rg.ai && rg.ai.length ? '<h3>Artificial intelligence</h3><ul class="small plain">' + rg.ai.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul>' : '') +
+      (rg.upcoming && rg.upcoming.length ? '<h3>Coming up</h3><ul class="small plain">' + rg.upcoming.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') + '</ul>' : '') +
+      '<p class="small muted">Draft guidance, last checked against the law in ' + esc(R.CHECKED) + ': have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country in Settings above.</p>' +
       '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p>';
   }
 

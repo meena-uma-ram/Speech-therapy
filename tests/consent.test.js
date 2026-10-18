@@ -82,6 +82,10 @@ test('countries: complete entries, offered languages exist, the notice names the
     const n = C.notice(r.languages[0], null, { clinic: 'X', years: 8, contact: 'c', authority: r.authority });
     if (r.languages[0] === 'en' || r.languages[0] === 'sv') assert.ok(n.rights.includes(r.authority), k);
   });
+  Object.keys(R.REGIONS).forEach((k) => assert.ok(Array.isArray(R.REGIONS[k].ai) && R.REGIONS[k].ai.length && Array.isArray(R.REGIONS[k].upcoming), k + ' ai/upcoming'));
+  assert.ok(R.REGIONS.SE.ai.some((x) => /Art\. 4/.test(x)) && R.REGIONS.EU.ai === R.REGIONS.SE.ai, 'EU AI Act covers Sweden and the EU');
+  assert.strictEqual(R.REGIONS.SE.minRetentionYears, 10);
+  assert.ok(R.CHECKED);
   assert.strictEqual(R.region('nowhere').name, 'India');
   assert.ok(C.notice('sv', null, { authority: 'Integritetsskyddsmyndigheten (IMY)' }).rights.includes('IMY'));
   const p = { id: 'p', dob: '2009-06-01', guardian: 'Anna' };
