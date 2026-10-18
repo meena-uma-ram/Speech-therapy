@@ -4,8 +4,8 @@
  * Offline support for the installed app. Caches only the app's own files (code, styles, icons).
  * Patient data never passes through here: it stays in the browser's local storage, or on the clinic server (api/ requests are never cached).
  */
-const CACHE = 'tjs-v3';
-const FILES = ['./', './index.html', './css/styles.css', './js/logic.js', './js/sync.js', './js/consent.js', './js/store.js', './js/app.js',
+const CACHE = 'tjs-v4';
+const FILES = ['./', './css/styles.css', './js/logic.js', './js/sync.js', './js/consent.js', './js/store.js', './js/app.js',
   './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (ev) {
@@ -28,6 +28,6 @@ self.addEventListener('fetch', function (ev) {
     caches.open(CACHE).then(function (c) { c.put(req, copy); });
     return res;
   }).catch(function () {
-    return caches.match(req, { ignoreSearch: true }).then(function (hit) { return hit || caches.match('./index.html'); });
+    return caches.match(req, { ignoreSearch: true }).then(function (hit) { return hit || caches.match('./'); });
   }));
 });

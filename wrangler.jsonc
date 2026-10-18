@@ -1,0 +1,12 @@
+// Cloudflare Workers (static assets): publishes the TJS app from this repository.
+// Workers Builds runs `npx wrangler deploy` on every push to main; no build step is needed.
+// What is NOT published is listed in .assetsignore (server code, database schema, tests, documents).
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "speech-therapy",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./",
+    "not_found_handling": "404-page"
+  }
+}

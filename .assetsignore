@@ -1,0 +1,18 @@
+# Only the app itself is published. Everything below stays in the repository only.
+.git
+.github
+.gitignore
+.assetsignore
+wrangler.jsonc
+node_modules
+clinic-data
+clinic-data-*
+server
+supabase
+scripts
+tests
+docs
+README.md
+package.json
+package-lock.json
+*.tmp

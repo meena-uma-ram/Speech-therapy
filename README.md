@@ -165,6 +165,14 @@ The old file name `therapy-planner.html` still works: it forwards to `tjs.html`.
 
 The first screen offers the **demo** (five people, patients at each stage, coursework waiting for review; password `demo1234`) or **your clinic** (empty; you create the first supervisor and a passphrase). See [Demo and clinic](#demo-and-clinic-two-separate-workspaces).
 
+## Published on Cloudflare
+
+The repository is connected to the Cloudflare Worker **speech-therapy**. Every push to `main` publishes the app (Workers Builds runs `npx wrangler deploy`; settings in `wrangler.jsonc`, no build step).
+
+- Only the app is published: `index.html`, `tjs.html`, `css/`, `js/`, `icons/`, the manifest, the offline worker and the licence. `.assetsignore` keeps the server code, database schema, tests and documents off the site.
+- `_headers` adds the security headers (HTTPS only, content security policy, no framing, no referrer).
+- Data still stays in each visitor's browser: the published site has no server behind it. It is the single-device version, so use the **demo** there, or a clinic workspace on your own device.
+
 ## Install it as an app
 
 TJS is an installable web app (PWA). Once it is served from a website address (for example GitHub Pages, Netlify or the clinic's own server):
