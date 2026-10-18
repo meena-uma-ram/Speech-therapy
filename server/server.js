@@ -15,6 +15,7 @@ const http = require('http');
 const https = require('https');
 const crypto = require('crypto');
 const Sync = require('../js/sync.js');
+const Mailer = require('./mailer.js');
 const L = require('../js/logic.js');
 
 const ROOT = path.join(__dirname, '..');
@@ -183,6 +184,70 @@ function createServer(opts) {
 
   function persist() { vault.write('clinic-data.json', db); }
   function persistKeys() { vault.write('patient-keys.json', keys); }
+
+  /* ---------- email: the clinic's own account, kept in its own encrypted file, never sent to browsers ---------- */
+
+  let mail = vault.read('mail-settings.json') || {};
+  const outbox = []; // demo: messages are captured here instead of being sent
+  function persistMail() { vault.write('mail-settings.json', mail); }
+  function mailReady() { return !!(mail.host && mail.from && (mail.user ? mail.password : true)); }
+  function publicMail() {
+    const o = Object.assign({}, mail, { hasPassword: !!mail.password, ready: mailReady() || !!db.state.seeded, demo: !!db.state.seeded });
+    delete o.password;
+    return o;
+  }
+  function deliver(msg) {
+    if (db.state.seeded) {
+      outbox.unshift(Object.assign({ at: new Date().toISOString(), attachments: (msg.attachments || []).map((a) => a.filename) }, { to: msg.to, subject: msg.subject, text: msg.text }));
+      outbox.length = Math.min(outbox.length, 50);
+      return Promise.resolve({ messageId: '<demo-' + crypto.randomBytes(6).toString('hex') + '@tjs>', response: 'Demo: captured, not sent' });
+    }
+    if (!mailReady()) return Promise.reject(new Error('Email is not set up yet (Privacy → Email).'));
+    return (opts.sendMail || Mailer.send)(mail, msg);
+  }
+  function clinicName() { return (db.state.settings.messaging && db.state.settings.messaging.clinicName) || 'the clinic'; }
+  function emailIn(text) { const m = /[^\s<>,;]+@[^\s<>,;]+\.[a-z]{2,}/i.exec(text || ''); return m ? m[0] : ''; }
+  function changed() { db.version++; persist(); broadcast(); }
+
+  /* Tomorrow's email reminders: patients who agreed to reminders and gave an email, not yet reminded on any channel. */
+  function emailReminders(now) {
+    const r = mail.reminders || {};
+    const day = new Date(now.getTime() + (Number(r.daysAhead) || 1) * 864e5);
+    const iso = day.getFullYear() + '-' + String(day.getMonth() + 1).padStart(2, '0') + '-' + String(day.getDate()).padStart(2, '0');
+    const ms = db.state.settings.messaging || {};
+    const tpl = ms.emailTemplate || 'Hello,\n\nThis is a reminder of your appointment at {clinic} on {day} at {time}.\n\nDetails: {link}\n\nIf you cannot come, please let us know.\n\n{clinic}';
+    const jobs = db.state.appointments.filter((a) => a.date === iso && a.status === 'scheduled').map((a) => {
+      const p = db.state.patients.find((x) => x.id === a.patientId);
+      const to = p && p.reminders && p.reminders.optIn && p.reminders.channel !== 'none' && emailIn(p.contact);
+      const done = db.state.reminders.some((x) => x.apptId === a.id && x.date === a.date && x.time === a.time && x.status === 'sent');
+      return to && !done ? { a: a, p: p, to: to } : null;
+    }).filter(Boolean);
+    const vars = (a) => ({ clinic: clinicName(), day: L.formatDate(a.date, { weekday: 'short', day: 'numeric', month: 'short' }), date: L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' }), time: L.formatTime(a.time), link: ms.portalLink || '' });
+    return jobs.reduce((pr, j) => pr.then((out) => deliver({ to: [j.to], subject: 'Appointment reminder – ' + clinicName(), text: L.fillTemplate(tpl, vars(j.a)) }).then((res) => {
+      db.state.reminders.push({ id: L.uid('rem'), patientId: j.p.id, apptId: j.a.id, date: j.a.date, time: j.a.time, channel: 'email', status: 'sent', sentAt: new Date().toISOString(), by: 'system', messageId: res.messageId });
+      out.sent++; return out;
+    }, (e) => {
+      db.state.reminders.push({ id: L.uid('rem'), patientId: j.p.id, apptId: j.a.id, date: j.a.date, time: j.a.time, channel: 'email', status: 'failed', sentAt: new Date().toISOString(), by: 'system', error: String(e.message).slice(0, 200) });
+      out.failed++; return out;
+    })), Promise.resolve({ sent: 0, failed: 0, date: iso })).then((out) => {
+      mail.lastReminderRun = { at: new Date().toISOString(), date: iso, sent: out.sent, failed: out.failed };
+      persistMail();
+      if (out.sent || out.failed) changed();
+      log(null, null, 'Email reminders', iso + ': ' + out.sent + ' sent, ' + out.failed + ' failed');
+      return out;
+    });
+  }
+  // Check once a minute; run once a day at the chosen time (the server computer's clock).
+  let running = false;
+  const reminderClock = setInterval(() => {
+    const r = mail.reminders || {}, now = new Date();
+    if (!r.enabled || running || !(mailReady() || db.state.seeded)) return;
+    const today = now.toISOString().slice(0, 10), hhmm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    if (hhmm < (r.time || '18:00') || (mail.lastReminderRun && mail.lastReminderRun.at.slice(0, 10) === today)) return;
+    running = true;
+    emailReminders(now).then(() => { running = false; }, () => { running = false; });
+  }, 60000);
+  reminderClock.unref();
   function userById(id) { return db.state.users.find((u) => u.id === id); }
 
   function sessionFor(req) {
@@ -362,6 +427,64 @@ function createServer(opts) {
       res.writeHead(200, headers(meta.type, { 'Content-Disposition': 'attachment', 'Cache-Control': 'no-store', 'Content-Length': buf.length }));
       return res.end(buf);
     }
+    if (pathname === '/api/mail/settings' && req.method === 'GET') {
+      if (me.role !== 'supervisor') return json(res, 200, { ready: mailReady() || !!db.state.seeded, demo: !!db.state.seeded, reminders: { enabled: !!(mail.reminders || {}).enabled, time: (mail.reminders || {}).time } });
+      return json(res, 200, Object.assign(publicMail(), { presets: Mailer.PRESETS, outbox: db.state.seeded ? outbox : [] }));
+    }
+    if (pathname === '/api/mail/settings' && req.method === 'PUT') {
+      if (me.role !== 'supervisor') return json(res, 403, { error: 'Only a supervisor sets up email' });
+      const b = await readBody(req);
+      const from = String(b.from || '').trim();
+      if (from && !Mailer.EMAIL.test(from)) return json(res, 400, { error: 'The sending address does not look right.' });
+      if (from && Mailer.PERSONAL_DOMAINS.test(from) && !b.personalOk) return json(res, 400, { error: 'This looks like a personal mailbox. Use the clinic\'s business account (Google Workspace, Microsoft 365), or confirm that you accept the risk.' });
+      if (!['tls', 'starttls', 'none'].includes(b.security || 'tls')) return json(res, 400, { error: 'Unknown security setting' });
+      mail = Object.assign({}, mail, {
+        provider: String(b.provider || 'other'), host: String(b.host || '').trim(), port: Number(b.port) || 587, security: b.security || 'tls',
+        user: String(b.user || '').trim(), from: from, fromName: String(b.fromName || '').slice(0, 80), replyTo: String(b.replyTo || '').trim(), personalOk: !!b.personalOk,
+        reminders: { enabled: !!(b.reminders && b.reminders.enabled), time: /^\d\d:\d\d$/.test((b.reminders || {}).time) ? b.reminders.time : '18:00', daysAhead: Math.min(Math.max(Number((b.reminders || {}).daysAhead) || 1, 1), 3) }
+      }, b.password ? { password: String(b.password) } : {});
+      if (b.security === 'none' && !/^(localhost|127\.0\.0\.1)$/.test(mail.host)) return json(res, 400, { error: 'Unencrypted connections are allowed only to this computer.' });
+      persistMail();
+      log(req, me, 'Changed email settings', mail.host + ' · reminders ' + (mail.reminders.enabled ? 'on at ' + mail.reminders.time : 'off'));
+      return json(res, 200, publicMail());
+    }
+    if (pathname === '/api/mail/test' && req.method === 'POST') {
+      if (me.role !== 'supervisor') return json(res, 403, { error: 'Only a supervisor' });
+      const b = await readBody(req);
+      try {
+        const r = await deliver({ to: [String(b.to || me.email || '').trim()], subject: 'Test email from TJS', text: 'This is a test from TJS at ' + clinicName() + '. Email sending works.' });
+        log(req, me, 'Sent test email');
+        return json(res, 200, { ok: true, response: r.response });
+      } catch (e) { return json(res, 400, { error: e.message }); }
+    }
+    if (pathname === '/api/mail/send' && req.method === 'POST') {
+      const b = await readBody(req);
+      const letter = db.state.letters.find((l) => l.id === b.letterId);
+      if (!letter || !Sync.canRead(me, 'letters', letter, db.state)) return json(res, 404, { error: 'Letter not found' });
+      if (letter.status === 'sent') return json(res, 409, { error: 'Already sent' });
+      const p = db.state.patients.find((x) => x.id === letter.patientId);
+      if (letter.kind === 'family-report' && !(p && p.consent && p.consent.shareReports)) return json(res, 403, { error: 'No consent to send reports to this family.' });
+      // Only this patient's own files, and only ones this person may open.
+      const files = (letter.attachmentIds || []).map((id) => db.state.attachments.find((a) => a.id === id));
+      if (files.some((a) => !a || a.patientId !== letter.patientId || !Sync.canRead(me, 'attachments', a, db.state) || !vault.hasFile(a.id))) return json(res, 400, { error: 'An attached file is not available.' });
+      try {
+        const r = await deliver({ to: [letter.to], subject: letter.subject, text: letter.body, attachments: files.map((a) => ({ filename: a.name, contentType: a.type, content: vault.readFile(a.id) })) });
+        Object.assign(letter, { status: 'sent', sentAt: new Date().toISOString(), via: db.state.seeded ? 'demo' : 'email', messageId: r.messageId, error: '' });
+        log(req, me, 'Sent email', letter.id + ' · ' + letter.kind + ' · ' + files.length + ' attachment(s)');
+        changed();
+        return json(res, 200, { ok: true, demo: !!db.state.seeded });
+      } catch (e) {
+        Object.assign(letter, { status: 'failed', error: String(e.message).slice(0, 200) });
+        log(req, me, 'Email failed', letter.id);
+        changed();
+        return json(res, 502, { error: e.message });
+      }
+    }
+    if (pathname === '/api/mail/reminders-now' && req.method === 'POST') {
+      if (me.role !== 'supervisor') return json(res, 403, { error: 'Only a supervisor' });
+      const out = await emailReminders(new Date());
+      return json(res, 200, out);
+    }
     if (pathname === '/api/keys' && req.method === 'PUT') {
       if (me.role !== 'supervisor') return json(res, 403, { error: 'Only a supervisor manages patient keys' });
       const body = await readBody(req);
@@ -402,6 +525,7 @@ function createServer(opts) {
     ? https.createServer({ cert: fs.readFileSync(opts.tlsCert), key: fs.readFileSync(opts.tlsKey) }, handler)
     : http.createServer(handler);
   server.vault = vault;
+  server.on('close', () => clearInterval(reminderClock));
   server.state = () => db;
   return server;
 }

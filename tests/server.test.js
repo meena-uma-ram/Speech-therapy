@@ -197,3 +197,55 @@ test('files on the clinic server: encrypted on disk, need-to-know, removed when 
     assert.ok(!fs.existsSync(path.join(s.dir, 'files', 'fil_stu001.bin')));
   } finally { await s.stop(); }
 });
+
+test('email: settings are supervisor-only and never sent back; letters go out with attachments; reminders run', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tp-server-'));
+  process.env.THERAPY_DATA_PASSPHRASE = 'mail test passphrase';
+  const sent = [];
+  const { hashPassword } = require('../server/server.js');
+  const server = createServer({ data: dir, demo: false, sendMail: (cfg, m) => { sent.push({ cfg, m }); return Promise.resolve({ messageId: '<x@y>', response: '250 ok' }); } });
+  const st = server.state().state;
+  st.users.push(Object.assign({ id: 'u_s', name: 'Meenakshi', email: 'm@clinic.in', role: 'supervisor' }, hashPassword('a-good-password')),
+    Object.assign({ id: 'u_t', name: 'Sam', email: 's@clinic.in', role: 'therapist' }, hashPassword('another-password')));
+  const tomorrow = new Date(Date.now() + 864e5), iso = tomorrow.getFullYear() + '-' + String(tomorrow.getMonth() + 1).padStart(2, '0') + '-' + String(tomorrow.getDate()).padStart(2, '0');
+  st.patients.push({ id: 'p1', name: 'Ravi Kumar', caseCode: 'SLT-26-001', status: 'active', assignedTo: 'u_t', contact: 'ravi.family@example.com', consent: { shareReports: true }, reminders: { optIn: true, channel: 'default', phone: '' } },
+    { id: 'p2', name: 'No Consent', caseCode: 'SLT-26-002', status: 'active', assignedTo: 'u_t', contact: 'nc@example.com', consent: {}, reminders: { optIn: false } });
+  st.appointments.push({ id: 'a1', patientId: 'p1', date: iso, time: '10:00', duration: 30, status: 'scheduled' }, { id: 'a2', patientId: 'p2', date: iso, time: '11:00', duration: 30, status: 'scheduled' });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const base = 'http://127.0.0.1:' + server.address().port + '/';
+  const sup = client(base), ther = client(base);
+  try {
+    await sup('POST', 'api/login', { login: 'm@clinic.in', password: 'a-good-password' });
+    await ther('POST', 'api/login', { login: 's@clinic.in', password: 'another-password' });
+    assert.strictEqual((await ther('PUT', 'api/mail/settings', { host: 'evil' })).status, 403);
+    assert.strictEqual((await sup('PUT', 'api/mail/settings', { provider: 'google', host: 'smtp.gmail.com', port: 465, security: 'tls', user: 'me@gmail.com', password: 'p', from: 'me@gmail.com' })).status, 400, 'personal Gmail needs an explicit acknowledgement');
+    const saved = await sup('PUT', 'api/mail/settings', { provider: 'google', host: 'smtp.gmail.com', port: 465, security: 'tls', user: 'reports@clinic.in', password: 'app-pass', from: 'reports@clinic.in', reminders: { enabled: true, time: '18:00' } });
+    assert.strictEqual(saved.status, 200);
+    assert.strictEqual(saved.body.password, undefined);
+    assert.strictEqual(saved.body.hasPassword, true);
+    assert.ok(!JSON.stringify((await sup('GET', 'api/mail/settings')).body).includes('app-pass'));
+    assert.ok(!fs.readFileSync(path.join(dir, 'mail-settings.json'), 'utf8').includes('app-pass'), 'password encrypted on disk');
+    assert.strictEqual((await ther('GET', 'api/mail/settings')).body.ready, true);
+    // the therapist sends a report with an attachment
+    const thC = (await fetch(base + 'api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: 's@clinic.in', password: 'another-password' }) })).headers.get('set-cookie').split(';')[0];
+    await fetch(base + 'api/files/fil_rep001', { method: 'PUT', headers: { 'content-type': 'application/pdf', 'x-tjs-upload': '1', cookie: thC }, body: '%PDF report' });
+    const ops = [{ c: 'attachments', id: 'fil_rep001', v: { id: 'fil_rep001', patientId: 'p1', name: 'report.pdf', type: 'application/pdf', size: 11, addedBy: 'u_t', addedAt: new Date().toISOString(), category: 'Scanned report' } },
+      { c: 'letters', id: 'l1', v: { id: 'l1', patientId: 'p1', kind: 'family-report', to: 'ravi.family@example.com', subject: 'Your summary', body: 'Dear family', status: 'draft', by: 'u_t', at: new Date().toISOString(), attachmentIds: ['fil_rep001'] } },
+      { c: 'letters', id: 'l2', v: { id: 'l2', patientId: 'p2', kind: 'family-report', to: 'nc@example.com', subject: 'x', body: 'y', status: 'draft', by: 'u_t', at: new Date().toISOString(), attachmentIds: [] } }];
+    assert.strictEqual((await ther('POST', 'api/changes', { ops })).body.applied, 3);
+    const r = await ther('POST', 'api/mail/send', { letterId: 'l1' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(sent[0].m.attachments[0].content.toString(), '%PDF report');
+    assert.strictEqual(sent[0].m.to[0], 'ravi.family@example.com');
+    assert.strictEqual(server.state().state.letters.find((l) => l.id === 'l1').status, 'sent');
+    assert.strictEqual((await ther('POST', 'api/mail/send', { letterId: 'l1' })).status, 409, 'not sent twice');
+    assert.strictEqual((await ther('POST', 'api/mail/send', { letterId: 'l2' })).status, 403, 'no consent, no report');
+    // reminders: only the patient who agreed, and only once
+    const run = await sup('POST', 'api/mail/reminders-now', {});
+    assert.deepStrictEqual([run.body.sent, run.body.failed], [1, 0]);
+    assert.strictEqual(sent[1].m.to[0], 'ravi.family@example.com');
+    assert.ok(!/speech|therapy|SLT/i.test(sent[1].m.text + sent[1].m.subject), 'no health details in the reminder');
+    assert.strictEqual((await sup('POST', 'api/mail/reminders-now', {})).body.sent, 0);
+    assert.ok(server.state().state.reminders.some((x) => x.channel === 'email' && x.by === 'system'));
+  } finally { delete process.env.THERAPY_DATA_PASSPHRASE; server.closeAllConnections(); await new Promise((r) => server.close(r)); }
+});

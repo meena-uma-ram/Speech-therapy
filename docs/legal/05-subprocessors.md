@@ -9,6 +9,7 @@ For the **hosted** version. (A clinic running its own clinic server has no sub-p
 | Cloudflare, Inc. | Hosting the app's code (Pages) | No patient data; visitors' IP addresses and request logs | Global edge network | Cloudflare DPA | To sign |
 | [SMS provider, e.g. MSG91 / Gupshup] | OTP and reminders | Phone numbers, neutral text | India | Provider DPA + DLT registration | After DLT |
 | [WhatsApp Business provider (BSP), e.g. Gupshup / Interakt / AiSensy] and Meta | Reminders | Phone numbers, template text; Meta processes metadata | India / Meta | BSP DPA; WhatsApp Business terms | To decide |
-| [Email provider] | Sign-in emails, alerts | Staff emails | [ ] | [ ] | To decide |
+| The clinic's email provider (Google Workspace / Microsoft 365 / Zoho) | Sending reports, thank-you letters, reminders from the clinic's own account | Recipients' addresses, report text and attachments | Provider's regions (check data residency options) | The clinic's own agreement with the provider (the clinic's processor, not yours) | In use from the clinic server |
+| [Email provider for the hosted version] | Sign-in emails, alerts | Staff emails | [ ] | [ ] | To decide |
 | GitHub, Inc. | Source code | No patient data | USA | – | In use |
 | Tailscale Inc. (only if you use it for support access) | VPN coordination | Device names, IPs, staff emails | Canada/USA | Tailscale DPA | Optional |

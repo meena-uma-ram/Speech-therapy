@@ -44,9 +44,13 @@ Each patient has a **Files** tab. Add scanned reports, referral letters, audiogr
 
 When an assessment is complete, its page offers **Email the report to the family**, **Thank the referrer** and **Other email**. TJS drafts each one from the assessment (what was done, found and recommended, and the next step). You check and edit it, then **Open in my email program** (or copy the text) and tick **I have sent it**.
 
+**Sending straight from TJS (clinic server):** once a supervisor sets up the clinic's email account under **Privacy → Email** (Google Workspace/Gmail, Microsoft 365/Outlook, Zoho or any SMTP server, with an app password), letters get a **Send now** button and can **attach the patient's files** (e.g. the written report). TJS records sent or failed by itself. Without the server, *Open in my email program* still works. On a demo server, emails are captured in an outbox and never sent.
+
 **Keeping track:** *Diagnostics → Letters to send* lists every completed assessment still waiting for its family report or thank-you; each assessment shows *sent ✓ / to send*; the patient's record lists every letter and email. Diagnosticians see *Letters to send* in the top bar. Family reports need consent for reports; the referrer letter uses initials and the case code. Add the referrer's name and email in the assessment form.
 
 ## Appointment reminders: where and how to track
+
+**Automatic email reminders (clinic server):** turn on under *Privacy → Email*: every day at the chosen time (e.g. 18:00) TJS emails tomorrow's patients who agreed to reminders and gave an email address, unless they were already reminded by SMS or WhatsApp. Sent and failed ones appear in the history. Automatic SMS and WhatsApp follow once a provider is connected (DLT registration for SMS).
 
 **Reports → Appointment reminders** (or *Reminders to send* in the top bar) shows tomorrow's sessions, each patient's channel (SMS or WhatsApp Business) and the message. Copy the list into your provider, send, then press **Mark all as sent**. **Sent in the last 30 days** below shows what was marked, when and by whom; each patient's record shows their reminders too.
 

@@ -82,7 +82,19 @@ WantedBy=multi-user.target
 
 **Clinic network only, no VPN:** run with `--host 0.0.0.0` and open `http://<server-ip>:8080`. Add HTTPS with your own certificate (`--tls-cert`, `--tls-key`) so passwords and records are not sent in the clear over Wi-Fi.
 
-## 5. Backups
+## 5. Email (reports, thank-yous, automatic reminders)
+
+A supervisor opens **Privacy → Email** and enters the clinic's account. Use a **business** account (Google Workspace, Microsoft 365, Zoho Mail for business): their terms include data processing agreements; personal Gmail/Outlook don't.
+
+| Service | Server | Port / security | Password |
+|---|---|---|---|
+| Google Workspace / Gmail | smtp.gmail.com | 465 TLS | Turn on 2-Step Verification, then Google Account → Security → **App passwords** |
+| Microsoft 365 / Outlook | smtp.office365.com | 587 STARTTLS | The admin must enable **Authenticated SMTP** for the mailbox; with MFA, an app password |
+| Zoho Mail (India) | smtp.zoho.in | 465 TLS | Application-specific password |
+
+Press **Send a test email to me**. Then turn on **Automatic email reminders** and choose the time. The settings, including the password, are stored only on the server, in `clinic-data/mail-settings.json`, encrypted with `THERAPY_DATA_PASSPHRASE`, and never sent to browsers. Each email sent (not its content) is written to `access.log`.
+
+## 6. Backups
 
 Don't just copy `clinic-data/`: every copy would keep erased patients readable.
 
@@ -93,7 +105,7 @@ Don't just copy `clinic-data/`: every copy would keep erased patients readable.
 
 Also back up the data passphrase (offline). Without it the server's files cannot be opened.
 
-## 6. Day to day
+## 7. Day to day
 
 - The pill at the top of the app shows **Live** when connected. **Offline** means the server can't be reached: keep the tab open and changes are sent when it's back.
 - Update by replacing the code files and restarting the server. `clinic-data/` stays.

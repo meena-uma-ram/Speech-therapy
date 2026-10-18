@@ -532,6 +532,8 @@
   /* ---------- appointment reminders: SMS or WhatsApp Business ---------- */
 
   const CHANNELS = { sms: 'SMS', whatsapp: 'WhatsApp Business' };
+  // Reminder channels the server can also use on its own (history only; patients choose SMS or WhatsApp above).
+  const CHANNEL_LABELS = { sms: 'SMS', whatsapp: 'WhatsApp Business', email: 'Email' };
 
   /*
    * Which channel to use for a patient, or null with a reason.
@@ -640,7 +642,7 @@
     RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
     clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
     PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles,
-    weekStart: weekStart, freeSlots: freeSlots, LETTER_KINDS: LETTER_KINDS, letterDraft: letterDraft, mailtoLink: mailtoLink,
+    weekStart: weekStart, freeSlots: freeSlots, CHANNEL_LABELS: CHANNEL_LABELS, LETTER_KINDS: LETTER_KINDS, letterDraft: letterDraft, mailtoLink: mailtoLink,
     CHANNELS: CHANNELS, reminderChannel: reminderChannel, fillTemplate: fillTemplate, templateWarnings: templateWarnings, smsParts: smsParts, maskPhone: maskPhone
   };
 

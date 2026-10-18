@@ -555,6 +555,7 @@
     const form = modal.querySelector('form');
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
+      form.dataset.intent = ev.submitter && ev.submitter.value || '';
       if (!form.reportValidity()) return;
       if (onSubmit(new FormData(form), form) !== false) { modal.close(); render(); }
     });
@@ -1287,7 +1288,7 @@
     let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + '</p></div></header>';
 
     html += storageSection();
-    if (isLead) html += messagingSection();
+    if (isLead) html += messagingSection() + mailSection();
     html += '<section class="card"><h2>How patient data is protected</h2><ul class="safeguards">' +
       (srv ? '<li>' + tick(true) + '<div><strong>Stays on your clinic\u2019s server.</strong> Records go only between this browser and the clinic computer, never to the app\u2019s makers or other websites. This device keeps nothing once you sign out.</div></li>' +
         '<li>' + tick(info.encryptedAtRest) + '<div><strong>Encrypted at rest on the server</strong> ' + (info.encryptedAtRest ? '(AES-256-GCM).' : '– not yet. Start the server with THERAPY_DATA_PASSPHRASE set, and turn on full-disk encryption.') + '</div></li>' +
@@ -1997,7 +1998,7 @@
 
   Object.assign(ACTIONS, {
     'demo-login': function (el) { document.getElementById('login-name').value = el.dataset.login; document.querySelector('#login-form [name=pass]').value = S.demoPassword; },
-    'sign-out': function () { route = '#/'; lastViewed = null; Promise.resolve(S.signOut()).then(render); },
+    'sign-out': function () { route = '#/'; lastViewed = null; mailStatus = null; Promise.resolve(S.signOut()).then(render); },
     'reconnect': function () { S.reconnect().then(render); render(); },
     'compose': function (el) { composeForm(el.dataset.to, el.dataset.subject); },
     'reschedule': function (el) { rescheduleForm(el.dataset.id); },
@@ -3104,21 +3105,39 @@
       '<label>Message<textarea name="body" rows="14" required>' + esc(draft.body) + '</textarea></label>' +
       '<p class="small muted">Check the address twice. Ordinary email is not end-to-end encrypted, so send only what the person needs; the subject has no health details. ' +
       (kind === 'referrer-thanks' ? 'The draft uses initials and the case code: add the full name only if your clinic’s policy allows. ' : '') + '</p>' +
-      '<div class="actions wrap"><button type="button" class="btn btn-primary" data-action="letter-mail">Open in my email program</button><button type="button" class="btn" data-action="letter-copy">Copy the text</button></div>' +
-      '<label class="check"><input type="checkbox" name="sent"' + (old && old.status === 'sent' ? ' checked' : '') + '> I have sent it</label>' +
+      (canSendMail() ? attachPicker(p, old) : '') +
+      (old && old.status === 'failed' ? '<div class="callout warn"><strong>Last attempt failed</strong><span>' + esc(old.error || '') + '</span></div>' : '') +
+      '<div class="actions wrap">' + (canSendMail() ? '<button type="submit" class="btn btn-primary" name="intent" value="send">Send now' + (mailStatus.demo ? ' (demo)' : '') + '</button>' : '') +
+      '<button type="button" class="btn' + (canSendMail() ? '' : ' btn-primary') + '" data-action="letter-mail">Open in my email program</button><button type="button" class="btn" data-action="letter-copy">Copy the text</button></div>' +
+      (S.isServer() && !canSendMail() ? '<p class="small muted">To send straight from TJS with files attached, a supervisor sets up email under Privacy → Email.</p>' : '') +
+      '<label class="check"><input type="checkbox" name="sent"' + (old && old.status === 'sent' ? ' checked' : '') + '> I have sent it myself</label>' +
       (kind !== 'other' && a && !old ? '<label class="check"><input type="checkbox" name="notNeeded"> Not needed for this patient</label>' : ''),
-    function (fd) {
-      if (needs && fd.get('sent')) { toast(needs); return false; }
+    function (fd, form) {
+      const sendNow = form.dataset.intent === 'send';
+      if (needs && (fd.get('sent') || sendNow)) { toast(needs); return false; }
+      if (sendNow && !fd.get('to').trim()) { toast('Add the email address first.'); return false; }
       if (fd.get('notNeeded')) {
         if (kind === 'family-report') a.noFamilyLetter = true; else a.noReferrerLetter = true;
         S.audit('Marked letter not needed', p.id, L.LETTER_KINDS[kind]); S.save(); toast('Marked as not needed'); return;
       }
-      const sent = !!fd.get('sent');
+      const sent = !!fd.get('sent') && !sendNow;
       const l = S.upsert('letters', Object.assign({}, old || { patientId: p.id, assessmentId: a ? a.id : '', kind: kind, by: me().id, at: new Date().toISOString() },
-        { to: fd.get('to').trim(), subject: fd.get('subject').trim(), body: fd.get('body'), status: sent ? 'sent' : 'draft', sentAt: sent ? (old && old.sentAt) || new Date().toISOString() : '' }));
+        { to: fd.get('to').trim(), subject: fd.get('subject').trim(), body: fd.get('body'), status: sent ? 'sent' : 'draft', sentAt: sent ? (old && old.sentAt) || new Date().toISOString() : '',
+          attachmentIds: fd.getAll('attach'), via: sent ? 'own email program' : '' }));
+      if (sendNow) { sendLetterNow(l.id); return; }
       S.audit(sent ? 'Sent email' : 'Saved email draft', p.id, L.LETTER_KINDS[kind] + (l.to ? ' to ' + l.to.replace(/^(.).*@/, '$1…@') : ''));
       toast(sent ? 'Recorded as sent' : 'Draft saved – it stays on "Letters to send"');
     });
+  }
+
+  /* Which of the patient's files to attach (reports first). */
+  function attachPicker(p, old) {
+    const files = S.state.attachments.filter(function (x) { return x.patientId === p.id; });
+    if (!files.length) return '<p class="small muted">No files to attach: add the report under the patient’s Files tab.</p>';
+    const chosen = (old && old.attachmentIds) || [];
+    return '<fieldset class="checks"><legend>Attach</legend>' + files.map(function (x) {
+      return '<label class="check"><input type="checkbox" name="attach" value="' + x.id + '"' + (chosen.indexOf(x.id) >= 0 ? ' checked' : '') + '> ' + fileIcon(x.type) + ' ' + esc(x.name) + ' <span class="muted small">' + esc(x.category) + ' · ' + esc(fileSize(x.size)) + '</span></label>';
+    }).join('') + '</fieldset>';
   }
 
   function viewLettersDue() {
@@ -3126,9 +3145,9 @@
     let html = '';
     if (!due.length) return html + '<div class="empty"><p>All assessment reports and thank-you emails are sent.</p></div>';
     return html + '<ul class="list">' + due.map(function (x) {
-      const draft = S.state.letters.find(function (l) { return l.assessmentId === x.a.id && l.kind === x.kind && l.status === 'draft'; });
+      const draft = S.state.letters.find(function (l) { return l.assessmentId === x.a.id && l.kind === x.kind && (l.status === 'draft' || l.status === 'failed'); });
       return '<li><div class="row"><div><strong>' + esc(L.LETTER_KINDS[x.kind]) + '</strong> · ' + esc(pseud(x.p)) + ' · ' + esc(nm(x.p)) +
-        '<div class="muted small">Assessed ' + esc(L.formatDate(x.a.date, { day: 'numeric', month: 'short' })) + (x.kind === 'referrer-thanks' ? ' · referred by ' + esc(x.a.referrerName || x.a.source || '—') : '') + (draft ? ' · draft saved' : '') + '</div></div>' +
+        '<div class="muted small">Assessed ' + esc(L.formatDate(x.a.date, { day: 'numeric', month: 'short' })) + (x.kind === 'referrer-thanks' ? ' · referred by ' + esc(x.a.referrerName || x.a.source || '—') : '') + (draft ? (draft.status === 'failed' ? ' · <strong>sending failed</strong>' : ' · draft saved') : '') + '</div></div>' +
         '<button class="btn btn-sm btn-primary" data-action="letter-new" data-assessment="' + x.a.id + '" data-kind="' + x.kind + '"' + (draft ? ' data-id="' + draft.id + '"' : '') + '>' + (draft ? 'Continue' : 'Write') + '</button></div></li>';
     }).join('') + '</ul>';
   }
@@ -3138,12 +3157,12 @@
     const rem = S.state.reminders.filter(function (r) { return r.patientId === p.id; }).slice(-8).reverse();
     return '<section class="card"><div class="card-head"><h2>Letters, emails &amp; reminders</h2><button class="btn btn-sm" data-action="letter-new" data-patient="' + p.id + '" data-kind="other">+ Email</button></div>' +
       (list.length ? '<ul class="list flat">' + list.map(function (l) {
-        return '<li><div class="row"><div><strong>' + esc(L.LETTER_KINDS[l.kind]) + '</strong> <span class="badge ' + (l.status === 'sent' ? 'badge-good' : 'badge-warn') + '">' + (l.status === 'sent' ? 'Sent ' + esc(fmtStamp(l.sentAt)) : 'Draft') + '</span>' +
+        return '<li><div class="row"><div><strong>' + esc(L.LETTER_KINDS[l.kind]) + '</strong> <span class="badge ' + (l.status === 'sent' ? 'badge-good' : 'badge-warn') + '">' + (l.status === 'sent' ? 'Sent ' + esc(fmtStamp(l.sentAt)) + (l.via === 'email' ? ' by TJS' : l.via === 'demo' ? ' (demo)' : '') : l.status === 'failed' ? 'Failed' : 'Draft') + '</span>' + ((l.attachmentIds || []).length ? ' 📎' + l.attachmentIds.length : '') +
           '<div class="muted small">' + esc(l.subject) + (l.to ? ' · to ' + esc(l.to) : '') + ' · ' + esc(userName(l.by)) + '</div></div>' +
           '<button class="btn btn-sm btn-ghost" data-action="letter-new" data-id="' + l.id + '" data-patient="' + p.id + '">Open</button></div></li>';
       }).join('') + '</ul>' : '<p class="muted small">No letters or emails yet.</p>') +
       '<h3>Appointment reminders</h3>' + (rem.length ? '<ul class="plain small">' + rem.map(function (r) {
-        return '<li>' + esc(L.CHANNELS[r.channel] || r.channel) + ' for ' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(r.time)) + ' · marked sent ' + esc(fmtStamp(r.sentAt)) + ' by ' + esc(userName(r.by)) + '</li>';
+        return '<li>' + esc(L.CHANNEL_LABELS[r.channel] || r.channel) + ' for ' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(r.time)) + ' · ' + (r.status === 'failed' ? '<strong>failed</strong> ' : 'sent ') + esc(fmtStamp(r.sentAt)) + ' by ' + esc(r.by === 'system' ? 'TJS (automatic)' : userName(r.by)) + '</li>';
       }).join('') + '</ul>' : '<p class="muted small">None sent yet.</p>') + '</section>';
   }
 
@@ -3158,12 +3177,16 @@
 
   function remindersHistory() {
     const since = L.addDays(L.todayISO(), -30);
+    const failed = S.state.reminders.filter(function (r) { return r.status === 'failed' && (r.sentAt || '').slice(0, 10) >= L.addDays(L.todayISO(), -3); });
     const list = S.state.reminders.filter(function (r) { return r.status === 'sent' && (r.sentAt || '').slice(0, 10) >= since; }).filter(function (r) { const p = S.patient(r.patientId); return p && canSee(p); })
       .sort(function (a, b) { return b.sentAt.localeCompare(a.sentAt); });
-    return '<section class="card"><h2>Sent in the last 30 days (' + list.length + ')</h2>' + (list.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Marked sent</th><th>Patient</th><th>Appointment</th><th>By</th><th>Channel</th><th>Who</th></tr></thead><tbody>' +
+    const auto = mailStatus && mailStatus.reminders && mailStatus.reminders.enabled;
+    return (S.isServer() ? '<p class="small">' + (auto ? '✓ <strong>Automatic email reminders are on</strong>, every day at ' + esc(mailStatus.reminders.time) + '.' : 'Automatic email reminders are off. A supervisor can turn them on under Privacy → Email.') + ' SMS and WhatsApp still go through your provider until it is connected.</p>' : '') +
+      (failed.length ? '<div class="callout warn"><strong>' + failed.length + ' reminder email' + (failed.length === 1 ? '' : 's') + ' failed in the last 3 days</strong><span>' + esc(failed[0].error || '') + '</span></div>' : '') +
+      '<section class="card"><h2>Sent in the last 30 days (' + list.length + ')</h2>' + (list.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Marked sent</th><th>Patient</th><th>Appointment</th><th>By</th><th>Channel</th><th>Who</th></tr></thead><tbody>' +
       list.slice(0, 100).map(function (r) {
         const p = S.patient(r.patientId);
-        return '<tr><td class="nowrap">' + esc(fmtStamp(r.sentAt)) + '</td><td>' + esc(pseud(p)) + '</td><td class="nowrap">' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' }) + ' ' + L.formatTime(r.time)) + '</td><td>' + esc(L.CHANNELS[r.channel] || r.channel) + '</td><td>' + esc(userName(r.by)) + '</td></tr>';
+        return '<tr><td class="nowrap">' + esc(fmtStamp(r.sentAt)) + '</td><td>' + esc(pseud(p)) + '</td><td class="nowrap">' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' }) + ' ' + L.formatTime(r.time)) + '</td><td>' + esc(L.CHANNEL_LABELS[r.channel] || r.channel) + '</td><td>' + esc(r.by === 'system' ? 'TJS (automatic)' : userName(r.by)) + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<p class="muted small">Nothing marked as sent yet. After sending from your SMS or WhatsApp Business provider, press <em>Mark all as sent</em> so it is tracked here.</p>') + '</section>';
   }
 
@@ -3176,6 +3199,95 @@
       window.location.href = link;
     },
     'letter-copy': function (el) { copyText(el.closest('form').querySelector('[name=body]').value); }
+  });
+
+  /* ---------- sending email from the clinic's own account (clinic server) ---------- */
+
+  let mailStatus = null; // { ready, demo, reminders, ... } from the server
+  function loadMailStatus(force) {
+    if (!S.isServer() || !S.currentUser()) return Promise.resolve(null);
+    if (mailStatus && !force) return Promise.resolve(mailStatus);
+    return S.call('GET', 'api/mail/settings').then(function (m) { mailStatus = m; mailStatus.at = Date.now(); return m; }, function () { return null; });
+  }
+  function canSendMail() { return S.isServer() && mailStatus && mailStatus.ready; }
+
+  function mailSection() {
+    if (!S.isServer()) {
+      return '<section class="card"><h2>Email</h2><p class="small">Sending email straight from TJS (reports with attachments, thank-you emails, automatic reminders) needs the <strong>clinic server</strong>, which keeps the clinic’s email password safely. On this device, emails open in your own email program instead.</p></section>';
+    }
+    const m = mailStatus;
+    // Refresh when the page is opened again (outbox, last reminder run).
+    if (m && Date.now() - (m.at || 0) > 5000) loadMailStatus(true).then(function () { if (route.indexOf('#/privacy') === 0) render(); });
+    if (!m) { loadMailStatus(true).then(function () { if (route.indexOf('#/privacy') === 0) render(); }); return '<section class="card"><h2>Email</h2><p class="muted small">Loading…</p></section>'; }
+    const P = m.presets || {}, prov = m.provider || 'google', r = m.reminders || {};
+    return '<form class="card" id="mail-form"><h2>Email: send from the clinic’s account</h2>' +
+      (m.demo ? '<div class="callout"><strong>Demo server: emails are captured, not sent.</strong><span>You can see them below.</span></div>' : '') +
+      '<p class="small">TJS sends reports, thank-you emails and reminders through your clinic’s own email account. Use the clinic’s <strong>business</strong> account (Google Workspace or Microsoft 365, with their data processing terms), not a personal one.</p>' +
+      '<div class="grid-2"><label>Email service<select name="provider">' + Object.keys(P).map(function (k) { return opt(k, P[k].label, prov === k); }).join('') + '</select></label>' +
+      '<label>Clinic’s sending address<input name="from" type="email" value="' + esc(m.from || '') + '" placeholder="reports@yourclinic.in"></label></div>' +
+      '<p class="small muted" id="mail-help">' + esc((P[prov] || {}).help || '') + '</p>' +
+      '<div class="grid-3"><label>Server<input name="host" value="' + esc(m.host || (P[prov] || {}).host || '') + '"></label>' +
+      '<label>Port<input name="port" type="number" value="' + esc(m.port || (P[prov] || {}).port || 465) + '"></label>' +
+      '<label>Security<select name="security">' + [['tls', 'TLS (port 465)'], ['starttls', 'STARTTLS (port 587)']].map(function (x) { return opt(x[0], x[1], (m.security || (P[prov] || {}).security) === x[0]); }).join('') + '</select></label></div>' +
+      '<div class="grid-2"><label>Sign-in name (usually the address)<input name="user" value="' + esc(m.user || '') + '" autocomplete="off"></label>' +
+      '<label>App password<input name="password" type="password" autocomplete="new-password" placeholder="' + (m.hasPassword ? 'Saved – leave blank to keep it' : 'From the account’s security settings') + '"></label></div>' +
+      '<div class="grid-2"><label>Name people see<input name="fromName" value="' + esc(m.fromName || S.state.settings.messaging.clinicName || '') + '"></label>' +
+      '<label>Replies go to (optional)<input name="replyTo" type="email" value="' + esc(m.replyTo || '') + '"></label></div>' +
+      '<label class="check"><input type="checkbox" name="personalOk"' + (m.personalOk ? ' checked' : '') + '> If this is a personal Gmail / Outlook address: I understand it has no business data processing agreement and accept the risk</label>' +
+      '<h3>Automatic email reminders</h3>' +
+      '<label class="check"><input type="checkbox" name="remEnabled"' + (r.enabled ? ' checked' : '') + '> Every day, email a reminder to patients who agreed to reminders and gave an email address (unless already reminded by SMS or WhatsApp)</label>' +
+      '<div class="grid-3"><label>Send at<input type="time" name="remTime" value="' + esc(r.time || '18:00') + '"></label>' +
+      '<label>For appointments<select name="remDays">' + [1, 2, 3].map(function (d) { return opt(d, d === 1 ? 'Tomorrow' : 'In ' + d + ' days', Number(r.daysAhead || 1) === d); }).join('') + '</select></label></div>' +
+      (m.lastReminderRun ? '<p class="small muted">Last run ' + esc(fmtStamp(m.lastReminderRun.at)) + ' for ' + esc(m.lastReminderRun.date) + ': ' + m.lastReminderRun.sent + ' sent' + (m.lastReminderRun.failed ? ', <strong>' + m.lastReminderRun.failed + ' failed</strong>' : '') + '.</p>' : '') +
+      '<p class="small muted">The email says only the clinic name, day, time and link, like the SMS. It uses the server computer’s clock, so keep that computer on.</p>' +
+      '<p class="form-error" id="mail-error" hidden></p>' +
+      '<div class="actions wrap"><button class="btn btn-primary" type="submit">Save</button><button class="btn" type="button" data-action="mail-test">Send a test email to me</button>' +
+      '<button class="btn" type="button" data-action="mail-reminders-now">Send reminders now</button></div>' +
+      (m.demo && (m.outbox || []).length ? '<h3>Demo outbox</h3><ul class="plain small">' + m.outbox.slice(0, 10).map(function (x) {
+        return '<li><strong>' + esc(x.subject) + '</strong> → ' + esc(x.to.join(', ')) + ' · ' + esc(fmtStamp(x.at)) + (x.attachments.length ? ' · 📎 ' + esc(x.attachments.join(', ')) : '') + '</li>';
+      }).join('') + '</ul>' : '') + '</form>';
+  }
+
+  function mailError(msg) { const e = document.getElementById('mail-error'); if (e) { e.textContent = msg; e.hidden = !msg; } }
+
+  /* Send a saved letter now, with the chosen files attached. The server checks access and consent again. */
+  function sendLetterNow(id) {
+    toast('Sending…');
+    return S.call('POST', 'api/mail/send', { letterId: id }).then(function (r) {
+      toast(r.demo ? 'Demo: captured, not really sent' : 'Sent');
+    }, function (e) { toast('Not sent: ' + e.message); }).then(render);
+  }
+
+  Object.assign(ACTIONS, {
+    'mail-test': function () {
+      const to = window.prompt('Send a test email to:', me().email || '');
+      if (!to) return;
+      mailError('');
+      S.call('POST', 'api/mail/test', { to: to }).then(function () { toast('Test email sent to ' + to); }, function (e) { mailError(e.message); });
+    },
+    'mail-reminders-now': function () {
+      S.call('POST', 'api/mail/reminders-now', {}).then(function (r) { toast(r.sent + ' reminder email' + (r.sent === 1 ? '' : 's') + ' sent for ' + r.date + (r.failed ? ', ' + r.failed + ' failed' : '')); loadMailStatus(true).then(render); },
+        function (e) { mailError(e.message); });
+    },
+    'letter-send': function (el) { sendLetterNow(el.dataset.id); }
+  });
+  Object.assign(SUBMITS, {
+    'mail-form': function (form) {
+      const v = function (n) { const el = form.querySelector('[name=' + n + ']'); return el.type === 'checkbox' ? el.checked : el.value.trim(); };
+      mailError('');
+      S.call('PUT', 'api/mail/settings', { provider: v('provider'), from: v('from'), host: v('host'), port: v('port'), security: v('security'), user: v('user'), password: form.querySelector('[name=password]').value,
+        fromName: v('fromName'), replyTo: v('replyTo'), personalOk: v('personalOk'), reminders: { enabled: v('remEnabled'), time: v('remTime'), daysAhead: v('remDays') } })
+        .then(function (m) { mailStatus = Object.assign({}, mailStatus, m); toast('Email settings saved'); render(); }, function (e) { mailError(e.message); });
+    }
+  });
+  document.addEventListener('change', function (ev) {
+    const t = ev.target;
+    if (t.name !== 'provider' || !t.closest('#mail-form') || !mailStatus) return;
+    const P = mailStatus.presets[t.value] || {}, f = t.closest('form');
+    if (P.host) f.querySelector('[name=host]').value = P.host;
+    f.querySelector('[name=port]').value = P.port;
+    f.querySelector('[name=security]').value = P.security;
+    document.getElementById('mail-help').textContent = P.help || '';
   });
 
   /* ---------- router ---------- */
@@ -3249,6 +3361,7 @@
 
     const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases', consent: 'patients', 'consent-receipt': 'patients', 'files-to-file': 'inbox' }[section] || section;
     collectShared();
+    if (S.isServer() && !mailStatus) loadMailStatus().then(function (m) { if (m && (section === 'reports' || section === 'diagnostics' || section === 'patients' || section === 'assessment')) render(); });
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.classList.toggle('active', a.dataset.nav === navKey);
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');

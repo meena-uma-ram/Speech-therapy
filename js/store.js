@@ -1236,6 +1236,7 @@
     get state() { return state; },
     isLocked: function () { return locked; },
     isServer: function () { return REMOTE; },
+    call: function (method, url, body) { return flush().then(function () { return api(method, url, body); }); },
     ready: ready,
     syncStatus: function () { return status; },
     serverInfo: function () { return serverInfo; },
