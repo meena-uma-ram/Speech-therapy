@@ -2413,7 +2413,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
    * patientId null and use a separate key until they are filed.
    */
   const FILE_MAX = 25 * 1024 * 1024;
-  const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
+  const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|x-wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
   const UNFILED = '_unfiled';
   const memFiles = {}; // when IndexedDB is unavailable (private windows, tests)
 

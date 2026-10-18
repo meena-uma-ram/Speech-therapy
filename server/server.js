@@ -25,7 +25,7 @@ const SESSION_IDLE_MS = 60 * 60 * 1000;
 const SESSION_MAX_MS = 14 * 60 * 60 * 1000;
 const MAX_BODY = 25 * 1024 * 1024;
 const MAX_FILE = 25 * 1024 * 1024;
-const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
+const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|x-wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
 
 /* ---------- options ---------- */
 
