@@ -1554,6 +1554,125 @@ code.hash { word-break: break-all; font-size: .75rem; }
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Meenakshi Ramesh
 /*
+ * Country settings: which privacy law applies, who patients complain to, who may decide for an adult who cannot,
+ * which consent languages are offered, and where hosted data should live.
+ * DRAFT: every entry must be confirmed by a lawyer in that country before a clinic there relies on it.
+ * Pure data with no DOM or storage access, so it can be unit-tested in Node.
+ */
+(function (root) {
+  'use strict';
+
+  const REGIONS = {
+    IN: {
+      name: 'India',
+      law: 'Digital Personal Data Protection Act 2023 and DPDP Rules 2025',
+      authority: 'the Data Protection Board of India',
+      adultAge: 18,
+      languages: ['en', 'ta', 'hi', 'ml', 'kn'],
+      guardianBasis: [
+        'Court order appointing a guardian',
+        'Limited guardianship under the Rights of Persons with Disabilities Act 2016',
+        'Legal guardian under the National Trust Act 1999',
+        'Nominated representative under the Mental Healthcare Act 2017',
+        'Other (describe in the reference)'
+      ],
+      guardianNote: '',
+      hosting: 'India (e.g. Mumbai region)',
+      sms: 'SMS needs TRAI DLT registration: entity, 6-character sender ID and approved templates.',
+      breach: 'Tell the Data Protection Board and each affected person without delay; detailed report to the Board within 72 hours. Listed cyber incidents to CERT-In within 6 hours.',
+      duties: [
+        'Give a notice and ask for consent per purpose, in English or a language of the Eighth Schedule on request.',
+        'Get verifiable consent from a parent or lawful guardian for anyone under 18 (check the healthcare exemption with your lawyer).',
+        'Keep logs for at least one year, and name a contact for privacy questions and grievances.',
+        'Sign a contract with every processor (hosting, SMS, WhatsApp, email).',
+        'Erase data when it is no longer needed, unless another law requires keeping it.'
+      ]
+    },
+    SE: {
+      name: 'Sweden',
+      law: 'GDPR, the Swedish Data Protection Act (2018:218) and the Patient Data Act (2008:355)',
+      authority: 'Integritetsskyddsmyndigheten (IMY)',
+      adultAge: 18,
+      languages: ['sv', 'en'],
+      guardianBasis: [
+        'Guardian (god man) appointed by the district court',
+        'Administrator (förvaltare) appointed by the district court',
+        'Future power of attorney (framtidsfullmakt)',
+        'Other (describe in the reference)'
+      ],
+      guardianNote: 'In Sweden a god man, förvaltare or framtidsfullmakt does not usually give the right to consent to health care for someone. Care for a person who cannot decide is based on their presumed wishes, after talking with those close to them. Record who you talked with, and check with your lawyer.',
+      hosting: 'EU (e.g. Stockholm or Frankfurt region)',
+      sms: 'SMS reminders: no registration like India’s DLT, but use a provider with an EU data processing agreement.',
+      breach: 'Report a personal data breach to IMY within 72 hours; tell the people affected without undue delay if the risk to them is high.',
+      duties: [
+        'Health care records are kept under the Patient Data Act (patientdatalagen); the journal duty means some records cannot be deleted on request. Check the retention period.',
+        'Have a lawful basis for each use: care itself is usually based on law (Art. 6(1)(c)/(e) with Art. 9(2)(h)), not consent. Use consent for the optional uses (students, teaching, reminders).',
+        'Complete a DPIA (Art. 35) and keep a record of processing (Art. 30).',
+        'Sign a data processing agreement (Art. 28) with every processor, and check transfers outside the EU (Chapter V).',
+        'Staff access must be limited to what their work needs, and logged (patientdatalagen, chapter 4).'
+      ]
+    },
+    EU: {
+      name: 'Another EU or EEA country',
+      law: 'GDPR and the national data protection and patient records laws',
+      authority: 'your national data protection authority',
+      adultAge: 18,
+      languages: ['en'],
+      guardianBasis: ['Legal guardian appointed by a court', 'Power of attorney or advance directive recognised for health decisions', 'Other (describe in the reference)'],
+      guardianNote: 'Who may consent to care for an adult who cannot decide differs between countries. Check with a local lawyer.',
+      hosting: 'EU (e.g. Frankfurt or Stockholm region)',
+      sms: 'Use an SMS provider with an EU data processing agreement.',
+      breach: 'Report a personal data breach to your data protection authority within 72 hours; tell the people affected if the risk is high.',
+      duties: [
+        'Have a lawful basis for each use (Art. 6) and a condition for health data (Art. 9), usually 9(2)(h) for care.',
+        'Give a privacy notice (Art. 13–14), complete a DPIA (Art. 35) and keep a record of processing (Art. 30).',
+        'Sign a data processing agreement (Art. 28) with every processor, and check transfers outside the EU.',
+        'Follow your country’s rules on health records, retention and children’s consent.'
+      ]
+    },
+    UK: {
+      name: 'United Kingdom',
+      law: 'UK GDPR and the Data Protection Act 2018',
+      authority: 'the Information Commissioner’s Office (ICO)',
+      adultAge: 18,
+      languages: ['en'],
+      guardianBasis: ['Lasting power of attorney for health and welfare', 'Deputy appointed by the Court of Protection', 'Other (describe in the reference)'],
+      guardianNote: 'Where an adult lacks capacity and no one holds authority, decisions are made in their best interests under the Mental Capacity Act 2005 (England and Wales). Scotland and Northern Ireland have their own laws. Young people of 16 and 17 can usually consent to their own treatment.',
+      hosting: 'UK or EU',
+      sms: 'Use an SMS provider with a UK data processing agreement.',
+      breach: 'Report a personal data breach to the ICO within 72 hours; tell the people affected if the risk is high.',
+      duties: [
+        'Have a lawful basis and a condition for health data (UK GDPR Art. 6 and 9; DPA 2018 Schedule 1).',
+        'Complete a DPIA and keep a record of processing.',
+        'Follow professional record-keeping guidance (e.g. the Health and Care Professions Council and the RCSLT).',
+        'Sign a data processing agreement with every processor, and check international transfers.'
+      ]
+    },
+    OTHER: {
+      name: 'Another country',
+      law: 'your country’s privacy and health records laws',
+      authority: 'your data protection authority',
+      adultAge: 18,
+      languages: ['en'],
+      guardianBasis: ['Legal guardian', 'Power of attorney recognised for health decisions', 'Other (describe in the reference)'],
+      guardianNote: 'Check with a local lawyer who may consent for an adult who cannot decide.',
+      hosting: 'In or near your country',
+      sms: 'Check your country’s rules for SMS reminders.',
+      breach: 'Check your country’s breach reporting rules and deadlines.',
+      duties: ['Have a local lawyer confirm consent wording, retention periods, breach reporting and processor contracts before using TJS with real patients.']
+    }
+  };
+
+  function region(code) { return REGIONS[code] || REGIONS.IN; }
+
+  const api = { REGIONS: REGIONS, region: region };
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.Regions = api;
+})(typeof window !== 'undefined' ? window : this);
+
+// SPDX-License-Identifier: AGPL-3.0-or-later
+// Copyright (C) 2026 Meenakshi Ramesh
+/*
  * Consent: purposes, versioned notices, and an append-only ledger sealed with a hash chain.
  * Clinical consent to treatment is kept apart from consent to uses of personal data.
  * Pure functions with no DOM or storage access, so they can be unit-tested in Node.
@@ -1661,7 +1780,8 @@ code.hash { word-break: break-all; font-size: .75rem; }
     ta: { name: 'தமிழ் (Tamil)', voice: 'ta-IN' },
     hi: { name: 'हिन्दी (Hindi)', voice: 'hi-IN' },
     ml: { name: 'മലയാളം (Malayalam)', voice: 'ml-IN' },
-    kn: { name: 'ಕನ್ನಡ (Kannada)', voice: 'kn-IN' }
+    kn: { name: 'ಕನ್ನಡ (Kannada)', voice: 'kn-IN' },
+    sv: { name: 'Svenska (Swedish)', voice: 'sv-SE' }
   };
 
   /*
@@ -1686,10 +1806,10 @@ code.hash { word-break: break-all; font-size: .75rem; }
               records: { label: 'Keeping records to provide care', text: 'We keep notes, goals, session records and reports so that care is safe and continuous. Only the people caring for the patient can see them. We send a short summary to the professional who referred you. We keep them for {years} years after therapy ends, or longer only if a law requires it.', simple: 'We write notes about therapy. Only your therapists see them.' },
               students: { label: 'Student clinicians, supervised', text: 'Student speech and language therapists may assess or treat the patient under the supervision of a qualified therapist, and see the notes they need.', simple: 'A student may help, with a teacher watching.' },
               reports: { label: 'Progress reports to the family', text: 'We may send short session summaries and progress reports to the contact you give us, through a secure link.', simple: 'We may send you short reports.' },
-              reminders: { label: 'Appointment reminders', text: 'We may send appointment reminders by SMS or WhatsApp Business. They contain only the clinic name, date, time and a link, never health details.', simple: 'We may send a message to remind you of the time.' },
+              reminders: { label: 'Appointment reminders', text: 'We may send appointment reminders by SMS, email or WhatsApp Business. They contain only the clinic name, date, time and a link, never health details.', simple: 'We may send a message to remind you of the time.' },
               teaching: { label: 'Pseudonymised use in teaching', text: 'Students may use the case in coursework and teaching, with the name replaced by a case code and initials. Others could sometimes still recognise a case, so we ask separately.', simple: 'Students may learn from this case. We hide the name.' }
             },
-            rights: 'You can see your information, ask us to correct it, and withdraw any agreement at any time by telling us. Withdrawing does not undo what was done before. To ask a question or complain, contact {contact}. You can also complain to the Data Protection Board of India.',
+            rights: 'You can see your information, ask us to correct it, and withdraw any agreement at any time by telling us. Withdrawing does not undo what was done before. To ask a question or complain, contact {contact}. You can also complain to {authority}.',
             signHere: 'I have read or been told this information, and my answers above are my choice.'
           },
           ta: {
@@ -1759,6 +1879,23 @@ code.hash { word-break: break-all; font-size: .75rem; }
             },
             rights: 'ನಿಮ್ಮ ಮಾಹಿತಿಯನ್ನು ನೋಡಬಹುದು, ತಿದ್ದಲು ಕೇಳಬಹುದು, ಯಾವುದೇ ಒಪ್ಪಿಗೆಯನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂಪಡೆಯಬಹುದು. ಪ್ರಶ್ನೆ ಅಥವಾ ದೂರಿಗೆ {contact} ಅವರನ್ನು ಸಂಪರ್ಕಿಸಿ. ಭಾರತದ ಡೇಟಾ ಸಂರಕ್ಷಣಾ ಮಂಡಳಿಗೂ ದೂರು ನೀಡಬಹುದು.',
             signHere: 'ಈ ಮಾಹಿತಿಯನ್ನು ನಾನು ಓದಿದ್ದೇನೆ ಅಥವಾ ನನಗೆ ವಿವರಿಸಲಾಗಿದೆ; ಮೇಲಿನ ಉತ್ತರಗಳು ನನ್ನ ಆಯ್ಕೆ.'
+          },
+          sv: {
+            status: 'draft-translation',
+            title: 'Hur vi tar hand om dig och använder dina uppgifter',
+            intro: '{clinic} gör bedömningar och ger behandling inom tal och språk (logopedi). Innan vi börjar frågar vi vad du samtycker till. Du kan säga ja till vissa saker och nej till andra. Att säga nej till de frivilliga delarna nedan påverkar inte din vård.',
+            clinicalHead: 'Samtycke till bedömning och behandling',
+            dataHead: 'Hur vi använder dina uppgifter',
+            purposes: {
+              treatment: { label: 'Bedömning och behandling', text: 'En logoped bedömer och behandlar patienten. Logopeden förklarar varje steg, och du kan ställa frågor eller avbryta när som helst.', simple: 'Vi undersöker tal och språk och ger behandling. Du kan sluta när du vill.' },
+              records: { label: 'Journal för att ge vård', text: 'Vi för anteckningar, mål, besöksanteckningar och rapporter så att vården blir säker och sammanhängande. Bara de som vårdar patienten kan se dem. Vi skickar en kort sammanfattning till den som remitterade dig. Vi sparar dem i {years} år efter avslutad behandling, eller längre om lagen kräver det.', simple: 'Vi skriver anteckningar om behandlingen. Bara dina logopeder ser dem.' },
+              students: { label: 'Studenter under handledning', text: 'Logopedstudenter kan bedöma eller behandla patienten under handledning av en legitimerad logoped och läsa de anteckningar de behöver.', simple: 'En student kan hjälpa till, med en lärare bredvid.' },
+              reports: { label: 'Rapporter till familjen', text: 'Vi kan skicka korta sammanfattningar och rapporter till den kontakt du anger, via en säker länk.', simple: 'Vi kan skicka korta rapporter till dig.' },
+              reminders: { label: 'Påminnelser om besök', text: 'Vi kan skicka påminnelser via sms, e-post eller WhatsApp Business. De innehåller bara mottagningens namn, datum, tid och en länk, aldrig hälsouppgifter.', simple: 'Vi kan skicka ett meddelande som påminner om tiden.' },
+              teaching: { label: 'Pseudonymiserad användning i undervisning', text: 'Studenter kan använda fallet i kursarbete och undervisning, med namnet ersatt av en kod och initialer. Andra kan ibland ändå känna igen ett fall, därför frågar vi separat.', simple: 'Studenter kan lära sig av fallet. Vi döljer namnet.' }
+            },
+            rights: 'Du kan ta del av dina uppgifter, be oss rätta dem och när som helst återkalla ett samtycke genom att säga till. Ett återkallat samtycke gäller framåt. Frågor eller klagomål: kontakta {contact}. Du kan också klaga hos {authority}.',
+            signHere: 'Jag har läst eller fått denna information förklarad, och mina svar ovan är mina egna val.'
           }
         }
       }
@@ -1872,13 +2009,14 @@ code.hash { word-break: break-all; font-size: .75rem; }
   }
 
   /* Reasons to ask again: turned 18, guardian changed, a new purpose, a new notice version, or nothing in the ledger. */
-  function reviewNeeded(p, entries, today) {
+  function reviewNeeded(p, entries, today, adultAge) {
     const chain = forPatient(entries, p.id), last = chain[chain.length - 1], cur = current(entries, p.id), out = [];
     if (!last) return [{ code: 'none', text: 'No consent recorded in the ledger yet' }];
     if (chain.every(function (e) { return e.method === 'legacy'; })) out.push({ code: 'legacy', text: 'Recorded before the consent ledger: ask again with a notice' });
     const giverForChild = last.giver.relationship === 'parent' || last.giver.relationship === 'guardian';
     const age = ageOn(p.dob, today);
-    if (giverForChild && age != null && age >= 18) out.push({ code: 'adult', text: 'Turned 18: ask the patient themselves' });
+    const adult = adultAge || 18;
+    if (giverForChild && age != null && age >= adult) out.push({ code: 'adult', text: 'Turned ' + adult + ': ask the patient themselves' });
     if (giverForChild && p.guardian && last.giver.name && p.guardian.trim().toLowerCase() !== last.giver.name.trim().toLowerCase()) out.push({ code: 'guardian', text: 'Guardian changed (consent was given by ' + last.giver.name + ')' });
     PURPOSES.forEach(function (pp) { if (!cur[pp.id]) out.push({ code: 'purpose', purpose: pp.id, text: 'Not asked yet: ' + notice('en').purposes[pp.id].label }); });
     const major = function (v) { return Number(String(v || '0').split('.')[0]); };
@@ -3287,6 +3425,8 @@ code.hash { word-break: break-all; font-size: .75rem; }
   const S = window.Store;
   const Sync = window.Sync;
   const C = window.Consent;
+  const R = window.Regions;
+  function region() { return R.region(S.state.settings.region); }
   const view = document.getElementById('view');
   const modal = document.getElementById('modal');
 
@@ -4287,7 +4427,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
           (a.recommendations ? '<p class="small">' + esc(a.recommendations) + (a.frequency ? ' <span class="muted">(' + esc(a.frequency) + ')</span>' : '') + '</p>' : '') +
           (r.notes ? '<p class="small note">' + esc(r.notes) + '</p>' : '') +
           '<p class="small consent-line">Therapy ' + tick(c.therapy) + ' · Student clinicians ' + tick(c.students) + ' · Reports to family ' + tick(c.shareReports) +
-          (C.reviewNeeded(p, S.state.consents, L.todayISO()).length ? ' <a class="badge badge-warn" href="#/patients/' + p.id + '?tab=record">Consent: ask again</a>' : '') + '</p>' +
+          (C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge).length ? ' <a class="badge badge-warn" href="#/patients/' + p.id + '?tab=record">Consent: ask again</a>' : '') + '</p>' +
           '<div class="actions wrap"><a class="btn btn-sm" href="#/assessment/' + a.id + '">Assessment</a>' +
           (u.role === 'supervisor' ? '<button class="btn btn-sm btn-primary" data-action="allot" data-patient="' + p.id + '">Allot</button>'
             : '<button class="btn btn-sm btn-primary" data-action="take-case" data-patient="' + p.id + '">Take on this case</button>') +
@@ -4328,7 +4468,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
   /* Patients whose consent should be asked for again (turned 18, guardian changed, new purpose, new notice, nothing recorded). */
   function consentDue() {
     return visiblePatients().filter(function (p) { return p.status !== 'discharged'; }).map(function (p) {
-      return { p: p, reasons: C.reviewNeeded(p, S.state.consents, L.todayISO()) };
+      return { p: p, reasons: C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge) };
     }).filter(function (x) { return x.reasons.length; });
   }
 
@@ -4568,7 +4708,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
     const due = st.patients.filter(function (p) { return L.isPastRetention(p, set.retentionYears); });
     const isLead = u.role === 'supervisor';
     const srv = S.isServer(), info = S.serverInfo();
-    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + '</p></div></header>';
+    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">Privacy by design for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + ' · ' + esc(region().name) + ': ' + esc(region().law) + '</p></div></header>';
 
     html += storageSection();
     if (isLead) html += messagingSection() + mailSection();
@@ -4610,6 +4750,9 @@ code.hash { word-break: break-all; font-size: .75rem; }
       '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>' +
       '<label>Keep records after therapy ends (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
       '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"' + (srv && !isLead ? ' disabled' : '') + '></label></div>' +
+      '<div class="grid-2"><label>Country (privacy law, authority, guardianship, consent languages)<select name="region"' + (isLead ? '' : ' disabled') + '>' +
+      Object.keys(R.REGIONS).map(function (k) { return opt(k, R.REGIONS[k].name, (set.region || 'IN') === k); }).join('') + '</select></label>' +
+      '<label>Contact for privacy questions (shown in notices)<input name="privacyContact" value="' + esc(set.privacyContact || '') + '" placeholder="e.g. privacy@yourclinic.in or the clinic phone"' + (isLead ? '' : ' disabled') + '></label></div>' +
       '<div class="grid-4">' + [['dayStart', 'Day starts'], ['lunchStart', 'Lunch from'], ['lunchEnd', 'Lunch until'], ['dayEnd', 'Day ends']].map(function (f) {
         return '<label>' + f[1] + '<input type="time" name="' + f[0] + '" value="' + esc(set[f[0]]) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>';
       }).join('') + '</div>' +
@@ -4659,12 +4802,12 @@ code.hash { word-break: break-all; font-size: .75rem; }
         '<div id="deletion-test-out"></div></section>';
     }
 
-    html += '<section class="card"><h2>Your organisation\'s part</h2><p class="small">The app supports GDPR compliance but cannot provide it alone. Your clinic or university, as data controller, still needs to:</p><ul class="small plain">' +
-      '<li>Record the lawful basis for processing health data (usually Article 6(1)(e) or (b) with Article 9(2)(h)), and complete a DPIA.</li>' +
-      '<li>Give patients a privacy notice explaining how their data is used, including by student clinicians.</li>' +
-      '<li>Use encrypted, managed devices, and send reports only through a secure channel (not personal email or messaging apps).</li>' +
-      '<li>Have a process for access and erasure requests (one month to respond) and for reporting breaches (within 72 hours).</li>' +
-      '<li>Where a law requires records to be kept for a set number of years, set the retention period to match. Keep only what the law requires, for as long as it requires, with minimal access. Delete everything else on schedule.</li></ul>' +
+    const rg = region();
+    html += '<section class="card"><h2>Your organisation\'s part · ' + esc(rg.name) + '</h2><p class="small">TJS is designed to help you meet <strong>' + esc(rg.law) + '</strong>, but cannot do it alone. Your clinic or university, as the organisation responsible for the data, still needs to:</p><ul class="small plain">' +
+      rg.duties.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') +
+      '<li><strong>Breaches:</strong> ' + esc(rg.breach) + '</li>' +
+      '<li><strong>Patients can complain to:</strong> ' + esc(rg.authority) + '.</li></ul>' +
+      '<p class="small muted">Draft guidance: have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country under Settings.</p>' +
       '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
     if (S.isDemo() && !srv) {
@@ -5484,7 +5627,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
     return '<form class="card" id="messaging-form"><h2>Appointment reminders</h2>' +
       '<p class="small">Choose how your clinic sends reminders. Reminders contain only the clinic name, date, time and a link to the secure portal.</p>' +
       '<fieldset class="pick channels"><legend>Send reminders by</legend>' +
-      radio('sms', 'SMS only', 'Works on every phone. Needs TRAI DLT registration: sender ID and approved template.') +
+      radio('sms', 'SMS only', 'Works on every phone. ' + region().sms) +
       radio('whatsapp', 'WhatsApp Business only', 'Through a WhatsApp Business provider, with an approved template. Not personal WhatsApp.') +
       radio('both', 'Both – each patient chooses', 'Patients pick SMS or WhatsApp in their details; others get the default below.') +
       '<label>Default when a patient hasn\'t chosen<select name="defaultChannel">' + opt('sms', 'SMS', ms.defaultChannel === 'sms') + opt('whatsapp', 'WhatsApp Business', ms.defaultChannel === 'whatsapp') + '</select></label></fieldset>' +
@@ -5784,7 +5927,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 
   function noticeVars() {
     const set = S.state.settings;
-    return { clinic: set.messaging.clinicName || 'Our clinic', years: set.retentionYears, contact: set.privacyContact || set.messaging.clinicName || 'the clinic' };
+    return { clinic: set.messaging.clinicName || 'Our clinic', years: set.retentionYears, contact: set.privacyContact || set.messaging.clinicName || 'the clinic', authority: region().authority };
   }
   function canRecordConsent(p) { const u = me(); return canSee(p) && u.role !== 'student'; }
   function consentStatus(p) { return C.current(S.state.consents, p.id); }
@@ -5793,11 +5936,12 @@ code.hash { word-break: break-all; font-size: .75rem; }
     const p = S.patient(pid);
     if (!p) return '<div class="empty"><p>Patient not found.</p></div>';
     if (!canRecordConsent(p)) return noAccess();
-    const lang = C.LANGUAGES[params.lang] ? params.lang : 'en';
+    const langs = region().languages;
+    const lang = langs.indexOf(params.lang) >= 0 ? params.lang : langs[0];
     const access = params.access === '1';
     const n = C.notice(lang, null, noticeVars());
     const q = function (o) { const x = Object.assign({ lang: lang, access: access ? '1' : '' }, o); return '#/consent/' + p.id + '?' + Object.keys(x).filter(function (k) { return x[k]; }).map(function (k) { return k + '=' + encodeURIComponent(x[k]); }).join('&') + (params.next ? '&next=' + encodeURIComponent(params.next) : ''); };
-    const child = p.ageGroup === 'Child' || (p.dob && C.ageOn(p.dob) < 18);
+    const child = p.ageGroup === 'Child' || (p.dob && C.ageOn(p.dob) < region().adultAge);
     const draft = n.status !== 'approved';
     const answer = function (pp) {
       const t = n.purposes[pp.id];
@@ -5811,7 +5955,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
     let html = '<a class="back no-print" href="#/patients/' + p.id + '?tab=record">‹ ' + esc(pseud(p)) + '</a>' +
       '<header class="page-head"><div><h1>Consent</h1><p class="muted">' + esc(nm(p)) + ' · ' + esc(p.caseCode) + ' · notice v' + esc(n.version) + '</p></div>' +
       '<div class="head-actions no-print"><button class="btn btn-ghost" data-action="print">Print this form</button></div></header>';
-    html += '<section class="card no-print"><h2>1. Language and format</h2><div class="pchips">' + Object.keys(C.LANGUAGES).map(function (k) {
+    html += '<section class="card no-print"><h2>1. Language and format</h2><div class="pchips">' + langs.map(function (k) {
       return '<a class="pchip' + (k === lang ? ' on who-7' : '') + '" href="' + q({ lang: k }) + '" lang="' + k + '">' + esc(C.LANGUAGES[k].name) + '</a>';
     }).join('') + '</div>' +
       '<a class="btn btn-sm' + (access ? ' btn-primary' : '') + '" href="' + q({ access: access ? '' : '1' }) + '">' + (access ? '✓ ' : '') + 'Accessible mode: pictures, simple words, read aloud, witness</a>' +
@@ -5825,8 +5969,9 @@ code.hash { word-break: break-all; font-size: .75rem; }
       '<label>Relationship to the patient<select name="relationship" required>' + opt('', 'Choose…', true) +
       Object.keys(C.RELATIONSHIPS).map(function (k) { return opt(k, C.RELATIONSHIPS[k]); }).join('') + '</select></label></div>' +
       '<div class="guardian-basis" hidden><div class="grid-2"><label>Legal basis for deciding for this adult<select name="basis">' + opt('', 'Choose…', true) +
-      C.GUARDIAN_BASIS.map(function (b) { return opt(b, b); }).join('') + '</select></label>' +
+      region().guardianBasis.map(function (b) { return opt(b, b); }).join('') + '</select></label>' +
       '<label>Reference (order number, date, issuing court or board)<input name="basisRef"></label></div>' +
+      (region().guardianNote ? '<p class="small callout">' + esc(region().guardianNote) + '</p>' : '') +
       '<p class="small muted">Keep a copy of the document with the paper records, or attach a photo below.</p></div></section>';
     html += '<section class="card notice-text"><h2>3. ' + esc(n.title) + '</h2><p>' + esc(n.intro) + '</p>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-action="consent-read" data-lang="' + lang + '" data-text="' + esc(n.title + '. ' + n.intro) + '">▶ Read aloud</button>' +
@@ -6009,7 +6154,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 
   /* The consent part of a patient's record: where each purpose stands, what needs asking again, and the ledger. */
   function consentSection(p) {
-    const cur = consentStatus(p), chain = C.forPatient(S.state.consents, p.id), review = C.reviewNeeded(p, S.state.consents, L.todayISO());
+    const cur = consentStatus(p), chain = C.forPatient(S.state.consents, p.id), review = C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge);
     const ver = C.verify(S.state.consents, p.id), en = C.notice('en', null, noticeVars());
     const can = canRecordConsent(p);
     let html = '<section class="card"><div class="card-head"><h2>Consent</h2>' + (can ? '<a class="btn btn-sm btn-primary" href="#/consent/' + p.id + '">Record consent</a>' : '') + '</div>';
@@ -6101,7 +6246,8 @@ code.hash { word-break: break-all; font-size: .75rem; }
   function setupScreen() {
     return '<div class="lock"><form id="setup-form" class="card lock-card"><h1>Set up your clinic</h1>' +
       '<p class="muted">You will be the first clinical supervisor. You then create everyone else’s accounts.</p>' +
-      '<label>Clinic name<input name="clinic" required value=""></label>' +
+      '<div class="grid-2"><label>Clinic name<input name="clinic" required value=""></label>' +
+      '<label>Country<select name="region">' + Object.keys(R.REGIONS).map(function (k) { return opt(k, R.REGIONS[k].name, k === 'IN'); }).join('') + '</select></label></div>' +
       '<div class="grid-2"><label>Your name<input name="name" required autocomplete="name"></label><label>Your email<input name="email" type="email" required autocomplete="username"></label></div>' +
       '<div class="grid-2"><label>Your password<input type="password" name="p1" minlength="10" required autocomplete="new-password"></label><label>Repeat password<input type="password" name="p2" minlength="10" required autocomplete="new-password"></label></div>' +
       '<h2>Encrypt this device’s data</h2><p class="small">Patients can only be added once the data is encrypted. Choose a passphrase of at least 10 characters, different from your password. <strong>If it is lost, the data cannot be recovered</strong>, so keep it somewhere safe and make backups.</p>' +
@@ -6168,6 +6314,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
       if (v('k1') === v('p1')) return fail('Use a passphrase that is different from your password.');
       if (!S.cryptoAvailable()) return fail('This browser cannot encrypt data here. Open TJS from a file or over https in an up-to-date browser.');
       S.createFirstSupervisor(v('name').trim(), v('email').trim(), v('p1'), v('clinic').trim())
+        .then(function () { S.state.settings.region = v('region'); S.save(); })
         .then(function () { return S.setPassphrase(v('k1')); })
         .then(function () { S.audit('Turned on encryption'); lastActivity = Date.now(); route = '#/'; render(); toast('Your clinic is ready. Add people under Privacy → People & sign-in.'); }, function (e) { fail(e.message); });
     }
@@ -6823,6 +6970,8 @@ code.hash { word-break: break-all; font-size: .75rem; }
       if (ae) set.autoErase = ae.checked;
       if (!form.querySelector('[name=retentionYears]').disabled) set.retentionYears = Number(form.querySelector('[name=retentionYears]').value) || 0;
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
+      const reg = form.querySelector('[name=region]');
+      if (reg && !reg.disabled) { if (set.region !== reg.value) S.audit('Changed country', null, reg.value); set.region = reg.value; set.privacyContact = form.querySelector('[name=privacyContact]').value.trim(); }
       ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {
         const v = form.querySelector('[name=' + k + ']').value;
         if (v) S.state.settings[k] = v;

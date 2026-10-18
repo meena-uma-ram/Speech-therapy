@@ -12,7 +12,7 @@ module.exports = function demoState() {
   const win = { localStorage: storage, sessionStorage: storage, document: { querySelector: () => null }, crypto: require('crypto').webcrypto };
   win.window = win;
   const ctx = vm.createContext(Object.assign(win, { TextEncoder, TextDecoder, btoa, atob, console }));
-  ['js/logic.js', 'js/sync.js', 'js/consent.js', 'js/store.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
+  ['js/logic.js', 'js/sync.js', 'js/regions.js', 'js/consent.js', 'js/store.js'].forEach((f) => vm.runInContext(fs.readFileSync(path.join(root, f), 'utf8'), ctx, { filename: f }));
   const s = JSON.parse(JSON.stringify(ctx.Store.state));
   s.settings.currentUserId = '';
   return s;

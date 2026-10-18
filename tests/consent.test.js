@@ -71,3 +71,21 @@ test('server rules: the consent ledger is append-only', () => {
   assert.strictEqual(Sync.applyFrom(s.users[0], s, [{ c: 'consents', id: e.id, del: true }]).rejected.length, 1);
   assert.strictEqual(Sync.applyFrom(s.users[1], s, [{ c: 'consents', id: e.id, del: true }]).applied, 1);
 });
+
+test('countries: complete entries, offered languages exist, the notice names the right authority', () => {
+  const R = require('../js/regions.js');
+  Object.keys(R.REGIONS).forEach((k) => {
+    const r = R.REGIONS[k];
+    ['name', 'law', 'authority', 'hosting', 'sms', 'breach'].forEach((f) => assert.ok(r[f], k + ' ' + f));
+    assert.ok(r.adultAge >= 16 && r.guardianBasis.length && r.duties.length && r.languages.length, k);
+    r.languages.forEach((l) => assert.ok(C.LANGUAGES[l] && C.notice(l).lang === l, k + ' ' + l));
+    const n = C.notice(r.languages[0], null, { clinic: 'X', years: 8, contact: 'c', authority: r.authority });
+    if (r.languages[0] === 'en' || r.languages[0] === 'sv') assert.ok(n.rights.includes(r.authority), k);
+  });
+  assert.strictEqual(R.region('nowhere').name, 'India');
+  assert.ok(C.notice('sv', null, { authority: 'Integritetsskyddsmyndigheten (IMY)' }).rights.includes('IMY'));
+  const p = { id: 'p', dob: '2009-06-01', guardian: 'Anna' };
+  const L1 = [C.makeEntry([], { patientId: 'p', decisions: C.PURPOSES.map((x) => ({ purpose: x.id, action: 'grant' })), giver: { name: 'Anna', relationship: 'parent' }, recordedBy: 'u', method: 'signature' })];
+  assert.deepStrictEqual(C.reviewNeeded(p, L1, '2025-07-01', 16).map((r) => r.code), ['adult']);
+  assert.deepStrictEqual(C.reviewNeeded(p, L1, '2025-07-01', 18), []);
+});

@@ -16,6 +16,7 @@
 | 5.10 | GDPR position (processor in Sweden) | [10-gdpr-position.md](10-gdpr-position.md) | Questions and likely position ⚖️ |
 | 5.11 | Children's-data healthcare exemption | [11-questions-for-lawyer.md](11-questions-for-lawyer.md) | Questions ⚖️ |
 | 5.12 | Outside medical-device rules | [11-questions-for-lawyer.md](11-questions-for-lawyer.md) | Position and questions ⚖️ |
+| – | Countries: what changes per market | [13-countries.md](13-countries.md) | Draft for local lawyers ⚖️ |
 | 5.13 | Security review and pentest | [12-security-review-scope.md](12-security-review-scope.md) | Scope for the tester 🏢 |
 
 See also [../LEGAL.md](../LEGAL.md) (licence and the law in detail) and [../BACKEND-PLAN.md](../BACKEND-PLAN.md).

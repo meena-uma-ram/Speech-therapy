@@ -10,6 +10,10 @@ Two ways to run TJS with real data, both from the same app:
 | Who is the processor | No one (the clinic runs it) | You, plus your sub-processors |
 | Best for | A single clinic or department that wants its data on its premises | Many clinics, family portal, SMS/WhatsApp, remote consent |
 
+## One project per region
+
+Patient data stays in the clinic's region: a Supabase project in **Mumbai** for Indian clinics and in the **EU (e.g. Stockholm or Frankfurt)** for Swedish and other EU clinics, each with its own keys, backups and processor contracts. The app picks the project from the clinic's country (`js/regions.js` → `hosting`). Never mix regions in one database.
+
 ## Stack decision
 
 **I agree with Supabase in the Mumbai region plus Cloudflare Pages for the front end**, with five conditions:

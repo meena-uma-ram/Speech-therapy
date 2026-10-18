@@ -7,8 +7,8 @@
  * Share target: when someone shares a file to TJS from another app (WhatsApp, Gmail, Files, Gallery), the phone posts it to ./share.
  * The worker keeps it for a moment in the 'tjs-incoming' inbox and opens TJS, which encrypts it and lists it under "Files to file".
  */
-const CACHE = 'tjs-v5';
-const FILES = ['./', './css/styles.css', './js/logic.js', './js/sync.js', './js/consent.js', './js/store.js', './js/app.js',
+const CACHE = 'tjs-v6';
+const FILES = ['./', './css/styles.css', './js/logic.js', './js/sync.js', './js/regions.js', './js/consent.js', './js/store.js', './js/app.js',
   './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (ev) {

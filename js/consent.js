@@ -108,7 +108,8 @@
     ta: { name: 'தமிழ் (Tamil)', voice: 'ta-IN' },
     hi: { name: 'हिन्दी (Hindi)', voice: 'hi-IN' },
     ml: { name: 'മലയാളം (Malayalam)', voice: 'ml-IN' },
-    kn: { name: 'ಕನ್ನಡ (Kannada)', voice: 'kn-IN' }
+    kn: { name: 'ಕನ್ನಡ (Kannada)', voice: 'kn-IN' },
+    sv: { name: 'Svenska (Swedish)', voice: 'sv-SE' }
   };
 
   /*
@@ -133,10 +134,10 @@
               records: { label: 'Keeping records to provide care', text: 'We keep notes, goals, session records and reports so that care is safe and continuous. Only the people caring for the patient can see them. We send a short summary to the professional who referred you. We keep them for {years} years after therapy ends, or longer only if a law requires it.', simple: 'We write notes about therapy. Only your therapists see them.' },
               students: { label: 'Student clinicians, supervised', text: 'Student speech and language therapists may assess or treat the patient under the supervision of a qualified therapist, and see the notes they need.', simple: 'A student may help, with a teacher watching.' },
               reports: { label: 'Progress reports to the family', text: 'We may send short session summaries and progress reports to the contact you give us, through a secure link.', simple: 'We may send you short reports.' },
-              reminders: { label: 'Appointment reminders', text: 'We may send appointment reminders by SMS or WhatsApp Business. They contain only the clinic name, date, time and a link, never health details.', simple: 'We may send a message to remind you of the time.' },
+              reminders: { label: 'Appointment reminders', text: 'We may send appointment reminders by SMS, email or WhatsApp Business. They contain only the clinic name, date, time and a link, never health details.', simple: 'We may send a message to remind you of the time.' },
               teaching: { label: 'Pseudonymised use in teaching', text: 'Students may use the case in coursework and teaching, with the name replaced by a case code and initials. Others could sometimes still recognise a case, so we ask separately.', simple: 'Students may learn from this case. We hide the name.' }
             },
-            rights: 'You can see your information, ask us to correct it, and withdraw any agreement at any time by telling us. Withdrawing does not undo what was done before. To ask a question or complain, contact {contact}. You can also complain to the Data Protection Board of India.',
+            rights: 'You can see your information, ask us to correct it, and withdraw any agreement at any time by telling us. Withdrawing does not undo what was done before. To ask a question or complain, contact {contact}. You can also complain to {authority}.',
             signHere: 'I have read or been told this information, and my answers above are my choice.'
           },
           ta: {
@@ -206,6 +207,23 @@
             },
             rights: 'ನಿಮ್ಮ ಮಾಹಿತಿಯನ್ನು ನೋಡಬಹುದು, ತಿದ್ದಲು ಕೇಳಬಹುದು, ಯಾವುದೇ ಒಪ್ಪಿಗೆಯನ್ನು ಯಾವಾಗ ಬೇಕಾದರೂ ಹಿಂಪಡೆಯಬಹುದು. ಪ್ರಶ್ನೆ ಅಥವಾ ದೂರಿಗೆ {contact} ಅವರನ್ನು ಸಂಪರ್ಕಿಸಿ. ಭಾರತದ ಡೇಟಾ ಸಂರಕ್ಷಣಾ ಮಂಡಳಿಗೂ ದೂರು ನೀಡಬಹುದು.',
             signHere: 'ಈ ಮಾಹಿತಿಯನ್ನು ನಾನು ಓದಿದ್ದೇನೆ ಅಥವಾ ನನಗೆ ವಿವರಿಸಲಾಗಿದೆ; ಮೇಲಿನ ಉತ್ತರಗಳು ನನ್ನ ಆಯ್ಕೆ.'
+          },
+          sv: {
+            status: 'draft-translation',
+            title: 'Hur vi tar hand om dig och använder dina uppgifter',
+            intro: '{clinic} gör bedömningar och ger behandling inom tal och språk (logopedi). Innan vi börjar frågar vi vad du samtycker till. Du kan säga ja till vissa saker och nej till andra. Att säga nej till de frivilliga delarna nedan påverkar inte din vård.',
+            clinicalHead: 'Samtycke till bedömning och behandling',
+            dataHead: 'Hur vi använder dina uppgifter',
+            purposes: {
+              treatment: { label: 'Bedömning och behandling', text: 'En logoped bedömer och behandlar patienten. Logopeden förklarar varje steg, och du kan ställa frågor eller avbryta när som helst.', simple: 'Vi undersöker tal och språk och ger behandling. Du kan sluta när du vill.' },
+              records: { label: 'Journal för att ge vård', text: 'Vi för anteckningar, mål, besöksanteckningar och rapporter så att vården blir säker och sammanhängande. Bara de som vårdar patienten kan se dem. Vi skickar en kort sammanfattning till den som remitterade dig. Vi sparar dem i {years} år efter avslutad behandling, eller längre om lagen kräver det.', simple: 'Vi skriver anteckningar om behandlingen. Bara dina logopeder ser dem.' },
+              students: { label: 'Studenter under handledning', text: 'Logopedstudenter kan bedöma eller behandla patienten under handledning av en legitimerad logoped och läsa de anteckningar de behöver.', simple: 'En student kan hjälpa till, med en lärare bredvid.' },
+              reports: { label: 'Rapporter till familjen', text: 'Vi kan skicka korta sammanfattningar och rapporter till den kontakt du anger, via en säker länk.', simple: 'Vi kan skicka korta rapporter till dig.' },
+              reminders: { label: 'Påminnelser om besök', text: 'Vi kan skicka påminnelser via sms, e-post eller WhatsApp Business. De innehåller bara mottagningens namn, datum, tid och en länk, aldrig hälsouppgifter.', simple: 'Vi kan skicka ett meddelande som påminner om tiden.' },
+              teaching: { label: 'Pseudonymiserad användning i undervisning', text: 'Studenter kan använda fallet i kursarbete och undervisning, med namnet ersatt av en kod och initialer. Andra kan ibland ändå känna igen ett fall, därför frågar vi separat.', simple: 'Studenter kan lära sig av fallet. Vi döljer namnet.' }
+            },
+            rights: 'Du kan ta del av dina uppgifter, be oss rätta dem och när som helst återkalla ett samtycke genom att säga till. Ett återkallat samtycke gäller framåt. Frågor eller klagomål: kontakta {contact}. Du kan också klaga hos {authority}.',
+            signHere: 'Jag har läst eller fått denna information förklarad, och mina svar ovan är mina egna val.'
           }
         }
       }
@@ -319,13 +337,14 @@
   }
 
   /* Reasons to ask again: turned 18, guardian changed, a new purpose, a new notice version, or nothing in the ledger. */
-  function reviewNeeded(p, entries, today) {
+  function reviewNeeded(p, entries, today, adultAge) {
     const chain = forPatient(entries, p.id), last = chain[chain.length - 1], cur = current(entries, p.id), out = [];
     if (!last) return [{ code: 'none', text: 'No consent recorded in the ledger yet' }];
     if (chain.every(function (e) { return e.method === 'legacy'; })) out.push({ code: 'legacy', text: 'Recorded before the consent ledger: ask again with a notice' });
     const giverForChild = last.giver.relationship === 'parent' || last.giver.relationship === 'guardian';
     const age = ageOn(p.dob, today);
-    if (giverForChild && age != null && age >= 18) out.push({ code: 'adult', text: 'Turned 18: ask the patient themselves' });
+    const adult = adultAge || 18;
+    if (giverForChild && age != null && age >= adult) out.push({ code: 'adult', text: 'Turned ' + adult + ': ask the patient themselves' });
     if (giverForChild && p.guardian && last.giver.name && p.guardian.trim().toLowerCase() !== last.giver.name.trim().toLowerCase()) out.push({ code: 'guardian', text: 'Guardian changed (consent was given by ' + last.giver.name + ')' });
     PURPOSES.forEach(function (pp) { if (!cur[pp.id]) out.push({ code: 'purpose', purpose: pp.id, text: 'Not asked yet: ' + notice('en').purposes[pp.id].label }); });
     const major = function (v) { return Number(String(v || '0').split('.')[0]); };

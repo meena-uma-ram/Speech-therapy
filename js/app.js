@@ -7,6 +7,8 @@
   const S = window.Store;
   const Sync = window.Sync;
   const C = window.Consent;
+  const R = window.Regions;
+  function region() { return R.region(S.state.settings.region); }
   const view = document.getElementById('view');
   const modal = document.getElementById('modal');
 
@@ -1007,7 +1009,7 @@
           (a.recommendations ? '<p class="small">' + esc(a.recommendations) + (a.frequency ? ' <span class="muted">(' + esc(a.frequency) + ')</span>' : '') + '</p>' : '') +
           (r.notes ? '<p class="small note">' + esc(r.notes) + '</p>' : '') +
           '<p class="small consent-line">Therapy ' + tick(c.therapy) + ' · Student clinicians ' + tick(c.students) + ' · Reports to family ' + tick(c.shareReports) +
-          (C.reviewNeeded(p, S.state.consents, L.todayISO()).length ? ' <a class="badge badge-warn" href="#/patients/' + p.id + '?tab=record">Consent: ask again</a>' : '') + '</p>' +
+          (C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge).length ? ' <a class="badge badge-warn" href="#/patients/' + p.id + '?tab=record">Consent: ask again</a>' : '') + '</p>' +
           '<div class="actions wrap"><a class="btn btn-sm" href="#/assessment/' + a.id + '">Assessment</a>' +
           (u.role === 'supervisor' ? '<button class="btn btn-sm btn-primary" data-action="allot" data-patient="' + p.id + '">Allot</button>'
             : '<button class="btn btn-sm btn-primary" data-action="take-case" data-patient="' + p.id + '">Take on this case</button>') +
@@ -1048,7 +1050,7 @@
   /* Patients whose consent should be asked for again (turned 18, guardian changed, new purpose, new notice, nothing recorded). */
   function consentDue() {
     return visiblePatients().filter(function (p) { return p.status !== 'discharged'; }).map(function (p) {
-      return { p: p, reasons: C.reviewNeeded(p, S.state.consents, L.todayISO()) };
+      return { p: p, reasons: C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge) };
     }).filter(function (x) { return x.reasons.length; });
   }
 
@@ -1288,7 +1290,7 @@
     const due = st.patients.filter(function (p) { return L.isPastRetention(p, set.retentionYears); });
     const isLead = u.role === 'supervisor';
     const srv = S.isServer(), info = S.serverInfo();
-    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">GDPR safeguards for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + '</p></div></header>';
+    let html = '<header class="page-head"><div><h1>Privacy &amp; settings</h1><p class="muted">Privacy by design for patient data ' + (srv ? 'on your clinic\u2019s server' : 'on this device') + ' · ' + esc(region().name) + ': ' + esc(region().law) + '</p></div></header>';
 
     html += storageSection();
     if (isLead) html += messagingSection() + mailSection();
@@ -1330,6 +1332,9 @@
       '<div class="grid-3"><label>Sign out / lock after (minutes idle)<input type="number" min="1" max="120" name="autoLockMinutes" value="' + esc(set.autoLockMinutes) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>' +
       '<label>Keep records after therapy ends (years)<input type="number" min="0" max="30" name="retentionYears" value="' + esc(set.retentionYears) + '"' + (isLead ? '' : ' disabled') + '></label>' +
       '<label>Name used to sign family reports<input name="therapistName" value="' + esc(set.therapistName) + '"' + (srv && !isLead ? ' disabled' : '') + '></label></div>' +
+      '<div class="grid-2"><label>Country (privacy law, authority, guardianship, consent languages)<select name="region"' + (isLead ? '' : ' disabled') + '>' +
+      Object.keys(R.REGIONS).map(function (k) { return opt(k, R.REGIONS[k].name, (set.region || 'IN') === k); }).join('') + '</select></label>' +
+      '<label>Contact for privacy questions (shown in notices)<input name="privacyContact" value="' + esc(set.privacyContact || '') + '" placeholder="e.g. privacy@yourclinic.in or the clinic phone"' + (isLead ? '' : ' disabled') + '></label></div>' +
       '<div class="grid-4">' + [['dayStart', 'Day starts'], ['lunchStart', 'Lunch from'], ['lunchEnd', 'Lunch until'], ['dayEnd', 'Day ends']].map(function (f) {
         return '<label>' + f[1] + '<input type="time" name="' + f[0] + '" value="' + esc(set[f[0]]) + '"' + (srv && !isLead ? ' disabled' : '') + '></label>';
       }).join('') + '</div>' +
@@ -1379,12 +1384,12 @@
         '<div id="deletion-test-out"></div></section>';
     }
 
-    html += '<section class="card"><h2>Your organisation\'s part</h2><p class="small">The app supports GDPR compliance but cannot provide it alone. Your clinic or university, as data controller, still needs to:</p><ul class="small plain">' +
-      '<li>Record the lawful basis for processing health data (usually Article 6(1)(e) or (b) with Article 9(2)(h)), and complete a DPIA.</li>' +
-      '<li>Give patients a privacy notice explaining how their data is used, including by student clinicians.</li>' +
-      '<li>Use encrypted, managed devices, and send reports only through a secure channel (not personal email or messaging apps).</li>' +
-      '<li>Have a process for access and erasure requests (one month to respond) and for reporting breaches (within 72 hours).</li>' +
-      '<li>Where a law requires records to be kept for a set number of years, set the retention period to match. Keep only what the law requires, for as long as it requires, with minimal access. Delete everything else on schedule.</li></ul>' +
+    const rg = region();
+    html += '<section class="card"><h2>Your organisation\'s part · ' + esc(rg.name) + '</h2><p class="small">TJS is designed to help you meet <strong>' + esc(rg.law) + '</strong>, but cannot do it alone. Your clinic or university, as the organisation responsible for the data, still needs to:</p><ul class="small plain">' +
+      rg.duties.map(function (d) { return '<li>' + esc(d) + '</li>'; }).join('') +
+      '<li><strong>Breaches:</strong> ' + esc(rg.breach) + '</li>' +
+      '<li><strong>Patients can complain to:</strong> ' + esc(rg.authority) + '.</li></ul>' +
+      '<p class="small muted">Draft guidance: have a lawyer in ' + esc(rg.name === 'Another country' ? 'your country' : rg.name) + ' confirm it. Change the country under Settings.</p>' +
       '<p class="small"><strong>What you can truthfully say:</strong> “Patient data is erased from live systems on request or at the end of the retention period, and made permanently unreadable in backups through per-patient encryption keys.”</p></section>';
 
     if (S.isDemo() && !srv) {
@@ -2204,7 +2209,7 @@
     return '<form class="card" id="messaging-form"><h2>Appointment reminders</h2>' +
       '<p class="small">Choose how your clinic sends reminders. Reminders contain only the clinic name, date, time and a link to the secure portal.</p>' +
       '<fieldset class="pick channels"><legend>Send reminders by</legend>' +
-      radio('sms', 'SMS only', 'Works on every phone. Needs TRAI DLT registration: sender ID and approved template.') +
+      radio('sms', 'SMS only', 'Works on every phone. ' + region().sms) +
       radio('whatsapp', 'WhatsApp Business only', 'Through a WhatsApp Business provider, with an approved template. Not personal WhatsApp.') +
       radio('both', 'Both – each patient chooses', 'Patients pick SMS or WhatsApp in their details; others get the default below.') +
       '<label>Default when a patient hasn\'t chosen<select name="defaultChannel">' + opt('sms', 'SMS', ms.defaultChannel === 'sms') + opt('whatsapp', 'WhatsApp Business', ms.defaultChannel === 'whatsapp') + '</select></label></fieldset>' +
@@ -2504,7 +2509,7 @@
 
   function noticeVars() {
     const set = S.state.settings;
-    return { clinic: set.messaging.clinicName || 'Our clinic', years: set.retentionYears, contact: set.privacyContact || set.messaging.clinicName || 'the clinic' };
+    return { clinic: set.messaging.clinicName || 'Our clinic', years: set.retentionYears, contact: set.privacyContact || set.messaging.clinicName || 'the clinic', authority: region().authority };
   }
   function canRecordConsent(p) { const u = me(); return canSee(p) && u.role !== 'student'; }
   function consentStatus(p) { return C.current(S.state.consents, p.id); }
@@ -2513,11 +2518,12 @@
     const p = S.patient(pid);
     if (!p) return '<div class="empty"><p>Patient not found.</p></div>';
     if (!canRecordConsent(p)) return noAccess();
-    const lang = C.LANGUAGES[params.lang] ? params.lang : 'en';
+    const langs = region().languages;
+    const lang = langs.indexOf(params.lang) >= 0 ? params.lang : langs[0];
     const access = params.access === '1';
     const n = C.notice(lang, null, noticeVars());
     const q = function (o) { const x = Object.assign({ lang: lang, access: access ? '1' : '' }, o); return '#/consent/' + p.id + '?' + Object.keys(x).filter(function (k) { return x[k]; }).map(function (k) { return k + '=' + encodeURIComponent(x[k]); }).join('&') + (params.next ? '&next=' + encodeURIComponent(params.next) : ''); };
-    const child = p.ageGroup === 'Child' || (p.dob && C.ageOn(p.dob) < 18);
+    const child = p.ageGroup === 'Child' || (p.dob && C.ageOn(p.dob) < region().adultAge);
     const draft = n.status !== 'approved';
     const answer = function (pp) {
       const t = n.purposes[pp.id];
@@ -2531,7 +2537,7 @@
     let html = '<a class="back no-print" href="#/patients/' + p.id + '?tab=record">‹ ' + esc(pseud(p)) + '</a>' +
       '<header class="page-head"><div><h1>Consent</h1><p class="muted">' + esc(nm(p)) + ' · ' + esc(p.caseCode) + ' · notice v' + esc(n.version) + '</p></div>' +
       '<div class="head-actions no-print"><button class="btn btn-ghost" data-action="print">Print this form</button></div></header>';
-    html += '<section class="card no-print"><h2>1. Language and format</h2><div class="pchips">' + Object.keys(C.LANGUAGES).map(function (k) {
+    html += '<section class="card no-print"><h2>1. Language and format</h2><div class="pchips">' + langs.map(function (k) {
       return '<a class="pchip' + (k === lang ? ' on who-7' : '') + '" href="' + q({ lang: k }) + '" lang="' + k + '">' + esc(C.LANGUAGES[k].name) + '</a>';
     }).join('') + '</div>' +
       '<a class="btn btn-sm' + (access ? ' btn-primary' : '') + '" href="' + q({ access: access ? '' : '1' }) + '">' + (access ? '✓ ' : '') + 'Accessible mode: pictures, simple words, read aloud, witness</a>' +
@@ -2545,8 +2551,9 @@
       '<label>Relationship to the patient<select name="relationship" required>' + opt('', 'Choose…', true) +
       Object.keys(C.RELATIONSHIPS).map(function (k) { return opt(k, C.RELATIONSHIPS[k]); }).join('') + '</select></label></div>' +
       '<div class="guardian-basis" hidden><div class="grid-2"><label>Legal basis for deciding for this adult<select name="basis">' + opt('', 'Choose…', true) +
-      C.GUARDIAN_BASIS.map(function (b) { return opt(b, b); }).join('') + '</select></label>' +
+      region().guardianBasis.map(function (b) { return opt(b, b); }).join('') + '</select></label>' +
       '<label>Reference (order number, date, issuing court or board)<input name="basisRef"></label></div>' +
+      (region().guardianNote ? '<p class="small callout">' + esc(region().guardianNote) + '</p>' : '') +
       '<p class="small muted">Keep a copy of the document with the paper records, or attach a photo below.</p></div></section>';
     html += '<section class="card notice-text"><h2>3. ' + esc(n.title) + '</h2><p>' + esc(n.intro) + '</p>' +
       '<button type="button" class="btn btn-sm btn-ghost" data-action="consent-read" data-lang="' + lang + '" data-text="' + esc(n.title + '. ' + n.intro) + '">▶ Read aloud</button>' +
@@ -2729,7 +2736,7 @@
 
   /* The consent part of a patient's record: where each purpose stands, what needs asking again, and the ledger. */
   function consentSection(p) {
-    const cur = consentStatus(p), chain = C.forPatient(S.state.consents, p.id), review = C.reviewNeeded(p, S.state.consents, L.todayISO());
+    const cur = consentStatus(p), chain = C.forPatient(S.state.consents, p.id), review = C.reviewNeeded(p, S.state.consents, L.todayISO(), region().adultAge);
     const ver = C.verify(S.state.consents, p.id), en = C.notice('en', null, noticeVars());
     const can = canRecordConsent(p);
     let html = '<section class="card"><div class="card-head"><h2>Consent</h2>' + (can ? '<a class="btn btn-sm btn-primary" href="#/consent/' + p.id + '">Record consent</a>' : '') + '</div>';
@@ -2821,7 +2828,8 @@
   function setupScreen() {
     return '<div class="lock"><form id="setup-form" class="card lock-card"><h1>Set up your clinic</h1>' +
       '<p class="muted">You will be the first clinical supervisor. You then create everyone else’s accounts.</p>' +
-      '<label>Clinic name<input name="clinic" required value=""></label>' +
+      '<div class="grid-2"><label>Clinic name<input name="clinic" required value=""></label>' +
+      '<label>Country<select name="region">' + Object.keys(R.REGIONS).map(function (k) { return opt(k, R.REGIONS[k].name, k === 'IN'); }).join('') + '</select></label></div>' +
       '<div class="grid-2"><label>Your name<input name="name" required autocomplete="name"></label><label>Your email<input name="email" type="email" required autocomplete="username"></label></div>' +
       '<div class="grid-2"><label>Your password<input type="password" name="p1" minlength="10" required autocomplete="new-password"></label><label>Repeat password<input type="password" name="p2" minlength="10" required autocomplete="new-password"></label></div>' +
       '<h2>Encrypt this device’s data</h2><p class="small">Patients can only be added once the data is encrypted. Choose a passphrase of at least 10 characters, different from your password. <strong>If it is lost, the data cannot be recovered</strong>, so keep it somewhere safe and make backups.</p>' +
@@ -2888,6 +2896,7 @@
       if (v('k1') === v('p1')) return fail('Use a passphrase that is different from your password.');
       if (!S.cryptoAvailable()) return fail('This browser cannot encrypt data here. Open TJS from a file or over https in an up-to-date browser.');
       S.createFirstSupervisor(v('name').trim(), v('email').trim(), v('p1'), v('clinic').trim())
+        .then(function () { S.state.settings.region = v('region'); S.save(); })
         .then(function () { return S.setPassphrase(v('k1')); })
         .then(function () { S.audit('Turned on encryption'); lastActivity = Date.now(); route = '#/'; render(); toast('Your clinic is ready. Add people under Privacy → People & sign-in.'); }, function (e) { fail(e.message); });
     }
@@ -3543,6 +3552,8 @@
       if (ae) set.autoErase = ae.checked;
       if (!form.querySelector('[name=retentionYears]').disabled) set.retentionYears = Number(form.querySelector('[name=retentionYears]').value) || 0;
       S.state.settings.therapistName = form.querySelector('[name=therapistName]').value.trim();
+      const reg = form.querySelector('[name=region]');
+      if (reg && !reg.disabled) { if (set.region !== reg.value) S.audit('Changed country', null, reg.value); set.region = reg.value; set.privacyContact = form.querySelector('[name=privacyContact]').value.trim(); }
       ['dayStart', 'lunchStart', 'lunchEnd', 'dayEnd'].forEach(function (k) {
         const v = form.querySelector('[name=' + k + ']').value;
         if (v) S.state.settings[k] = v;

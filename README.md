@@ -2,6 +2,10 @@
 
 A workspace for a speech **diagnostics** department, a speech **therapy** department, and university clinics where supervisors allot cases to students. It also covers the daily work: a timetable, SMART goals, materials, session logging, progress and family reports.
 
+## Countries
+
+TJS is privacy by design for clinics anywhere, built for the strictest laws (Europe's **GDPR** and India's **DPDP Act**). Under **Privacy → Settings → Country** (India, Sweden, another EU/EEA country, UK, other) a supervisor sets which law applies, the authority patients can complain to (named in notices and receipts), guardianship options, consent languages (Swedish added), the age at which consent is asked again, and the clinic's legal checklist. Every country's details are drafts for a local lawyer: see [docs/legal/13-countries.md](docs/legal/13-countries.md). The USA (HIPAA) is not covered.
+
 ## Demo and clinic: two separate workspaces
 
 The first screen asks: **Try the demo** or **Set up my clinic**. Each device keeps the two completely apart.
