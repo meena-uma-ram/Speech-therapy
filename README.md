@@ -136,7 +136,7 @@ Documents are **pre-filled** from what the app already knows. The pre-assessment
 | Data minimisation | Need-to-know screens by role (on one device a screen filter, not a security barrier; on the clinic server, enforced by the server); case codes; coursework pseudonymised; "Hide names" for screens others can see |
 | No third parties | No web fonts, CDNs, analytics or trackers: the page makes no network requests at all; `no-referrer` |
 | Consent | Append-only, sealed consent ledger per purpose, with notice version and language; withdrawal with immediate effect; re-consent triggers. Allotment to students, family reports, reminders and coursework export check it |
-| Accountability | Access log of opening, editing, sharing, allotting, reviewing, exporting and erasing records |
+| Accountability | Access log of opening, editing, sharing, allotting, reviewing, exporting and erasing records, visible only to supervisors |
 | Right of access & portability | "Copy full record" exports everything held about a person as JSON |
 | Right to erasure | Erasing a patient removes all linked records on the device **and destroys the patient's key** (crypto-shredding), so earlier backups can no longer be read for that patient. Each erasure issues a **deletion receipt** |
 | Backups | The whole file is encrypted with a backup password, and each patient again with their own key; keys are never in the backup. The key file is the recovery copy of the keys. Erased patients are never restored, and a key file older than the latest erasure is refused |
