@@ -408,8 +408,9 @@
       '<div class="head-actions">' + (canManage(p) ? '<button class="btn btn-ghost" data-action="edit-patient" data-id="' + p.id + '">Edit</button>' : '') +
       (p.status === 'active' && me().role !== 'diagnostician' ? '<button class="btn btn-ghost" data-action="new-appt" data-patient="' + p.id + '">+ Session</button>' : '') +
       (isStudentCase(p) ? '<a class="btn btn-ghost" href="#/cases/' + p.id + '">Coursework</a>' : '') + '</div></header>' +
-      tabs(base, tab, [['goals', 'SMART goals'], ['progress', 'Progress'], ['history', 'Session journal'], ['record', 'Details & consent']]);
+      tabs(base, tab, [['goals', 'SMART goals'], ['progress', 'Progress'], ['history', 'Session journal'], ['files', 'Files (' + S.state.attachments.filter(function (a) { return a.patientId === p.id; }).length + ')'], ['record', 'Details & consent']]);
     if (tab === 'record') return html + recordTab(p);
+    if (tab === 'files') return html + filesTab(p);
 
     if (tab === 'goals') {
       html += '<div class="actions"><button class="btn btn-primary" data-action="new-goal" data-patient="' + p.id + '">+ Add SMART goal</button></div>';
@@ -765,6 +766,7 @@
       const moved = st.appointments.reduce(function (n, a) { return n + (a.reschedules || []).filter(function (r) { return r.at.slice(0, 10) >= since; }).length; }, 0);
       return [
         { label: 'To allot', n: pending, href: '#/cases?tab=allot', alert: pending > 0 },
+        { label: 'Reminders to send', n: remindersToSend(L.addDays(L.todayISO(), 1)), href: '#/reports?tab=reminders' },
         { label: 'To review', n: st.documents.filter(function (d) { return d.status === 'submitted'; }).length, href: '#/cases?tab=review' },
         { label: 'Needs cover', n: cover, href: '#/leave', alert: cover > 0 },
         { label: 'Rescheduled', n: moved, href: '#/cases?tab=reschedules' }
@@ -775,6 +777,7 @@
       return [
         { label: 'My cases', n: st.patients.filter(function (p) { return p.assignedTo === u.id && p.status === 'active'; }).length, href: '#/cases' },
         { label: 'Covering', n: st.appointments.filter(function (a) { return a.coverBy === u.id && a.date >= L.todayISO(); }).length, href: '#/schedule' },
+        { label: 'Reminders to send', n: remindersToSend(L.addDays(L.todayISO(), 1)), href: '#/reports?tab=reminders' },
         { label: 'Invitations', n: invites, href: '#/inbox', alert: invites > 0 }
       ];
     }
@@ -788,14 +791,16 @@
     }
     return [
       { label: 'Waiting list', n: st.patients.filter(function (p) { return p.status === 'waiting'; }).length, href: '#/diagnostics' },
+      { label: 'Letters to send', n: lettersDue().length, href: '#/diagnostics?tab=letters', alert: lettersDue().length > 0 },
       { label: 'Referred', n: st.referrals.filter(function (r) { return r.fromId === u.id && r.status === 'pending'; }).length, href: '#/diagnostics?tab=done' }
     ];
   }
 
   function rolebar() {
     const u = me(), st = S.state;
+    const toFile = unfiled().length;
     return '<div class="rb-left"><span class="rb-dept">' + esc(L.ROLES[u.role].dept) + '</span>' +
-      quickLinks(u).map(function (l) {
+      quickLinks(u).concat(toFile ? [{ label: 'Files to file', n: toFile, href: '#/files-to-file', alert: true }] : []).map(function (l) {
         return '<a class="rb-link' + (l.alert ? ' alert' : '') + '" href="' + l.href + '">' + esc(l.label) + ' <span class="rb-count">' + l.n + '</span></a>';
       }).join('') + '</div>' +
       '<div class="rb-right">' + (S.isServer() ? syncPill() : '') +
@@ -838,7 +843,8 @@
     const done = st.assessments.filter(function (a) { return a.status === 'completed' && (me().role === 'supervisor' || a.assessorId === me().id); }).sort(function (a, b) { return b.date.localeCompare(a.date); });
     let html = '<header class="page-head"><div><h1>Diagnostics</h1><p class="muted">Assess new patients and refer them to the therapy department</p></div>' +
       '<button class="btn btn-primary" data-action="new-patient">+ Register patient</button></header>' +
-      tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')']]) + (tab === 'waiting' ? newPatientsCard() : '');
+      tabs('#/diagnostics', tab, [['waiting', 'Waiting list (' + waiting.length + ')'], ['done', 'Assessed (' + done.length + ')'], ['letters', 'Letters to send (' + lettersDue().length + ')']]) + (tab === 'waiting' ? newPatientsCard() : '');
+    if (tab === 'letters') return html + viewLettersDue();
 
     if (tab === 'waiting') {
       if (!waiting.length) return html + '<div class="empty"><p>No one is waiting for assessment.</p></div>';
@@ -876,7 +882,7 @@
       (p.dob ? ' · Age ' + L.age(p.dob) : '') + ' · ' + (a.status === 'draft' ? '<span class="badge">Draft</span>' : '<span class="badge badge-good">Completed</span>') + '</p></div>' +
       '<div class="head-actions"><a class="btn btn-ghost" href="#/patients/' + p.id + '?tab=record">Details & consent</a></div></header>';
 
-    const F = [['source', 'Referred by', 1], ['reason', 'Reason for referral', 2], ['history', 'Case history', 3], ['tests', 'Tests & tools used', 2],
+    const F = [['source', 'Referred by (who or where)', 1], ['reason', 'Reason for referral', 2], ['history', 'Case history', 3], ['tests', 'Tests & tools used', 2],
       ['findings', 'Findings', 4], ['diagnosis', 'Diagnosis', 1], ['recommendations', 'Recommendations', 3], ['frequency', 'Recommended frequency', 1]];
 
     if (!editable) {
@@ -886,6 +892,11 @@
         '<div><dt>Severity</dt><dd>' + esc(a.severity || '—') + '</dd></div></dl></section>';
       if (r) html += '<section class="card"><h2>Referral to therapy</h2><p>' + esc(r.priority) + ' priority · sent ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + ' · ' +
         (r.status === 'pending' ? 'awaiting allotment' : 'allotted to ' + esc(userName(r.allottedTo))) + '</p>' + (r.notes ? '<p class="muted">' + esc(r.notes) + '</p>' : '') + '</section>';
+      html += '<section class="card"><h2>Emails after the assessment</h2><p>' + letterChips(a) + '</p>' +
+        (a.referrerName || a.referrerEmail ? '<p class="small muted">Referrer: ' + esc([a.referrerName, a.referrerEmail].filter(Boolean).join(' · ')) + '</p>' : '') +
+        '<div class="actions wrap"><button class="btn btn-primary" data-action="letter-new" data-assessment="' + a.id + '" data-kind="family-report">Email the report to the family</button>' +
+        '<button class="btn" data-action="letter-new" data-assessment="' + a.id + '" data-kind="referrer-thanks">Thank the referrer</button>' +
+        '<button class="btn btn-ghost" data-action="letter-new" data-assessment="' + a.id + '" data-kind="other">Other email</button></div></section>';
       return html;
     }
 
@@ -896,6 +907,8 @@
     html += '<form id="assessment-form" data-id="' + a.id + '" class="card">' +
       '<div class="grid-3"><label>Date<input type="date" name="date" value="' + esc(a.date) + '" required></label>' + field(F[0]) +
       '<label>Adult or child<select name="ageGroup">' + opt('Child', 'Child', p.ageGroup !== 'Adult') + opt('Adult', 'Adult', p.ageGroup === 'Adult') + '</select></label></div>' +
+      '<div class="grid-2"><label>Referrer\u2019s name<input name="referrerName" value="' + esc(a.referrerName || '') + '" placeholder="e.g. Dr. Kumar, class teacher"></label>' +
+      '<label>Referrer\u2019s email<input name="referrerEmail" type="email" value="' + esc(a.referrerEmail || '') + '" placeholder="for the thank-you email"></label></div>' +
       F.slice(1, 5).map(field).join('') +
       '<div class="grid-3"><label>Case type<input name="condition" list="conditions-dx" value="' + esc(p.condition) + '"></label>' + field(F[5]) +
       '<label>Severity<select name="severity">' + opt('', '—') + SEVERITY.map(function (s) { return opt(s, s, a.severity === s); }).join('') + '</select></label></div>' +
@@ -905,7 +918,7 @@
       '<div class="grid-2"><label>Priority<select name="priority">' + PRIORITY.map(function (x) { return opt(x, x); }).join('') + '</select></label>' +
       '<label>Note for the therapy team<input name="refNotes" placeholder="e.g. aspiration risk, family preferences"></label></div>' +
       '<p class="small muted">Consent for therapy: ' + tick(p.consent && p.consent.therapy) + ' · Student clinicians: ' + tick(p.consent && p.consent.students) +
-      ' <button type="button" class="link" data-action="edit-patient" data-id="' + p.id + '">Update consent</button></p></fieldset>' +
+      ' <a class="link" href="#/consent/' + p.id + '?next=' + encodeURIComponent('#/assessment/' + a.id) + '">Record consent</a></p></fieldset>' +
       '<div class="actions wrap end"><button class="btn" name="intent" value="draft">Save draft</button>' +
       '<button class="btn" name="intent" value="close">Complete – no therapy needed</button>' +
       '<button class="btn btn-primary" name="intent" value="refer">Complete &amp; refer to therapy</button></div></form>';
@@ -915,7 +928,7 @@
   function submitAssessment(form, intent) {
     const a = S.assessment(form.dataset.id), p = S.patient(a.patientId);
     const v = function (n) { const el = form.querySelector('[name=' + n + ']'); return el ? el.value.trim() : ''; };
-    ['date', 'source', 'reason', 'history', 'tests', 'findings', 'diagnosis', 'severity', 'recommendations', 'frequency'].forEach(function (k) { a[k] = v(k); });
+    ['date', 'source', 'referrerName', 'referrerEmail', 'reason', 'history', 'tests', 'findings', 'diagnosis', 'severity', 'recommendations', 'frequency'].forEach(function (k) { a[k] = v(k); });
     p.ageGroup = v('ageGroup'); p.condition = v('condition');
     if (intent === 'draft') { S.save(); toast('Draft saved'); return; }
     if (intent === 'refer' && !(p.consent && p.consent.therapy)) { toast('Record consent for therapy before referring.'); S.save(); return; }
@@ -1491,9 +1504,12 @@
     S.upsert('logs', { patientId: pid, date: L.todayISO(), entries: [], notes: marker, homework: '' });
     S.send(me().id, { kind: 'note', patientId: pid, subject: 'Test message', body: marker });
     S.audit('Deletion test: created test patient', pid);
-    let backup, file, receipt;
+    let backup, file, receipt, testFile;
     const pw = 'test-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-    S.exportBackup(pw).then(function (text) {
+    S.addFile(new File(['%PDF-1.4 ' + marker], 'deletion-test.pdf', { type: 'application/pdf' }), { patientId: pid, category: 'Scanned report', note: marker }).then(function (m) {
+      testFile = m;
+      return S.exportBackup(pw);
+    }).then(function (text) {
       file = text;
       return S.openBackup(text, pw);
     }).then(function (inner) {
@@ -1502,13 +1518,15 @@
       return S.flush();
     }).then(function () {
       const bundle = backup.patients.find(function (b) { return b.pid === pid; });
-      return S.openBundle(bundle).then(function (readable) {
+      let stored = false;
+      return (S.isServer() ? Promise.resolve(false) : new Promise(function (r) { setTimeout(r, 300); }).then(function () { return S.fileStoredHere(testFile.id); })).then(function (x) { stored = x; return S.openBundle(bundle); }).then(function (readable) {
         const live = JSON.stringify(Object.assign({}, S.state, { deletionReceipts: [] }));
         const checks = [
           ['Test patient was in the backup before erasure', !!bundle],
           ['Gone from live records (patients, goals, sessions, logs, messages, access log)', live.indexOf(pid) < 0 && live.indexOf(marker) < 0],
           ['Not in this device\'s stored data', S.rawStorage().indexOf(marker) < 0],
           ['Patient key destroyed', !S.hasKey(pid)],
+          ['Attached file removed from the file store', !stored],
           ['The earlier backup can no longer be read for this patient', readable === null],
           ['Name not readable anywhere in the backup, even after opening it with the backup password', JSON.stringify(backup).indexOf(marker) < 0],
           ['The backup file itself is encrypted (no names or case codes readable without the password)', file.indexOf(marker) < 0 && file.indexOf('TEST-') < 0],
@@ -1525,7 +1543,7 @@
   function eraseRecord(pid, reason) {
     const p = S.patient(pid);
     if (!p) return;
-    ask('Erase all data for ' + pseud(p) + '? This removes the record, assessments, sessions, notes and coursework from this device and destroys the patient\'s key, so earlier backups can no longer be read for this patient. It cannot be undone.', 'Erase').then(function (ok) {
+    ask('Erase all data for ' + pseud(p) + '? This removes the record, assessments, sessions, notes, coursework and files from this device and destroys the patient\'s key, so earlier backups can no longer be read for this patient. It cannot be undone.', 'Erase').then(function (ok) {
       if (!ok) return;
       const r = S.erasePatient(pid, reason || 'Erasure request');
       toast('Erased · deletion receipt ' + r.id);
@@ -1608,7 +1626,7 @@
       '<div><dt>Assessment</dt><dd>' + (a ? '<a href="#/assessment/' + a.id + '">' + esc(L.formatDate(a.date, { day: 'numeric', month: 'short', year: 'numeric' })) + ' · ' + esc(a.diagnosis || 'draft') + '</a> by ' + esc(userName(a.assessorId)) : '—') + '</dd></div>' +
       '<div><dt>Referral</dt><dd>' + (r ? esc(r.priority) + ', ' + esc(L.formatDate(r.at, { day: 'numeric', month: 'short' })) + (r.status === 'pending' ? ' – awaiting allotment' : ' – allotted') : '—') + '</dd></div>' +
       '</dl></section>' +
-      consentSection(p) +
+      consentSection(p) + lettersSection(p) +
       (manage ? '<section class="card"><h2>Data requests</h2><div class="actions wrap"><button class="btn" data-action="copy-record-one" data-id="' + p.id + '">Copy full record</button>' +
         '<button class="btn" data-action="discharge" data-id="' + p.id + '">' + (p.status === 'discharged' ? 'Reopen case' : 'Discharge') + '</button>' +
         (me().role === 'supervisor' ? '<button class="btn btn-danger" data-action="erase" data-id="' + p.id + '">Erase record</button>' : '') + '</div></section>' : '');
@@ -1806,7 +1824,7 @@
     const u = me();
     const list = S.inbox(u.id);
     let html = '<header class="page-head"><div><h1>Inbox</h1><p class="muted">' + S.unread(u.id) + ' unread · review comments, allotments, cover and reschedules</p></div>' +
-      '<button class="btn btn-primary" data-action="compose">New message</button></header>';
+      '<div class="head-actions"><a class="btn" href="#/files-to-file">Files to file (' + unfiled().length + ')</a><button class="btn btn-primary" data-action="compose">New message</button></div></header>';
     if (id) {
       const m = list.find(function (x) { return x.id === id; });
       if (!m) return html + '<div class="empty"><p>Message not found.</p></div>';
@@ -2145,7 +2163,7 @@
       '<div><span class="stat">' + sent + '/' + (rows.length - skipped) + '</span><span class="muted small">Marked sent</span></div></div>';
     html += '<p class="small muted">Clinic setting: <strong>' + esc(ms.channel === 'both' ? 'SMS or WhatsApp Business – each patient chooses' : L.CHANNELS[ms.channel] + ' only') + '</strong>' +
       (ms.provider ? ' via ' + esc(ms.provider) : '') + '. Sending needs the server version; until then, copy the list into your SMS or WhatsApp Business provider.</p>';
-    if (!rows.length) return html + '<div class="empty"><p>No scheduled sessions on this day.</p></div>';
+    if (!rows.length) return html + '<div class="empty"><p>No scheduled sessions on this day.</p></div>' + remindersHistory();
     html += '<div class="actions wrap">' +
       (count('sms') ? '<button class="btn" data-action="copy-reminders" data-channel="sms" data-date="' + date + '">Copy SMS list (' + count('sms') + ')</button>' : '') +
       (count('whatsapp') ? '<button class="btn" data-action="copy-reminders" data-channel="whatsapp" data-date="' + date + '">Copy WhatsApp list (' + count('whatsapp') + ')</button>' : '') +
@@ -2159,7 +2177,7 @@
         '<div class="head-actions">' + (r.rec && r.rec.status === 'sent' ? '<span class="badge badge-good">Sent ' + esc(fmtStamp(r.rec.sentAt)) + '</span>' : r.channel ? '<button class="btn btn-sm" data-action="mark-reminder" data-id="' + r.a.id + '">Mark sent</button>' : '') +
         '</div></div></li>';
     }).join('') + '</ul>';
-    return html;
+    return html + remindersHistory();
   }
 
   function recordReminder(a, channel) {
@@ -2869,6 +2887,297 @@
     }
   });
 
+  /* ---------- files: scanned reports, letters, photos, voice notes, videos ---------- */
+
+  const FILE_CATEGORIES = ['Scanned report', 'Referral letter', 'Hearing test / audiogram', 'Previous therapy report', 'School report', 'Medical report',
+    'Consent form (paper)', 'Photo', 'Voice recording', 'Video', 'Other'];
+  const FILE_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf,audio/*,video/*,.pdf,.ogg,.opus,.m4a,.mp3,.mp4';
+  const SOURCE_LABEL = { upload: 'Added here', camera: 'Photo taken here', share: 'Shared from another app', email: 'From email', whatsapp: 'From WhatsApp' };
+
+  function fileIcon(type) { return /^image/.test(type) ? '🖼' : /pdf/.test(type) ? '📄' : /^audio/.test(type) ? '🎙' : /^video/.test(type) ? '🎬' : '📎'; }
+  function fileSize(n) { return n < 1024 * 1024 ? Math.max(1, Math.round(n / 1024)) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+  function guessCategory(type) { return /^audio/.test(type) ? 'Voice recording' : /^video/.test(type) ? 'Video' : /^image/.test(type) ? 'Scanned report' : 'Scanned report'; }
+  function canChangeFile(a) { return me().role === 'supervisor' || a.addedBy === me().id; }
+  function unfiled() { return S.state.attachments.filter(function (a) { return !a.patientId && (me().role === 'supervisor' || a.addedBy === me().id); }); }
+
+  function addZone(pid) {
+    return '<section class="card dropzone" data-patient="' + esc(pid || '') + '"><h2>Add files</h2>' +
+      '<p class="small">Scanned reports, letters, audiograms, photos, voice notes and videos, up to 25 MB each. <strong>Drag files here</strong> – also straight out of your email – or:</p>' +
+      '<div class="actions wrap"><label class="btn btn-primary">Choose files<input type="file" class="file-pick" data-patient="' + esc(pid || '') + '" multiple accept="' + FILE_ACCEPT + '" hidden></label>' +
+      '<label class="btn">Take a photo<input type="file" class="file-pick" data-patient="' + esc(pid || '') + '" data-source="camera" accept="image/*" capture="environment" hidden></label></div>' +
+      '<div class="grid-2"><label>What is it<select id="file-cat">' + opt('', 'Work it out from the file', true) + FILE_CATEGORIES.map(function (c) { return opt(c, c); }).join('') + '</select></label>' +
+      '<label>Note (optional)<input id="file-note" maxlength="200" placeholder="e.g. ENT report, March 2026"></label></div>' +
+      '<p class="small muted">Files are encrypted ' + (S.isServer() ? 'on the clinic server' : 'on this device, with this patient’s own key') + ', and erased with the patient. Voice notes and videos of a patient need the family’s agreement: note it in their consent.</p></section>';
+  }
+
+  function fileRow(a, withPatient) {
+    const p = a.patientId && S.patient(a.patientId);
+    return '<li class="file-row"><span class="file-icon" aria-hidden="true">' + fileIcon(a.type) + '</span><div class="file-main"><strong>' + esc(a.name) + '</strong>' +
+      '<div class="muted small">' + esc(a.category) + ' · ' + esc(fileSize(a.size)) + ' · ' + esc(fmtStamp(a.addedAt)) + ' · ' + esc(userName(a.addedBy)) +
+      (a.source !== 'upload' ? ' · ' + esc(SOURCE_LABEL[a.source] || a.source) : '') + (withPatient && p ? ' · ' + esc(pseud(p)) : '') + '</div>' +
+      (a.note ? '<div class="small">' + esc(a.note) + '</div>' : '') + '</div>' +
+      '<div class="file-actions"><button class="btn btn-sm" data-action="file-view" data-id="' + a.id + '">Open</button>' +
+      '<button class="btn btn-sm btn-ghost" data-action="file-save" data-id="' + a.id + '">Save a copy</button>' +
+      (canChangeFile(a) && a.patientId ? '<button class="btn btn-sm btn-ghost" data-action="file-move" data-id="' + a.id + '">Move</button>' : '') +
+      (canChangeFile(a) ? '<button class="btn btn-sm btn-ghost" data-action="file-delete" data-id="' + a.id + '">Delete</button>' : '') + '</div></li>';
+  }
+
+  function filesTab(p) {
+    const list = S.state.attachments.filter(function (a) { return a.patientId === p.id; }).sort(function (a, b) { return b.addedAt.localeCompare(a.addedAt); });
+    return addZone(p.id) + '<section class="card"><h2>Files (' + list.length + ')</h2>' +
+      (list.length ? '<ul class="list flat files">' + list.map(function (a) { return fileRow(a, false); }).join('') + '</ul>' : '<p class="muted small">No files yet.</p>') + '</section>';
+  }
+
+  function viewFilesToFile(params) {
+    const list = unfiled().sort(function (a, b) { return b.addedAt.localeCompare(a.addedAt); });
+    const pats = visiblePatients().filter(function (p) { return p.status !== 'discharged'; });
+    let html = '<header class="page-head"><div><h1>Files to file</h1><p class="muted">Files that arrived without a patient: shared from WhatsApp or another app, or added here. Choose whose they are.</p></div></header>';
+    if (params.shared === 'failed') html += '<div class="callout warn"><strong>The shared file could not be received.</strong><span>Try again, or save it on the phone and add it below.</span></div>';
+    html += list.length ? '<section class="card"><ul class="list flat files">' + list.map(function (a) {
+      return '<li class="file-row unfiled"><span class="file-icon" aria-hidden="true">' + fileIcon(a.type) + '</span><div class="file-main"><strong>' + esc(a.name) + '</strong>' +
+        '<div class="muted small">' + esc(fileSize(a.size)) + ' · ' + esc(fmtStamp(a.addedAt)) + ' · ' + esc(SOURCE_LABEL[a.source] || a.source) + (a.from ? ' · from ' + esc(a.from) : '') + '</div>' +
+        (a.note ? '<div class="small">' + esc(a.note) + '</div>' : '') +
+        '<div class="grid-2 file-to"><label>Patient<select data-file-patient="' + a.id + '">' + opt('', 'Choose…', true) + pats.map(function (p) { return opt(p.id, p.caseCode + ' · ' + nm(p)); }).join('') + '</select></label>' +
+        '<label>What is it<select data-file-cat="' + a.id + '">' + FILE_CATEGORIES.map(function (c) { return opt(c, c, c === (a.category === 'Other' ? guessCategory(a.type) : a.category)); }).join('') + '</select></label></div></div>' +
+        '<div class="file-actions"><button class="btn btn-sm btn-primary" data-action="file-file" data-id="' + a.id + '">File it</button>' +
+        '<button class="btn btn-sm" data-action="file-view" data-id="' + a.id + '">Open</button>' +
+        '<button class="btn btn-sm btn-ghost" data-action="file-delete" data-id="' + a.id + '">Delete</button></div></li>';
+    }).join('') + '</ul></section>' : '<div class="empty"><p>Nothing waiting to be filed.</p></div>';
+    html += addZone('');
+    html += '<section class="card"><h2>How files get here</h2><ul class="small plain how-files">' +
+      '<li><strong>WhatsApp (Android):</strong> install TJS (browser menu → <em>Install app</em>). In WhatsApp, open the chat, press and hold the photo, PDF or voice note → <em>Share</em> → <strong>TJS</strong>. It appears here.</li>' +
+      '<li><strong>iPhone:</strong> in WhatsApp, <em>Share → Save to Files</em>, then <em>Choose files</em> above.</li>' +
+      '<li><strong>Email:</strong> on a computer, drag the attachment from Gmail or Outlook onto the box above, or save it and choose it.</li>' +
+      '<li><strong>Scanner or phone camera:</strong> scan to PDF or JPG and add it, or use <em>Take a photo</em>.</li>' +
+      '<li><strong>Automatically from the clinic’s email address or WhatsApp Business number:</strong> comes with the online version (it needs a server to receive them).</li></ul>' +
+      '<p class="small muted">After sharing, delete the file from the phone’s gallery and downloads, and from the chat if your clinic’s policy says so: TJS keeps the encrypted copy.</p></section>';
+    return html;
+  }
+
+  /* Add picked or dropped files one by one, then say what happened. */
+  function addFiles(files, pid, source) {
+    const cat = document.getElementById('file-cat'), note = document.getElementById('file-note');
+    const list = Array.prototype.slice.call(files);
+    if (!list.length) return;
+    const blocked = pid && patientsAllowed();
+    if (blocked) { toast(blocked); return; }
+    toast('Adding ' + list.length + ' file' + (list.length === 1 ? '' : 's') + '…');
+    let ok = 0, dup = 0;
+    const errors = [];
+    list.reduce(function (p, f) {
+      return p.then(function () {
+        return S.addFile(f, { patientId: pid, category: (cat && cat.value) || guessCategory(f.type), note: note ? note.value.trim() : '', source: source || 'upload' })
+          .then(function (m) { ok++; if (m.duplicate) dup++; }, function (e) { errors.push(e.message); });
+      });
+    }, Promise.resolve()).then(function () {
+      render();
+      toast((ok ? ok + ' file' + (ok === 1 ? '' : 's') + ' added' + (dup ? ' (' + dup + ' already here before)' : '') : 'Nothing added') + (errors.length ? '. ' + errors.join(' ') : ''));
+    });
+  }
+
+  let viewerUrl = null;
+  function showFile(id) {
+    const a = S.state.attachments.find(function (x) { return x.id === id; });
+    S.openFile(id).then(function (blob) {
+      const dlg = document.getElementById('viewer');
+      if (viewerUrl) URL.revokeObjectURL(viewerUrl);
+      viewerUrl = URL.createObjectURL(blob);
+      const body = /^image/.test(a.type) ? '<img src="' + viewerUrl + '" alt="' + esc(a.name) + '">'
+        : /^audio/.test(a.type) ? '<audio controls src="' + viewerUrl + '"></audio>'
+        : /^video/.test(a.type) ? '<video controls src="' + viewerUrl + '"></video>'
+        : '<p>PDFs open in a new tab.</p><a class="btn btn-primary" href="' + viewerUrl + '" target="_blank" rel="noopener">Open PDF</a>';
+      dlg.innerHTML = '<div class="viewer"><header class="notice-head"><div><h2>' + esc(a.name) + '</h2><p class="muted small">' + esc(a.category) + ' · ' + esc(fileSize(a.size)) + '</p></div>' +
+        '<button class="btn btn-ghost" data-action="viewer-close" aria-label="Close">✕</button></header><div class="viewer-body">' + body + '</div></div>';
+      dlg.onclose = function () { dlg.innerHTML = ''; if (viewerUrl) { URL.revokeObjectURL(viewerUrl); viewerUrl = null; } };
+      dlg.onclick = function (ev) { if (ev.target === dlg) dlg.close(); };
+      dlg.showModal();
+    }, function (e) { toast(e.message); });
+  }
+
+  function saveFile(id) {
+    const a = S.state.attachments.find(function (x) { return x.id === id; });
+    S.openFile(id).then(function (blob) {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob); link.download = a.name;
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(function () { URL.revokeObjectURL(link.href); }, 2000);
+      S.audit('Saved a copy of a file', a.patientId, a.category);
+      toast('Saved. The copy on this computer is not encrypted: delete it when you are done.');
+    }, function (e) { toast(e.message); });
+  }
+
+  function moveFileForm(id) {
+    const a = S.state.attachments.find(function (x) { return x.id === id; });
+    openModal('Move file', '<p class="small">' + esc(a.name) + '</p><label>Move to<select name="pid" required>' + opt('', 'Choose…', true) +
+      visiblePatients().filter(function (p) { return p.id !== a.patientId; }).map(function (p) { return opt(p.id, p.caseCode + ' · ' + nm(p)); }).join('') + '</select></label>',
+    function (fd) { S.fileTo(id, fd.get('pid')).then(function () { toast('Moved'); render(); }, function (e) { toast(e.message); }); });
+  }
+
+  Object.assign(ACTIONS, {
+    'file-view': function (el) { showFile(el.dataset.id); },
+    'file-save': function (el) { saveFile(el.dataset.id); },
+    'file-move': function (el) { moveFileForm(el.dataset.id); },
+    'viewer-close': function () { document.getElementById('viewer').close(); },
+    'file-delete': function (el) {
+      ask('Delete this file? It cannot be undone.', 'Delete').then(function (ok) { if (ok) S.deleteFile(el.dataset.id).then(function () { toast('File deleted'); render(); }); });
+    },
+    'file-file': function (el) {
+      const pid = document.querySelector('[data-file-patient="' + el.dataset.id + '"]').value;
+      if (!pid) { toast('Choose the patient first.'); return; }
+      S.fileTo(el.dataset.id, pid, document.querySelector('[data-file-cat="' + el.dataset.id + '"]').value)
+        .then(function () { toast('Filed under ' + pseud(S.patient(pid))); render(); }, function (e) { toast(e.message); });
+    }
+  });
+
+  document.addEventListener('change', function (ev) {
+    const t = ev.target;
+    if (t.classList && t.classList.contains('file-pick') && t.files.length) { addFiles(t.files, t.dataset.patient || '', t.dataset.source); t.value = ''; }
+  });
+  document.addEventListener('dragover', function (ev) {
+    const z = ev.target.closest && ev.target.closest('.dropzone');
+    if (!z) return;
+    ev.preventDefault(); z.classList.add('over');
+  });
+  document.addEventListener('dragleave', function (ev) { const z = ev.target.closest && ev.target.closest('.dropzone'); if (z && !z.contains(ev.relatedTarget)) z.classList.remove('over'); });
+  document.addEventListener('drop', function (ev) {
+    const z = ev.target.closest && ev.target.closest('.dropzone');
+    if (!z) return;
+    ev.preventDefault(); z.classList.remove('over');
+    if (ev.dataTransfer && ev.dataTransfer.files.length) addFiles(ev.dataTransfer.files, z.dataset.patient || '', 'upload');
+  });
+
+  /* Files shared into TJS from WhatsApp or another app: take them in once someone is signed in. */
+  let takingShared = false;
+  function collectShared() {
+    if (takingShared || !S.currentUser() || S.isLocked()) return;
+    takingShared = true;
+    S.takeSharedFiles().then(function (list) {
+      takingShared = false;
+      const ok = list.filter(function (x) { return !x.error; });
+      if (!list.length) return;
+      toast(ok.length + ' shared file' + (ok.length === 1 ? '' : 's') + ' received' + (list.length > ok.length ? '; ' + (list.length - ok.length) + ' not accepted (type or size)' : '') + '. Choose the patient.');
+      if (route.indexOf('#/files-to-file') === 0) render(); else go('#/files-to-file');
+    }, function () { takingShared = false; });
+  }
+
+  /* ---------- letters and emails: report to the family, thanks to the referrer ---------- */
+
+  function lettersFor(pid) { return S.state.letters.filter(function (l) { return l.patientId === pid; }).sort(function (a, b) { return b.at.localeCompare(a.at); }); }
+  function letterSent(a, kind) { return S.state.letters.some(function (l) { return l.assessmentId === a.id && l.kind === kind && l.status === 'sent'; }); }
+  function emailOf(text) { const m = /[^\s<>,;]+@[^\s<>,;]+\.[a-z]{2,}/i.exec(text || ''); return m ? m[0] : ''; }
+
+  /* Completed assessments still waiting for the family report or the referrer's thank-you. */
+  function lettersDue() {
+    const u = me(), out = [];
+    S.state.assessments.filter(function (a) { return a.status === 'completed' && (u.role === 'supervisor' || a.assessorId === u.id); }).forEach(function (a) {
+      const p = S.patient(a.patientId);
+      if (!p) return;
+      if (!letterSent(a, 'family-report') && !a.noFamilyLetter) out.push({ a: a, p: p, kind: 'family-report' });
+      if (!letterSent(a, 'referrer-thanks') && !a.noReferrerLetter) out.push({ a: a, p: p, kind: 'referrer-thanks' });
+    });
+    return out;
+  }
+
+  function letterChips(a) {
+    return ['family-report', 'referrer-thanks'].map(function (k) {
+      const sent = letterSent(a, k), skipped = k === 'family-report' ? a.noFamilyLetter : a.noReferrerLetter;
+      return '<button class="badge ' + (sent ? 'badge-good' : skipped ? 'badge-muted' : 'badge-warn') + '" data-action="letter-new" data-assessment="' + a.id + '" data-kind="' + k + '">' +
+        (k === 'family-report' ? 'Report to family' : 'Thanks to referrer') + ': ' + (sent ? 'sent ✓' : skipped ? 'not needed' : 'to send') + '</button>';
+    }).join(' ');
+  }
+
+  function letterForm(opts) {
+    const a = opts.assessmentId && S.assessment(opts.assessmentId);
+    const p = S.patient(opts.patientId || (a && a.patientId));
+    const old = opts.id && S.state.letters.find(function (l) { return l.id === opts.id; });
+    const kind = old ? old.kind : opts.kind || 'other';
+    const r = a && S.state.referrals.find(function (x) { return x.assessmentId === a.id; });
+    const draft = old || L.letterDraft(kind, { clinic: S.state.settings.messaging.clinicName, assessor: a ? userName(a.assessorId) : me().name, patient: p, assessment: a,
+      referrerName: a && a.referrerName, referred: !!r, closed: p.status === 'discharged' });
+    const to = old ? old.to : kind === 'family-report' ? emailOf(p.contact) : kind === 'referrer-thanks' ? (a && a.referrerEmail) || '' : '';
+    const needs = kind === 'family-report' ? (p.consent && p.consent.shareReports ? '' : 'No consent to send reports to the family. Record it first (Details & consent).')
+      : kind === 'referrer-thanks' ? (p.consent && p.consent.records ? '' : 'No consent to keep records and share a summary with the referrer yet. Record consent first.') : '';
+    openModal(L.LETTER_KINDS[kind] + ' – ' + pseud(p),
+      (needs ? '<div class="callout warn"><strong>' + esc(needs) + '</strong></div>' : '') +
+      '<label>To (email)<input name="to" type="email" value="' + esc(to) + '" placeholder="' + (kind === 'referrer-thanks' ? 'Referrer’s email – add it to the assessment to fill it in next time' : 'name@example.com') + '"></label>' +
+      '<label>Subject<input name="subject" required value="' + esc(draft.subject) + '"></label>' +
+      '<label>Message<textarea name="body" rows="14" required>' + esc(draft.body) + '</textarea></label>' +
+      '<p class="small muted">Check the address twice. Ordinary email is not end-to-end encrypted, so send only what the person needs; the subject has no health details. ' +
+      (kind === 'referrer-thanks' ? 'The draft uses initials and the case code: add the full name only if your clinic’s policy allows. ' : '') + '</p>' +
+      '<div class="actions wrap"><button type="button" class="btn btn-primary" data-action="letter-mail">Open in my email program</button><button type="button" class="btn" data-action="letter-copy">Copy the text</button></div>' +
+      '<label class="check"><input type="checkbox" name="sent"' + (old && old.status === 'sent' ? ' checked' : '') + '> I have sent it</label>' +
+      (kind !== 'other' && a && !old ? '<label class="check"><input type="checkbox" name="notNeeded"> Not needed for this patient</label>' : ''),
+    function (fd) {
+      if (needs && fd.get('sent')) { toast(needs); return false; }
+      if (fd.get('notNeeded')) {
+        if (kind === 'family-report') a.noFamilyLetter = true; else a.noReferrerLetter = true;
+        S.audit('Marked letter not needed', p.id, L.LETTER_KINDS[kind]); S.save(); toast('Marked as not needed'); return;
+      }
+      const sent = !!fd.get('sent');
+      const l = S.upsert('letters', Object.assign({}, old || { patientId: p.id, assessmentId: a ? a.id : '', kind: kind, by: me().id, at: new Date().toISOString() },
+        { to: fd.get('to').trim(), subject: fd.get('subject').trim(), body: fd.get('body'), status: sent ? 'sent' : 'draft', sentAt: sent ? (old && old.sentAt) || new Date().toISOString() : '' }));
+      S.audit(sent ? 'Sent email' : 'Saved email draft', p.id, L.LETTER_KINDS[kind] + (l.to ? ' to ' + l.to.replace(/^(.).*@/, '$1…@') : ''));
+      toast(sent ? 'Recorded as sent' : 'Draft saved – it stays on "Letters to send"');
+    });
+  }
+
+  function viewLettersDue() {
+    const due = lettersDue();
+    let html = '';
+    if (!due.length) return html + '<div class="empty"><p>All assessment reports and thank-you emails are sent.</p></div>';
+    return html + '<ul class="list">' + due.map(function (x) {
+      const draft = S.state.letters.find(function (l) { return l.assessmentId === x.a.id && l.kind === x.kind && l.status === 'draft'; });
+      return '<li><div class="row"><div><strong>' + esc(L.LETTER_KINDS[x.kind]) + '</strong> · ' + esc(pseud(x.p)) + ' · ' + esc(nm(x.p)) +
+        '<div class="muted small">Assessed ' + esc(L.formatDate(x.a.date, { day: 'numeric', month: 'short' })) + (x.kind === 'referrer-thanks' ? ' · referred by ' + esc(x.a.referrerName || x.a.source || '—') : '') + (draft ? ' · draft saved' : '') + '</div></div>' +
+        '<button class="btn btn-sm btn-primary" data-action="letter-new" data-assessment="' + x.a.id + '" data-kind="' + x.kind + '"' + (draft ? ' data-id="' + draft.id + '"' : '') + '>' + (draft ? 'Continue' : 'Write') + '</button></div></li>';
+    }).join('') + '</ul>';
+  }
+
+  function lettersSection(p) {
+    const list = lettersFor(p.id);
+    const rem = S.state.reminders.filter(function (r) { return r.patientId === p.id; }).slice(-8).reverse();
+    return '<section class="card"><div class="card-head"><h2>Letters, emails &amp; reminders</h2><button class="btn btn-sm" data-action="letter-new" data-patient="' + p.id + '" data-kind="other">+ Email</button></div>' +
+      (list.length ? '<ul class="list flat">' + list.map(function (l) {
+        return '<li><div class="row"><div><strong>' + esc(L.LETTER_KINDS[l.kind]) + '</strong> <span class="badge ' + (l.status === 'sent' ? 'badge-good' : 'badge-warn') + '">' + (l.status === 'sent' ? 'Sent ' + esc(fmtStamp(l.sentAt)) : 'Draft') + '</span>' +
+          '<div class="muted small">' + esc(l.subject) + (l.to ? ' · to ' + esc(l.to) : '') + ' · ' + esc(userName(l.by)) + '</div></div>' +
+          '<button class="btn btn-sm btn-ghost" data-action="letter-new" data-id="' + l.id + '" data-patient="' + p.id + '">Open</button></div></li>';
+      }).join('') + '</ul>' : '<p class="muted small">No letters or emails yet.</p>') +
+      '<h3>Appointment reminders</h3>' + (rem.length ? '<ul class="plain small">' + rem.map(function (r) {
+        return '<li>' + esc(L.CHANNELS[r.channel] || r.channel) + ' for ' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' })) + ' ' + esc(L.formatTime(r.time)) + ' · marked sent ' + esc(fmtStamp(r.sentAt)) + ' by ' + esc(userName(r.by)) + '</li>';
+      }).join('') + '</ul>' : '<p class="muted small">None sent yet.</p>') + '</section>';
+  }
+
+  /* Reminders to send for one day: scheduled sessions with a channel and an opt-in, not yet marked sent. */
+  function remindersToSend(date) {
+    return visibleAppts(S.appointmentsOn(date)).filter(function (a) {
+      if (a.status !== 'scheduled') return false;
+      const p = S.patient(a.patientId);
+      return p && L.reminderChannel(p, msgSettings()).channel && !S.state.reminders.some(function (r) { return r.apptId === a.id && r.date === a.date && r.time === a.time && r.status === 'sent'; });
+    }).length;
+  }
+
+  function remindersHistory() {
+    const since = L.addDays(L.todayISO(), -30);
+    const list = S.state.reminders.filter(function (r) { return r.status === 'sent' && (r.sentAt || '').slice(0, 10) >= since; }).filter(function (r) { const p = S.patient(r.patientId); return p && canSee(p); })
+      .sort(function (a, b) { return b.sentAt.localeCompare(a.sentAt); });
+    return '<section class="card"><h2>Sent in the last 30 days (' + list.length + ')</h2>' + (list.length ? '<div class="table-wrap"><table class="tbl"><thead><tr><th>Marked sent</th><th>Patient</th><th>Appointment</th><th>By</th><th>Channel</th><th>Who</th></tr></thead><tbody>' +
+      list.slice(0, 100).map(function (r) {
+        const p = S.patient(r.patientId);
+        return '<tr><td class="nowrap">' + esc(fmtStamp(r.sentAt)) + '</td><td>' + esc(pseud(p)) + '</td><td class="nowrap">' + esc(L.formatDate(r.date, { day: 'numeric', month: 'short' }) + ' ' + L.formatTime(r.time)) + '</td><td>' + esc(L.CHANNELS[r.channel] || r.channel) + '</td><td>' + esc(userName(r.by)) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<p class="muted small">Nothing marked as sent yet. After sending from your SMS or WhatsApp Business provider, press <em>Mark all as sent</em> so it is tracked here.</p>') + '</section>';
+  }
+
+  Object.assign(ACTIONS, {
+    'letter-new': function (el) { letterForm({ id: el.dataset.id, assessmentId: el.dataset.assessment, patientId: el.dataset.patient, kind: el.dataset.kind }); },
+    'letter-mail': function (el) {
+      const f = el.closest('form');
+      const link = L.mailtoLink(f.querySelector('[name=to]').value.trim(), f.querySelector('[name=subject]').value, f.querySelector('[name=body]').value);
+      if (link.length > 1900) toast('The message is long: if your email program cuts it short, use "Copy the text" and paste it.');
+      window.location.href = link;
+    },
+    'letter-copy': function (el) { copyText(el.closest('form').querySelector('[name=body]').value); }
+  });
+
   /* ---------- router ---------- */
 
   function render() {
@@ -2925,6 +3234,7 @@
     else if (section === 'leave') html = viewLeave();
     else if (section === 'team') html = viewTeam(r.params);
     else if (section === 'consent') html = viewConsent(r.parts[1], r.params);
+    else if (section === 'files-to-file') html = viewFilesToFile(r.params);
     else if (section === 'consent-receipt') html = viewConsentReceipt(r.parts[1], r.params);
     else if (section === 'session') html = viewSession(r.parts[1], r.params);
     else if (section === 'patients' && r.parts[1]) html = viewPatient(r.parts[1], r.params);
@@ -2937,7 +3247,8 @@
     const cf = document.getElementById('consent-form');
     if (cf) consentFormState(cf);
 
-    const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases', consent: 'patients', 'consent-receipt': 'patients' }[section] || section;
+    const navKey = { session: 'schedule', assessment: 'diagnostics', doc: 'cases', consent: 'patients', 'consent-receipt': 'patients', 'files-to-file': 'inbox' }[section] || section;
+    collectShared();
     document.querySelectorAll('.nav a').forEach(function (a) {
       a.classList.toggle('active', a.dataset.nav === navKey);
       if (a.dataset.nav === navKey) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');

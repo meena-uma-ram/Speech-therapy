@@ -14,7 +14,7 @@
   const SHARED_SETTINGS = ['nextCaseNo', 'lastRetentionRun'];
   const MAPS = ['settings', 'packed'];
   const SECRET = ['pwHash', 'pwSalt'];
-  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders', 'consents'];
+  const LINKED = ['goals', 'logs', 'assessments', 'referrals', 'documents', 'reminders', 'consents', 'letters'];
   const AUDIT_MAX = 5000;
 
   function clone(x) { return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
@@ -106,6 +106,8 @@
       case 'leave': return rec.userId === user.id;
       case 'events': return isAttendee(rec, user.id);
       case 'audit': case 'deletionReceipts': return false;
+      // Files not yet filed under a patient: the person who added them (and supervisors).
+      case 'attachments': return rec.patientId ? !!vis[rec.patientId] : rec.addedBy === user.id;
       case 'users': case 'materials': return true;
       default: return LINKED.indexOf(c) >= 0 ? !!vis[rec.patientId] : false;
     }
@@ -177,7 +179,8 @@
       if (op.c === 'messages' && !old && op.v.from !== user.id) return 'Messages must come from you';
       if (op.c === 'leave' && !op.del && op.v.userId !== user.id) return 'You can only enter your own leave';
       if (op.c === 'events' && ((old && old.createdBy !== user.id) || (!op.del && op.v.createdBy !== user.id))) return 'Only the organiser can change this event';
-      if (['patients', 'appointments', 'messages', 'leave', 'events', 'materials'].concat(LINKED).indexOf(op.c) < 0) return 'Unknown record type';
+      if (op.c === 'attachments' && !old && !op.del && op.v.addedBy !== user.id) return 'Files must be added by you';
+      if (['patients', 'appointments', 'messages', 'leave', 'events', 'materials', 'attachments'].concat(LINKED).indexOf(op.c) < 0) return 'Unknown record type';
       return '';
     }
     if (op.c === 'settings') {

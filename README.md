@@ -30,6 +30,26 @@ Consent has its own page (**Patient → Details & consent → Record consent**),
 
 The notice text is versioned. **English is a draft for clinical and legal review; the other four languages are draft translations** that must be checked by a qualified translator. The app says so, and asks the clinician to confirm the notice was explained.
 
+## Files: scanned reports, letters, photos, voice notes
+
+Each patient has a **Files** tab. Add scanned reports, referral letters, audiograms, school reports, photos, voice notes and videos (PDF, JPG/PNG/WebP, audio, video; up to 25 MB each):
+
+- **Choose files**, **Take a photo** (phone camera), or **drag and drop**, also straight out of Gmail or Outlook.
+- **From WhatsApp on Android:** install TJS as an app, then in WhatsApp press and hold the photo, PDF or voice note → **Share → TJS**. It lands in **Files to file** (top bar and Inbox), where you choose the patient. On iPhone: *Share → Save to Files*, then *Choose files*.
+- Files are **encrypted** with the patient's own key (on the clinic server: encrypted on the server's disk), shown only to people who can see that patient, included in backups, and **erased with the patient**.
+- *Open* shows photos, plays audio and video, and opens PDFs in a new tab. *Save a copy* writes an unencrypted copy: delete it when done.
+- **Automatic intake** from the clinic's own email address or WhatsApp Business number needs the online version (see docs/BACKEND-PLAN.md).
+
+## Emails after an assessment
+
+When an assessment is complete, its page offers **Email the report to the family**, **Thank the referrer** and **Other email**. TJS drafts each one from the assessment (what was done, found and recommended, and the next step). You check and edit it, then **Open in my email program** (or copy the text) and tick **I have sent it**.
+
+**Keeping track:** *Diagnostics → Letters to send* lists every completed assessment still waiting for its family report or thank-you; each assessment shows *sent ✓ / to send*; the patient's record lists every letter and email. Diagnosticians see *Letters to send* in the top bar. Family reports need consent for reports; the referrer letter uses initials and the case code. Add the referrer's name and email in the assessment form.
+
+## Appointment reminders: where and how to track
+
+**Reports → Appointment reminders** (or *Reminders to send* in the top bar) shows tomorrow's sessions, each patient's channel (SMS or WhatsApp Business) and the message. Copy the list into your provider, send, then press **Mark all as sent**. **Sent in the last 30 days** below shows what was marked, when and by whom; each patient's record shows their reminders too.
+
 ## The workflow
 
 ```

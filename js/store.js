@@ -43,7 +43,7 @@
       }
     },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [],
-    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], consents: [],
+    assessments: [], referrals: [], documents: [], audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], consents: [], attachments: [], letters: [],
     packed: {} // { 'YYYY-MM-DD': { materialId: true } }
   };
 
@@ -91,7 +91,7 @@
   function migrate(s) {
     s.settings = Object.assign({}, EMPTY.settings, s.settings);
     s.settings.messaging = Object.assign({}, EMPTY.settings.messaging, s.settings.messaging);
-    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events', 'consents'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
+    ['users', 'assessments', 'referrals', 'documents', 'audit', 'messages', 'leave', 'deletionReceipts', 'reminders', 'events', 'consents', 'attachments', 'letters'].forEach(function (k) { if (!Array.isArray(s[k])) s[k] = []; });
     Sync.ensureIds(s);
     s.appointments.forEach(function (a) {
       if (a.status === 'completed') a.status = 'attended';
@@ -331,7 +331,7 @@
   function cleanStart() {
     const receipts = state.deletionReceipts, n = state.patients.length, by = (currentUser() || {}).name || 'System';
     const p = cryptoKey ? removePassphrase() : Promise.resolve();
-    return p.then(function () {
+    return p.then(function () { return blobClear(); }).then(function () {
       state = blank();
       keyring = {};
       state.deletionReceipts = receipts.concat(n ? [{ id: 'DR-' + L.todayISO().replace(/-/g, '') + '-CLEAN', recordId: '*', caseCode: 'All ' + n + ' patients and all accounts',
@@ -499,6 +499,168 @@
     .then(function () { return connect(); })
     .catch(function (e) { setStatus(e.status === 0 ? 'unreachable' : 'signedout'); });
 
+  /* ---------- files: scanned reports, letters, photos, voice notes, videos ---------- */
+
+  /*
+   * The file itself lives apart from the records: in this browser's IndexedDB (encrypted with the patient's own key,
+   * so erasing the patient makes it unreadable) or, on a clinic server, on the server's disk (encrypted there).
+   * The records hold only a description of each file (state.attachments). Files nobody has filed yet carry
+   * patientId null and use a separate key until they are filed.
+   */
+  const FILE_MAX = 25 * 1024 * 1024;
+  const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
+  const UNFILED = '_unfiled';
+  const memFiles = {}; // when IndexedDB is unavailable (private windows, tests)
+
+  function fileDb() {
+    if (!window.indexedDB) return Promise.resolve(null);
+    if (fileDb.p) return fileDb.p;
+    fileDb.p = new Promise(function (resolve) {
+      const req = indexedDB.open('tjs-files-' + (WORKSPACE || 'clinic'), 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore('files'); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { resolve(null); };
+    });
+    return fileDb.p;
+  }
+  // A request (or the in-memory stand-in) gives its result, which may be undefined for a missing file.
+  function unwrap(o) { return o && typeof o === 'object' && 'result' in o ? o.result : o; }
+  function idb(mode, fn) {
+    return fileDb().then(function (db) {
+      if (!db) return unwrap(fn(null));
+      return new Promise(function (resolve, reject) {
+        const tx = db.transaction('files', mode), st = tx.objectStore('files');
+        const out = fn(st);
+        tx.oncomplete = function () { resolve(unwrap(out)); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+  function blobPut(id, v) { return idb('readwrite', function (st) { if (!st) { memFiles[id] = v; return; } st.put(v, id); }); }
+  function blobGet(id) { return idb('readonly', function (st) { return st ? st.get(id) : { result: memFiles[id] }; }); }
+  function blobDel(id) { return idb('readwrite', function (st) { if (!st) { delete memFiles[id]; return; } st.delete(id); }); }
+  function blobKeys() { return idb('readonly', function (st) { return st ? st.getAllKeys() : { result: Object.keys(memFiles) }; }); }
+  function blobClear() { return idb('readwrite', function (st) { if (!st) { Object.keys(memFiles).forEach(function (k) { delete memFiles[k]; }); return; } st.clear(); }); }
+
+  function fileKey(pid) {
+    const id = pid || UNFILED;
+    if (!keyring[id]) { keyring[id] = b64(crypto.getRandomValues(new Uint8Array(32))); persistKeyring(); }
+    return aesKey(keyring[id]);
+  }
+  function sealBytes(pid, fid, bytes) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    return fileKey(pid).then(function (k) { return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv, additionalData: enc.encode(fid) }, k, bytes); })
+      .then(function (ct) { return { iv: b64(iv), ct: new Uint8Array(ct) }; });
+  }
+  function openBytes(pid, fid, box) {
+    const raw = keyring[pid || UNFILED];
+    if (!raw) return Promise.reject(new Error('This file can no longer be opened: its patient was erased.'));
+    return aesKey(raw).then(function (k) { return crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(box.iv), additionalData: enc.encode(fid) }, k, box.ct); });
+  }
+  function hex(buf) { return Array.from(new Uint8Array(buf), function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+
+  /* Add a file. f: { patientId (or '' for unfiled), category, note, source: upload | camera | share | email | whatsapp } */
+  function addFile(file, f) {
+    if (file.size > FILE_MAX) return Promise.reject(new Error(file.name + ' is larger than 25 MB.'));
+    const type = file.type || 'application/octet-stream';
+    if (!FILE_TYPES.test(type)) return Promise.reject(new Error(file.name + ': only photos, PDFs, audio and video can be added.'));
+    const u = currentUser(), id = L.uid('fil'), pid = f.patientId || null;
+    return file.arrayBuffer().then(function (bytes) {
+      return crypto.subtle.digest('SHA-256', bytes).then(function (digest) {
+        const meta = { id: id, patientId: pid, name: String(file.name || 'file').slice(0, 160), type: type, size: file.size, sha256: hex(digest),
+          category: f.category || 'Other', note: f.note || '', source: f.source || 'upload', addedBy: u ? u.id : '', addedAt: new Date().toISOString(), from: f.from || '' };
+        const dup = state.attachments.find(function (a) { return a.sha256 === meta.sha256 && a.patientId === pid; });
+        const store = REMOTE
+          ? flush().then(function () { return fetch('api/files/' + id, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': type, 'X-TJS-Upload': '1' }, body: bytes }); })
+            .then(function (res) { if (!res.ok) return res.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.error || 'The server did not accept the file.'); }); })
+          : sealBytes(pid, id, bytes).then(function (box) { return blobPut(id, box); });
+        return store.then(function () {
+          state.attachments.push(meta);
+          audit('Added file', pid, meta.category + ' · ' + meta.type + (meta.source !== 'upload' ? ' · via ' + meta.source : ''));
+          save();
+          return Object.assign({ duplicate: !!dup }, meta);
+        });
+      });
+    });
+  }
+
+  /* The file's contents as a Blob, for viewing or saving. */
+  function openFile(id) {
+    const meta = state.attachments.find(function (a) { return a.id === id; });
+    if (!meta) return Promise.reject(new Error('File not found.'));
+    audit('Opened file', meta.patientId, meta.category);
+    if (REMOTE) {
+      return fetch('api/files/' + id, { credentials: 'same-origin', cache: 'no-store' }).then(function (res) {
+        if (!res.ok) throw new Error('The server could not send this file.');
+        return res.blob();
+      });
+    }
+    return blobGet(id).then(function (box) {
+      if (!box) throw new Error('This file is not on this device.');
+      return openBytes(meta.patientId, id, box);
+    }).then(function (bytes) { return new Blob([bytes], { type: meta.type }); });
+  }
+
+  /* File it under a patient (or move it to another one). Re-encrypted with that patient's key. */
+  function fileTo(id, pid, category) {
+    const meta = state.attachments.find(function (a) { return a.id === id; });
+    if (!meta) return Promise.reject(new Error('File not found.'));
+    const done = function () {
+      meta.patientId = pid; if (category) meta.category = category;
+      audit('Filed file', pid, meta.category);
+      save();
+      return meta;
+    };
+    if (REMOTE || meta.patientId === pid) return Promise.resolve(done());
+    return blobGet(id).then(function (box) { return openBytes(meta.patientId, id, box); })
+      .then(function (bytes) { return sealBytes(pid, id, bytes); })
+      .then(function (box) { return blobPut(id, box); }).then(done);
+  }
+
+  function deleteFile(id) {
+    const meta = state.attachments.find(function (a) { return a.id === id; });
+    if (!meta) return Promise.resolve();
+    state.attachments = state.attachments.filter(function (a) { return a.id !== id; });
+    audit('Deleted file', meta.patientId, meta.category);
+    save();
+    return REMOTE ? Promise.resolve() : blobDel(id);
+  }
+
+  /* Remove stored files that no record points to any more (after an erasure, a restore or a clean start). */
+  function sweepFiles() {
+    if (REMOTE) return Promise.resolve(0);
+    const keep = {};
+    state.attachments.forEach(function (a) { keep[a.id] = true; });
+    return blobKeys().then(function (ids) {
+      const gone = (ids || []).filter(function (id) { return !keep[id]; });
+      return Promise.all(gone.map(blobDel)).then(function () { return gone.length; });
+    });
+  }
+
+  /* Files shared into TJS from another app (WhatsApp, Files, Gallery) wait in the offline worker's inbox. Move them in, encrypted. */
+  function takeSharedFiles() {
+    if (!window.indexedDB || REMOTE && !shadow) return Promise.resolve([]);
+    return new Promise(function (resolve) {
+      const req = indexedDB.open('tjs-incoming', 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore('items', { keyPath: 'id' }); };
+      req.onerror = function () { resolve([]); };
+      req.onsuccess = function () {
+        const db = req.result, tx = db.transaction('items', 'readonly'), all = tx.objectStore('items').getAll();
+        tx.oncomplete = function () { resolve({ db: db, items: all.result || [] }); };
+      };
+    }).then(function (r) {
+      if (!r.items || !r.items.length) return [];
+      return r.items.reduce(function (p, it) {
+        return p.then(function (out) {
+          const file = new File([it.blob], it.name, { type: it.type });
+          return addFile(file, { patientId: '', source: 'share', note: it.text || '', category: 'Other' })
+            .then(function (m) { out.push(m); return out; }, function (e) { out.push({ error: e.message, name: it.name }); return out; })
+            .then(function (o) { r.db.transaction('items', 'readwrite').objectStore('items').delete(it.id); return o; });
+        });
+      }, Promise.resolve([]));
+    });
+  }
+
   /* ---------- inbox ---------- */
 
   function send(to, msg) {
@@ -531,7 +693,7 @@
     state[collection] = state[collection].filter(function (x) { return x.id !== id; });
     if (collection === 'patients') {
       // Erasure covers every record linked to the person, including messages and consent records about them.
-      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'consents'].forEach(function (k) {
+      ['messages', 'reminders', 'goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'consents', 'attachments', 'letters'].forEach(function (k) {
         state[k] = state[k].filter(function (x) { return x.patientId !== id; });
       });
       // The access log keeps a pseudonymised trail (case code only), so what happened stays accountable after erasure.
@@ -629,8 +791,13 @@
       }));
     }).then(function (patients) {
       const shared = Object.assign({}, split.shared, { settings: Object.assign({}, split.shared.settings, { currentUserId: '' }) });
-      return JSON.stringify({ format: 'therapy-planner-backup', v: 2, createdAt: new Date().toISOString(),
-        note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients, erased: erasedIds() });
+      // Files go in as they are stored: already encrypted with their patient's key (not available on a clinic server, which backs them up itself).
+      return (REMOTE ? Promise.resolve([]) : Promise.all(state.attachments.map(function (a) {
+        return blobGet(a.id).then(function (box) { return box ? { id: a.id, iv: box.iv, ct: b64(new Uint8Array(box.ct)) } : null; });
+      }))).then(function (files) {
+        return JSON.stringify({ format: 'therapy-planner-backup', v: 2, createdAt: new Date().toISOString(),
+          note: 'Each patient is encrypted with their own key. Keys are not in this file.', shared: shared, patients: patients, files: files.filter(Boolean), erased: erasedIds() });
+      });
     });
   }
 
@@ -670,7 +837,12 @@
       state.deletionReceipts = mergeReceipts(receipts, state.deletionReceipts);
       state.settings.currentUserId = session;
       save();
-      return { restored: ok.length, shredded: data.patients.filter(function (b) { return erased[b.pid] || !opened[bundles.indexOf(b)]; }).map(function (b) { return b.caseCode; }) };
+      const known = {};
+      state.attachments.forEach(function (a) { known[a.id] = true; });
+      return Promise.all((data.files || []).filter(function (f) { return known[f.id]; }).map(function (f) { return blobPut(f.id, { iv: f.iv, ct: unb64(f.ct) }); }))
+        .then(sweepFiles).then(function () { return opened; });
+    }).then(function (opened) {
+      return { restored: opened.filter(Boolean).length, shredded: data.patients.filter(function (b) { return erased[b.pid] || !opened[bundles.indexOf(b)]; }).map(function (b) { return b.caseCode; }) };
     });
   }
 
@@ -710,13 +882,14 @@
     remove('patients', pid);
     delete keyring[pid];
     persistKeyring();
+    sweepFiles();
     const now = new Date();
     const u = currentUser();
     const receipt = {
       id: 'DR-' + now.toISOString().slice(0, 10).replace(/-/g, '') + '-' + b64(crypto.getRandomValues(new Uint8Array(3))).replace(/[^A-Za-z0-9]/g, 'x'),
       recordId: pid, caseCode: p.caseCode, erasedAt: now.toISOString(), erasedBy: by || (u ? u.name : 'System'), reason: reason,
       destroyed: ['Patient record', counted.goals + ' goals', counted.appointments + ' sessions', counted.logs + ' session logs',
-        counted.assessments + ' assessments', counted.documents + ' documents', counted.messages + ' messages'],
+        counted.assessments + ' assessments', counted.documents + ' documents', counted.messages + ' messages', counted.attachments + ' files'],
       keyDestroyed: !hadKey ? 'No backup had been made, so no key existed'
         : inKeyFiles.length ? 'Key destroyed on this device. ' + inKeyFiles.length + ' key file' + (inKeyFiles.length === 1 ? '' : 's') + ' made before this erasure (' +
           inKeyFiles.map(function (x) { return x.at.slice(0, 10); }).join(', ') + ') still hold the key: destroy them and make a new key file, or old backups stay readable'
@@ -1126,6 +1299,14 @@
     },
     createFirstSupervisor: createFirstSupervisor,
     recordConsent: recordConsent,
+    addFile: addFile,
+    openFile: openFile,
+    fileTo: fileTo,
+    deleteFile: deleteFile,
+    takeSharedFiles: takeSharedFiles,
+    fileStoredHere: function (id) { return blobGet(id).then(function (b) { return !!b; }); },
+    FILE_MAX: FILE_MAX,
+    fileTypeOk: function (t) { return FILE_TYPES.test(t || ''); },
     cleanStart: cleanStart,
     generateFake: generateFake,
     exportKeyFile: exportKeyFile,
@@ -1162,6 +1343,7 @@
     },
     importJSON: function (text) { return restoreInner(JSON.parse(text)); },
     clearAll: function () {
+      blobClear();
       const users = state.users, me = state.settings.currentUserId, receipts = state.deletionReceipts, n = state.patients.length;
       state = blank();
       state.users = users; state.settings.currentUserId = me;
@@ -1174,6 +1356,7 @@
     },
     demoPassword: 'demo1234',
     resetDemo: function () {
+      blobClear();
       const cur = state.settings.currentUserId;
       keyring = {};
       persistKeyring();

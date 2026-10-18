@@ -23,6 +23,8 @@ const PW_ITERATIONS = 100000; // same as the browser (js/store.js)
 const SESSION_IDLE_MS = 60 * 60 * 1000;
 const SESSION_MAX_MS = 14 * 60 * 60 * 1000;
 const MAX_BODY = 25 * 1024 * 1024;
+const MAX_FILE = 25 * 1024 * 1024;
+const FILE_TYPES = /^(image\/(jpeg|png|webp|gif)|application\/pdf|audio\/(ogg|mpeg|mp4|aac|wav|webm|x-m4a|opus)|video\/(mp4|webm|3gpp|quicktime))$/;
 
 /* ---------- options ---------- */
 
@@ -108,7 +110,35 @@ function makeVault(dir, passphrase) {
     fs.writeFileSync(tmp, JSON.stringify(box), { mode: 0o600 });
     fs.renameSync(tmp, file);
   }
-  return { read: read, write: write, dir: dir };
+  // Files (scanned reports, photos, recordings): one file each in files/, encrypted with a key of their own salt.
+  const filesDir = path.join(dir, 'files');
+  fs.mkdirSync(filesDir, { recursive: true, mode: 0o700 });
+  const fileName = (id) => path.join(filesDir, id + '.bin');
+  function writeFile(id, buf) {
+    let out;
+    if (passphrase) {
+      const fsalt = crypto.randomBytes(16), iv = crypto.randomBytes(12);
+      const c = crypto.createCipheriv('aes-256-gcm', keyFor(fsalt), iv);
+      c.setAAD(Buffer.from(id));
+      const ct = Buffer.concat([c.update(buf), c.final()]);
+      out = Buffer.concat([Buffer.from('TJSF1'), fsalt, iv, c.getAuthTag(), ct]);
+    } else out = Buffer.concat([Buffer.from('TJSF0'), buf]);
+    fs.writeFileSync(fileName(id) + '.tmp', out, { mode: 0o600 });
+    fs.renameSync(fileName(id) + '.tmp', fileName(id));
+  }
+  function readFile(id) {
+    const b = fs.readFileSync(fileName(id));
+    if (b.subarray(0, 5).toString() === 'TJSF0') return b.subarray(5);
+    if (!passphrase) throw new Error('This file is encrypted. Set THERAPY_DATA_PASSPHRASE.');
+    const fsalt = b.subarray(5, 21), iv = b.subarray(21, 33), tag = b.subarray(33, 49);
+    const d = crypto.createDecipheriv('aes-256-gcm', keyFor(fsalt), iv);
+    d.setAAD(Buffer.from(id)); d.setAuthTag(tag);
+    return Buffer.concat([d.update(b.subarray(49)), d.final()]);
+  }
+  function hasFile(id) { return fs.existsSync(fileName(id)); }
+  function listFiles() { return fs.readdirSync(filesDir).filter((f) => f.endsWith('.bin')).map((f) => ({ id: f.slice(0, -4), mtime: fs.statSync(path.join(filesDir, f)).mtimeMs })); }
+  function deleteFile(id) { try { fs.unlinkSync(fileName(id)); } catch (e) { /* already gone */ } }
+  return { read: read, write: write, dir: dir, writeFile: writeFile, readFile: readFile, hasFile: hasFile, listFiles: listFiles, deleteFile: deleteFile };
 }
 
 /* ---------- passwords and sessions ---------- */
@@ -138,6 +168,7 @@ function createServer(opts) {
     vault.write('clinic-data.json', db);
   }
   Sync.ensureIds(db.state);
+  ['attachments', 'consents', 'events', 'letters'].forEach((k) => { if (!Array.isArray(db.state[k])) db.state[k] = []; });
   const sessions = new Map(); // token -> { userId, created, seen }
   const failures = new Map(); // login -> { n, until }
   const streams = new Set();
@@ -180,7 +211,7 @@ function createServer(opts) {
   function headers(type, extra) {
     return Object.assign({
       'Content-Type': type, 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer', 'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+      'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
       'Cache-Control': 'no-cache'
     }, secure ? { 'Strict-Transport-Security': 'max-age=31536000' } : {}, extra || {});
   }
@@ -207,6 +238,18 @@ function createServer(opts) {
     });
   }
 
+  function readRaw(req, max) {
+    return new Promise((resolve, reject) => {
+      let size = 0; const chunks = [];
+      req.on('data', (c) => { size += c.length; if (size > max) { reject(Object.assign(new Error('Files can be at most 25 MB.'), { status: 413 })); req.destroy(); } else chunks.push(c); });
+      req.on('end', () => resolve(Buffer.concat(chunks)));
+      req.on('error', reject);
+    });
+  }
+
+  // A stored file that no record points to (deleted, or its patient erased) is removed; fresh uploads get 15 minutes to be described.
+  function sweepNow(ids) { ids.forEach((id) => vault.deleteFile(id)); }
+
   function info() {
     return { app: 'TJS', version: PKG.version, license: 'AGPL-3.0-or-later', source: opts.source, clinic: db.state.settings.messaging && db.state.settings.messaging.clinicName || '',
       encryptedAtRest: !!process.env.THERAPY_DATA_PASSPHRASE, https: secure, demo: !!db.state.seeded,
@@ -215,8 +258,10 @@ function createServer(opts) {
 
   async function api(req, res, pathname) {
     // Changes must be same-origin JSON: a cross-site form or script cannot send these.
+    const fileRoute = /^\/api\/files\/(fil_[a-z0-9]{6,40})$/.exec(pathname);
     if (req.method !== 'GET' && req.method !== 'HEAD') {
-      if (!/^application\/json/.test(req.headers['content-type'] || '')) return json(res, 415, { error: 'JSON only' });
+      // A cross-site page can send neither JSON nor a custom header without the browser asking this server first.
+      if (fileRoute ? req.headers['x-tjs-upload'] !== '1' : !/^application\/json/.test(req.headers['content-type'] || '')) return json(res, 415, { error: 'JSON only' });
       const origin = req.headers.origin;
       if (origin && origin.replace(/^https?:\/\//, '') !== req.headers.host) return json(res, 403, { error: 'Cross-site request refused' });
     }
@@ -272,6 +317,10 @@ function createServer(opts) {
       if (r.applied) {
         r.erased.forEach((pid) => { delete keys[pid]; });
         if (r.erased.length) persistKeys();
+        // Files of erased patients, and deleted files, go at once.
+        sweepNow(ops.filter((op) => op && op.c === 'attachments' && op.del).map((op) => op.id).filter((id) => !db.state.attachments.some((a) => a.id === id)));
+        const live = new Set(db.state.attachments.map((a) => a.id));
+        sweepNow(vault.listFiles().filter((f) => !live.has(f.id) && Date.now() - f.mtime > 15 * 60 * 1000).map((f) => f.id));
         db.version++;
         persist();
         broadcast();
@@ -294,6 +343,24 @@ function createServer(opts) {
       broadcast();
       log(req, me, target.id === me.id ? 'Set own password' : 'Reset password', target.id);
       return json(res, 200, { ok: true, version: db.version });
+    }
+    if (fileRoute && req.method === 'PUT') {
+      const id = fileRoute[1], type = String(req.headers['content-type'] || '');
+      if (!FILE_TYPES.test(type)) return json(res, 415, { error: 'Only photos, PDFs, audio and video can be added.' });
+      if (vault.hasFile(id)) return json(res, 409, { error: 'That file already exists' });
+      if (!process.env.THERAPY_DATA_PASSPHRASE && !db.state.seeded) return json(res, 403, { error: 'Set THERAPY_DATA_PASSPHRASE on the server before adding files' });
+      const buf = await readRaw(req, MAX_FILE);
+      vault.writeFile(id, buf);
+      log(req, me, 'Uploaded file', id + ' · ' + type + ' · ' + buf.length + ' bytes');
+      return json(res, 200, { ok: true });
+    }
+    if (fileRoute && req.method === 'GET') {
+      const meta = db.state.attachments.find((a) => a.id === fileRoute[1]);
+      if (!meta || !Sync.canRead(me, 'attachments', meta, db.state) || !vault.hasFile(meta.id)) return json(res, 404, { error: 'Not found' });
+      const buf = vault.readFile(meta.id);
+      log(req, me, 'Opened file', meta.id);
+      res.writeHead(200, headers(meta.type, { 'Content-Disposition': 'attachment', 'Cache-Control': 'no-store', 'Content-Length': buf.length }));
+      return res.end(buf);
     }
     if (pathname === '/api/keys' && req.method === 'PUT') {
       if (me.role !== 'supervisor') return json(res, 403, { error: 'Only a supervisor manages patient keys' });
@@ -343,7 +410,7 @@ function emptyState() {
   return {
     settings: { dayStart: '08:00', dayEnd: '17:00', lunchStart: '12:30', lunchEnd: '13:30', retentionYears: 8, autoLockMinutes: 10, nextCaseNo: 1, autoCover: false, autoErase: false, lastRetentionRun: '' },
     users: [], patients: [], goals: [], materials: [], appointments: [], logs: [], assessments: [], referrals: [], documents: [],
-    audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], packed: {}
+    audit: [], messages: [], leave: [], deletionReceipts: [], reminders: [], events: [], consents: [], attachments: [], packed: {}
   };
 }
 

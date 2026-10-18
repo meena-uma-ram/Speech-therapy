@@ -416,6 +416,55 @@
   }
   function pickCover(appt, ctx) { return coverCandidates(appt, ctx)[0] || null; }
 
+  /* ---------- letters and emails after an assessment ---------- */
+
+  const LETTER_KINDS = {
+    'family-report': 'Assessment report to the family',
+    'referrer-thanks': 'Thank you to the referrer',
+    other: 'Other email'
+  };
+
+  function firstNameOf(name) { return String(name || '').trim().split(/\s+/)[0] || ''; }
+
+  /*
+   * A first draft from what the assessment recorded. The clinician reads and edits it before sending.
+   * Subjects carry no health details (they show in notifications and inbox lists).
+   */
+  function letterDraft(kind, c) {
+    const a = c.assessment || {}, p = c.patient || {};
+    const when = a.date ? formatDate(a.date, { day: 'numeric', month: 'long', year: 'numeric' }) : 'recently';
+    const outcome = [a.diagnosis, a.severity ? '(' + a.severity.toLowerCase() + ')' : ''].filter(Boolean).join(' ');
+    const next = c.referred ? 'We have referred ' + (kind === 'family-report' ? firstNameOf(p.name) : 'them') + ' to our therapy team, who will contact ' + (kind === 'family-report' ? 'you' : 'the family') + ' to arrange sessions.'
+      : c.closed ? 'No therapy is needed at present.' : 'We will be in touch about the next steps.';
+    const sign = ['', 'With best wishes,', c.assessor, c.clinic].filter(function (x, i) { return i < 2 || x; }).join('\n');
+    if (kind === 'family-report') {
+      const greet = p.guardian ? 'Dear ' + String(p.guardian).replace(/^.*?:\s*/, '') : 'Dear ' + (p.name || '');
+      return {
+        subject: 'Your assessment summary from ' + (c.clinic || 'the clinic'),
+        body: [greet + ',', '',
+          'Thank you for ' + (p.guardian ? 'bringing ' + firstNameOf(p.name) : 'coming') + ' for a speech and language assessment on ' + when + '. Here is a short summary.', '',
+          a.tests ? 'What we did: ' + a.tests : '', a.findings ? 'What we found: ' + a.findings : '', outcome ? 'Outcome: ' + outcome : '',
+          a.recommendations ? 'What we recommend: ' + a.recommendations + (a.frequency ? ' (' + a.frequency + ')' : '') : '', '', next, '',
+          'Please reply or call us if you have any questions.', sign].filter(function (x, i, arr) { return x !== '' || arr[i - 1] !== ''; }).join('\n')
+      };
+    }
+    if (kind === 'referrer-thanks') {
+      return {
+        subject: 'Thank you for your referral – ' + (p.caseCode || ''),
+        body: ['Dear ' + (c.referrerName || 'colleague') + ',', '',
+          'Thank you for referring ' + initials(p.name) + ' (our case ' + (p.caseCode || '') + ') to ' + (c.clinic || 'us') + '. We assessed them on ' + when + '.', '',
+          outcome ? 'Outcome: ' + outcome : '', a.recommendations ? 'Plan: ' + a.recommendations + (a.frequency ? ' (' + a.frequency + ')' : '') : '', '', next, '',
+          'Thank you again for thinking of us. Please contact us if you would like to discuss the case.', sign].filter(function (x, i, arr) { return x !== '' || arr[i - 1] !== ''; }).join('\n')
+      };
+    }
+    return { subject: 'From ' + (c.clinic || 'the clinic'), body: ['Dear ,', '', '', sign].join('\n') };
+  }
+
+  /* A mailto: link opens the person's own email program with the draft filled in. Long texts are cut short by some programs. */
+  function mailtoLink(to, subject, body) {
+    return 'mailto:' + encodeURIComponent(to || '').replace(/%40/g, '@') + '?subject=' + encodeURIComponent(subject || '') + '&body=' + encodeURIComponent(String(body || '').replace(/\n/g, '\r\n'));
+  }
+
   /* ---------- team calendar ---------- */
 
   /* Monday of the week containing this date. */
@@ -446,7 +495,7 @@
 
   /* ---------- per-patient backup bundles (for crypto-shredding) ---------- */
 
-  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders', 'consents'];
+  const PATIENT_COLLECTIONS = ['goals', 'appointments', 'logs', 'assessments', 'referrals', 'documents', 'messages', 'audit', 'reminders', 'consents', 'attachments', 'letters'];
 
   /*
    * Split app data into what is shared (people, materials, settings, receipts) and one bundle per patient,
@@ -591,7 +640,7 @@
     RESCHEDULED_BY: RESCHEDULED_BY, sessionCounts: sessionCounts, overlaps: overlaps, onLeave: onLeave,
     clinicianFor: clinicianFor, sessionsFor: sessionsFor, pickCover: pickCover, coverCandidates: coverCandidates,
     PATIENT_COLLECTIONS: PATIENT_COLLECTIONS, splitForBackup: splitForBackup, mergeBundles: mergeBundles,
-    weekStart: weekStart, freeSlots: freeSlots,
+    weekStart: weekStart, freeSlots: freeSlots, LETTER_KINDS: LETTER_KINDS, letterDraft: letterDraft, mailtoLink: mailtoLink,
     CHANNELS: CHANNELS, reminderChannel: reminderChannel, fillTemplate: fillTemplate, templateWarnings: templateWarnings, smsParts: smsParts, maskPhone: maskPhone
   };
 

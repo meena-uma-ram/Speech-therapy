@@ -154,3 +154,46 @@ test('a real clinic server: no sign-in without a password, no patients until the
     assert.match(r.body.rejected[0].reason, /THERAPY_DATA_PASSPHRASE/);
   } finally { server.closeAllConnections(); await new Promise((r) => server.close(r)); }
 });
+
+test('files on the clinic server: encrypted on disk, need-to-know, removed when deleted or erased', async () => {
+  const s = await start({ passphrase: 'file passphrase 123' });
+  try {
+    const sup = client(s.base), stu = client(s.base);
+    await sup('POST', 'api/login', { login: 'priya@clinic.example', password: 'demo1234' });
+    const demo = (await sup('GET', 'api/info')).body.demoAccounts;
+    await stu('POST', 'api/login', { login: demo.find((u) => u.role === 'student').login, password: 'demo1234' });
+    const full = (await sup('GET', 'api/state')).body.state;
+    const mine = (await stu('GET', 'api/state')).body;
+    const own = mine.state.patients.find((p) => p.assignedTo === mine.me);
+    const other = full.patients.find((p) => !mine.state.patients.some((q) => q.id === p.id));
+    const put = (who, id, type, body, hdr) => fetch(s.base + 'api/files/' + id, { method: 'PUT', headers: Object.assign({ 'content-type': type, cookie: who.cookie }, hdr === false ? {} : { 'x-tjs-upload': '1' }), body });
+    // the client helper keeps its cookie private; log in again with fetch to get one
+    const login = async (l) => (await fetch(s.base + 'api/login', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ login: l, password: 'demo1234' }) })).headers.get('set-cookie').split(';')[0];
+    const supC = { cookie: await login('priya@clinic.example') };
+    assert.strictEqual((await put(supC, 'fil_abc123', 'application/pdf', '%PDF-1.4 secret report', false)).status, 415);
+    assert.strictEqual((await put(supC, 'fil_abc123', 'text/html', '<script>', true)).status, 415);
+    assert.strictEqual((await put(supC, 'fil_abc123', 'application/pdf', '%PDF-1.4 secret report')).status, 200);
+    assert.strictEqual((await put(supC, 'fil_abc123', 'application/pdf', 'again')).status, 409);
+    const raw = fs.readFileSync(path.join(s.dir, 'files', 'fil_abc123.bin'));
+    assert.ok(!raw.includes('secret report') && raw.subarray(0, 5).toString() === 'TJSF1');
+    const meta = { id: 'fil_abc123', patientId: other.id, name: 'report.pdf', type: 'application/pdf', size: 22, addedBy: 'u_sup', addedAt: new Date().toISOString(), category: 'Scanned report', source: 'upload' };
+    assert.strictEqual((await sup('POST', 'api/changes', { ops: [{ c: 'attachments', id: meta.id, v: meta }] })).body.applied, 1);
+    const got = await fetch(s.base + 'api/files/fil_abc123', { headers: { cookie: supC.cookie } });
+    assert.strictEqual(got.status, 200);
+    assert.strictEqual(await got.text(), '%PDF-1.4 secret report');
+    assert.strictEqual(got.headers.get('content-disposition'), 'attachment');
+    const stuC = { cookie: await login(demo.find((u) => u.role === 'student').login) };
+    assert.strictEqual((await fetch(s.base + 'api/files/fil_abc123', { headers: { cookie: stuC.cookie } })).status, 404, 'student cannot open another clinician\'s patient file');
+    assert.ok(!(await stu('GET', 'api/state')).body.state.attachments.some((a) => a.id === 'fil_abc123'));
+    // a student's own unfiled upload: only they (and supervisors) see it, and only they can file it to their case
+    assert.strictEqual((await put(stuC, 'fil_stu001', 'image/jpeg', 'jpegbytes')).status, 200);
+    const unf = { id: 'fil_stu001', patientId: null, name: 'IMG.jpg', type: 'image/jpeg', size: 9, addedBy: mine.me, addedAt: new Date().toISOString(), category: 'Other', source: 'share' };
+    assert.strictEqual((await stu('POST', 'api/changes', { ops: [{ c: 'attachments', id: unf.id, v: unf }] })).body.applied, 1);
+    assert.strictEqual((await stu('POST', 'api/changes', { ops: [{ c: 'attachments', id: unf.id, v: Object.assign({}, unf, { patientId: own.id }) }] })).body.applied, 1);
+    // deleting the record removes the stored file; erasing the patient removes theirs
+    assert.strictEqual((await sup('POST', 'api/changes', { ops: [{ c: 'attachments', id: meta.id, del: true }] })).body.applied, 1);
+    assert.ok(!fs.existsSync(path.join(s.dir, 'files', 'fil_abc123.bin')));
+    assert.strictEqual((await sup('POST', 'api/changes', { ops: [{ c: 'patients', id: own.id, del: true }, { c: 'attachments', id: unf.id, del: true }] })).body.applied, 2);
+    assert.ok(!fs.existsSync(path.join(s.dir, 'files', 'fil_stu001.bin')));
+  } finally { await s.stop(); }
+});

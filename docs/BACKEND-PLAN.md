@@ -40,6 +40,8 @@ Two ways to run TJS with real data, both from the same app:
 | 4.12 | Rate limiting, HTTPS/HSTS, headers | **Partly** | `_headers` for Cloudflare Pages (HSTS, CSP, frame, referrer). Supabase Auth has built-in rate limits; tune them. The clinic server already rate-limits sign-in |
 | 4.13 | Breach alerting | **Partly** | `access_alerts` view (many patients in an hour, exports). Next: a scheduled Edge Function that emails supervisors and you |
 | 4.14 | Move the prototype onto the server; safe offline mode | **Not started** | Replace the sync layer (`js/sync.js`) with Supabase calls through the Edge Functions. Offline: cache only today's schedule, encrypted, cleared at sign-out |
+| 4.16 | Files arriving by email | **Designed** | A clinic address (e.g. reports@clinic) on Cloudflare Email Routing → Email Worker → encrypted into Supabase Storage (Mumbai) as an unfiled file, with the sender's address; staff file it under the patient. Unknown senders are held, never auto-filed. ⚖️ Cloudflare processes the email in transit |
+| 4.17 | Files arriving on WhatsApp Business | **Designed** 🏢 | Provider webhook (media messages) → Edge Function downloads the media → encrypted unfiled file, matched to a patient by phone number as a *suggestion* only. Needs the BSP and an opt-in; reply with a neutral acknowledgement only |
 | 4.15 | Secrets out of the repo; private repo? | **Done / advice** | `.gitignore` covers data folders; no keys or passwords are in the code. See below on a private repo |
 
 ## A private repo for the server code? (4.15)

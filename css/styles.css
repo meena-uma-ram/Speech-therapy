@@ -604,3 +604,20 @@ code.hash { word-break: break-all; font-size: .75rem; }
   .card { border: 1px solid #999 !important; break-inside: avoid; }
   .choice { border: 1px solid #000 !important; background: #fff !important; }
 }
+
+/* ---------- files ---------- */
+.dropzone { border: 2px dashed var(--border); }
+.dropzone.over { border-color: var(--primary); background: var(--primary-soft); }
+.files .file-row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.file-icon { font-size: 1.6rem; line-height: 1; width: 32px; text-align: center; }
+.file-main { flex: 1 1 240px; min-width: 0; overflow-wrap: anywhere; }
+.file-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.file-to { margin-top: 8px; }
+.how-files li { margin-bottom: 6px; }
+#viewer { width: min(920px, calc(100vw - 32px)); max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); }
+#viewer::backdrop { background: var(--overlay); }
+.viewer { padding: 16px; }
+.viewer h2 { margin: 0; overflow-wrap: anywhere; }
+.viewer-body { margin-top: 12px; text-align: center; }
+.viewer-body img, .viewer-body video { max-width: 100%; max-height: 70vh; border-radius: 8px; }
+.viewer-body audio { width: 100%; }
