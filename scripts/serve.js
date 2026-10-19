@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 // `npm start`: serves the app from this folder on http://localhost:8080 and opens it in the browser.
 // No downloads, no dependencies: only Node.js. Usage: node scripts/serve.js [port] [--no-open]
 const http = require('http');

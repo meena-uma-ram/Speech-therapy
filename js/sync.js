@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Sync rules shared by the browser and the clinic server: record-level changes, who sees what, who may change what.
  * Pure functions with no DOM or storage access, so they can be unit-tested in Node.

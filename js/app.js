@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /* UI: hash router, views and forms. */
 (function () {
   'use strict';
@@ -1356,13 +1356,15 @@
 
   const SOURCE_URL = 'https://github.com/meena-uma-ram/Speech-therapy';
 
-  /* AGPL section 13: everyone who uses the app over a network can get its source code. */
+  /* AGPL section 13: everyone who uses the app over a network can get its source code. Section 7(b): the author credit stays visible (see NOTICE). */
   function licenceSection() {
     const src = S.serverInfo().source || SOURCE_URL;
     return '<section class="card"><h2>Licence &amp; source code</h2>' +
-      '<p class="small">TJS is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later). You may use, study, change and share it. ' +
+      '<p><strong>TJS · Created by Meenakshi Ramesh.</strong> Copyright \u00a9 2026 Meenakshi Ramesh.</p>' +
+      '<p class="small">TJS is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later), with additional terms under section 7. You may use, study, change and share it. ' +
       'If you change it and let others use it, including over a network, you must offer them your changed source code under the same licence.</p>' +
-      '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a></p>' +
+      '<p class="small"><strong>Keep the author\u2019s name.</strong> Every copy and changed version must keep the credit \u201cCreated by Meenakshi Ramesh\u201d on screen and the copyright notices in the code. A changed version must say it is changed and by whom, and may not use the name TJS for itself without her written agreement.</p>' +
+      '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a> · <a href="NOTICE" target="_blank" rel="noopener">Additional terms (NOTICE)</a></p>' +
       '<p class="small muted">It comes with no warranty. The licence covers the software, not your clinic\u2019s records: those stay yours, and your obligations for them are set by data protection law.</p></section>';
   }
 

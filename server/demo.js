@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 // Builds the demo clinic (the same data the browser loads on first use) by running the app's own store in a sandbox.
 const fs = require('fs');
 const path = require('path');

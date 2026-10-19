@@ -8,7 +8,7 @@ Two different documents, because they cover two different things:
 | Text | GNU AGPL v3 or later (LICENSE). Not changed | Your own contract with each clinic |
 | Warranty | None ("as is", AGPL ss. 15–16) | Whatever you promise: uptime, support hours, backups, security measures |
 
-You can't add conditions to the AGPL for the code. You can sell services around it.
+You can't add conditions to the AGPL for the code beyond the section 7 terms already in NOTICE (the author credit, marking changed versions, and the name). You can sell services around it.
 
 ## Outline of the Service Agreement with a clinic
 

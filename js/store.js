@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Data store. Two modes:
  * - On its own (a file, or any website): everything lives in this browser's localStorage; nothing is sent anywhere.

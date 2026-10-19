@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Offline support for the installed app. Caches only the app's own files (code, styles, icons).
  * Patient data never passes through the cache: it stays in the browser's own storage, or on the clinic server (api/ requests are never cached).
@@ -7,7 +7,7 @@
  * Share target: when someone shares a file to TJS from another app (WhatsApp, Gmail, Files, Gallery), the phone posts it to ./share.
  * The worker keeps it for a moment in the 'tjs-incoming' inbox and opens TJS, which encrypts it and lists it under "Files to file".
  */
-const CACHE = 'tjs-v7';
+const CACHE = 'tjs-v8';
 const FILES = ['./', './css/styles.css', './js/logic.js', './js/sync.js', './js/regions.js', './js/consent.js', './js/store.js', './js/app.js',
   './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png', './icons/maskable-512.png', './icons/apple-touch-icon.png'];
 

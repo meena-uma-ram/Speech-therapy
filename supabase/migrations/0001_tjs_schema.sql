@@ -1,5 +1,5 @@
 -- SPDX-License-Identifier: AGPL-3.0-or-later
--- Copyright (C) 2026 Meenakshi Ramesh
+-- Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 --
 -- TJS hosted backend (Supabase, Mumbai region): schema, row-level security, append-only consent ledger and audit log,
 -- erasure with crypto-shredding and deletion receipts, retention, and access alerts.

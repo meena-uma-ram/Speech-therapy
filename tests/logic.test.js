@@ -243,3 +243,12 @@ test('reminder templates accept {meeting}', () => {
   assert.deepStrictEqual(L.templateWarnings('{clinic} {day} {time} {meeting}'), []);
   assert.strictEqual(L.templateWarnings('{clinic} {name}').length, 1);
 });
+
+test('the author credit (AGPL section 7(b), NOTICE) is on every screen and in both builds', () => {
+  const fs = require('fs'), path = require('path');
+  const read = (f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8');
+  assert.match(read('index.html'), /<footer class="credit[^>]*>TJS · Created by Meenakshi Ramesh/);
+  assert.match(read('tjs.html'), /Created by Meenakshi Ramesh/, 'rebuild tjs.html after changing index.html');
+  assert.match(read('NOTICE'), /section 7\(b\)/);
+  assert.match(read('js/app.js'), /Created by Meenakshi Ramesh/);
+});

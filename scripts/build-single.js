@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 // Bundles index.html + CSS + JS into one self-contained file: tjs.html
 // Usage: node scripts/build-single.js [--fragment out.html]
 //   --fragment writes the page without <html>/<head>/<body> wrappers (for hosts that add their own).

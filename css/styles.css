@@ -93,7 +93,8 @@ p { margin: .4rem 0; }
 .nav a { display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; color: var(--text); }
 .nav a:hover { background: var(--bg); text-decoration: none; }
 .nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-main { min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
+.credit { padding: 0 32px 24px; font-size: .8rem; color: var(--muted); }
+main { min-width: 0; padding-block: 28px 40px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
 
 @media (max-width: 760px) {
   .layout { flex-direction: column; }
@@ -105,7 +106,8 @@ main { min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-
   .nav { flex-direction: row; justify-content: space-around; }
   .nav a { flex-direction: column; gap: 0; font-size: .65rem; padding: 6px 2px; }
   .nav a svg { width: 22px; height: 22px; }
-  main { padding-block: 16px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .credit { padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
+  main { padding-block: 16px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   h1 { font-size: 1.35rem; }
 }
 

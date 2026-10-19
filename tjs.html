@@ -106,7 +106,8 @@ p { margin: .4rem 0; }
 .nav a { display: flex; gap: 10px; align-items: center; padding: 9px 10px; border-radius: 8px; color: var(--text); }
 .nav a:hover { background: var(--bg); text-decoration: none; }
 .nav a.active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-main { min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
+.credit { padding: 0 32px 24px; font-size: .8rem; color: var(--muted); }
+main { min-width: 0; padding-block: 28px 40px; padding-left: max(32px, env(safe-area-inset-left, 0px)); padding-right: max(32px, env(safe-area-inset-right, 0px)); max-width: 980px; outline: none; }
 
 @media (max-width: 760px) {
   .layout { flex-direction: column; }
@@ -118,7 +119,8 @@ main { min-width: 0; padding-block: 28px 80px; padding-left: max(32px, env(safe-
   .nav { flex-direction: row; justify-content: space-around; }
   .nav a { flex-direction: column; gap: 0; font-size: .65rem; padding: 6px 2px; }
   .nav a svg { width: 22px; height: 22px; }
-  main { padding-block: 16px 96px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .credit { padding: 0 16px calc(84px + env(safe-area-inset-bottom, 0px)); }
+  main { padding-block: 16px 24px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
   h1 { font-size: 1.35rem; }
 }
 
@@ -661,6 +663,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
     <div class="main-col">
       <div id="rolebar" class="rolebar"></div>
       <main id="view" tabindex="-1"></main>
+      <footer class="credit no-print">TJS · Created by Meenakshi Ramesh · <a href="NOTICE" target="_blank" rel="noopener">Licence</a></footer>
     </div>
   </div>
   <dialog id="modal" aria-label="Form"></dialog>
@@ -671,7 +674,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 
   <script>
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /* Pure helpers with no DOM or storage access, so they can be unit-tested in Node. */
 (function (root) {
   'use strict';
@@ -1395,7 +1398,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Sync rules shared by the browser and the clinic server: record-level changes, who sees what, who may change what.
  * Pure functions with no DOM or storage access, so they can be unit-tested in Node.
@@ -1624,7 +1627,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Country settings: which privacy law applies, who patients complain to, who may decide for an adult who cannot,
  * which consent languages are offered, and where hosted data should live.
@@ -1787,7 +1790,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Consent: purposes, versioned notices, and an append-only ledger sealed with a hash chain.
  * Clinical consent to treatment is kept apart from consent to uses of personal data.
@@ -2163,7 +2166,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 })(typeof window !== 'undefined' ? window : this);
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Data store. Two modes:
  * - On its own (a file, or any website): everything lives in this browser's localStorage; nothing is sent anywhere.
@@ -3536,7 +3539,7 @@ code.hash { word-break: break-all; font-size: .75rem; }
 })();
 
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /* UI: hash router, views and forms. */
 (function () {
   'use strict';
@@ -4893,13 +4896,15 @@ code.hash { word-break: break-all; font-size: .75rem; }
 
   const SOURCE_URL = 'https://github.com/meena-uma-ram/Speech-therapy';
 
-  /* AGPL section 13: everyone who uses the app over a network can get its source code. */
+  /* AGPL section 13: everyone who uses the app over a network can get its source code. Section 7(b): the author credit stays visible (see NOTICE). */
   function licenceSection() {
     const src = S.serverInfo().source || SOURCE_URL;
     return '<section class="card"><h2>Licence &amp; source code</h2>' +
-      '<p class="small">TJS is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later). You may use, study, change and share it. ' +
+      '<p><strong>TJS · Created by Meenakshi Ramesh.</strong> Copyright \u00a9 2026 Meenakshi Ramesh.</p>' +
+      '<p class="small">TJS is free software under the <strong>GNU Affero General Public License v3 or later</strong> (AGPL-3.0-or-later), with additional terms under section 7. You may use, study, change and share it. ' +
       'If you change it and let others use it, including over a network, you must offer them your changed source code under the same licence.</p>' +
-      '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a></p>' +
+      '<p class="small"><strong>Keep the author\u2019s name.</strong> Every copy and changed version must keep the credit \u201cCreated by Meenakshi Ramesh\u201d on screen and the copyright notices in the code. A changed version must say it is changed and by whom, and may not use the name TJS for itself without her written agreement.</p>' +
+      '<p class="small">Source code: <a href="' + esc(src) + '" target="_blank" rel="noopener noreferrer">' + esc(src) + '</a> · <a href="LICENSE" target="_blank" rel="noopener">Full licence text</a> · <a href="NOTICE" target="_blank" rel="noopener">Additional terms (NOTICE)</a></p>' +
       '<p class="small muted">It comes with no warranty. The licence covers the software, not your clinic\u2019s records: those stay yours, and your obligations for them are set by data protection law.</p></section>';
   }
 

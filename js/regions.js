@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Country settings: which privacy law applies, who patients complain to, who may decide for an adult who cannot,
  * which consent languages are offered, and where hosted data should live.

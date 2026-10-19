@@ -1,0 +1,42 @@
+TJS
+Copyright (C) 2026 Meenakshi Ramesh
+
+TJS is free software: you can redistribute it and/or modify it under the
+terms of the GNU Affero General Public License as published by the Free
+Software Foundation, either version 3 of the License, or (at your option)
+any later version (see LICENSE), with the additional terms below.
+
+ADDITIONAL TERMS UNDER SECTION 7 OF THE GNU AGPL
+
+These terms apply to TJS and to every copy, modified version and work based
+on it. They are permitted by section 7 of the licence and may not be removed.
+
+1. Author attribution (section 7(b)).
+   a. Keep, unchanged, the copyright notice "Copyright (C) 2026 Meenakshi
+      Ramesh" in every source file that carries it, in this NOTICE file and
+      in the README.
+   b. Keep the credit "Created by Meenakshi Ramesh" visible in the user
+      interface, as part of its Appropriate Legal Notices: on every screen
+      where the original shows it (the footer, including the sign-in and
+      welcome screens) and in the "Licence & source code" section, at least
+      as legible as in the original.
+   c. You may add your own names and credits next to it, but not in place of
+      it, and not in a way that hides or makes it less visible.
+
+2. Origin of modified versions (section 7(c)).
+   A modified version must say that it is modified and by whom, for example
+   "Based on TJS, created by Meenakshi Ramesh; modified by <name>". It must
+   not present itself, or be presented, as the original or as approved by
+   Meenakshi Ramesh unless she has agreed in writing.
+
+3. Names and trademarks (section 7(e)).
+   The licence gives no right to use the name "TJS", its logo, or the name
+   Meenakshi Ramesh to promote a product or service, except to give the
+   credit required above. A modified version offered to others under its own
+   name must use a different product name, unless she has agreed in writing.
+
+Under section 7, anyone who receives TJS may not remove these terms, and
+breaking them ends the licence under section 8, like any other breach.
+
+Contact for permission or questions: Meenakshi Ramesh,
+https://github.com/meena-uma-ram

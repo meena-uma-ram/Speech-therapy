@@ -6,7 +6,7 @@
  *
  * No dependencies beyond Node.js 18+.  Usage: see docs/SERVER-SETUP.md, or `node server/server.js --help`.
  *
- * Copyright (C) 2026 Meenakshi Ramesh. Licensed under the GNU AGPL v3 or later (see LICENSE).
+ * Copyright (C) 2026 Meenakshi Ramesh. Licensed under the GNU AGPL v3 or later (see LICENSE), with additional terms under section 7 (author credit): see NOTICE.
  */
 'use strict';
 const fs = require('fs');
@@ -271,7 +271,7 @@ function createServer(opts) {
   }
 
   const STATIC = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json', '': 'text/plain; charset=utf-8' };
-  const ALLOWED = /^\/(index\.html|sw\.js|manifest\.webmanifest|LICENSE|css\/[\w.-]+\.css|js\/[\w.-]+\.js|icons\/[\w.-]+\.(svg|png))$/;
+  const ALLOWED = /^\/(index\.html|sw\.js|manifest\.webmanifest|LICENSE|NOTICE|css\/[\w.-]+\.css|js\/[\w.-]+\.js|icons\/[\w.-]+\.(svg|png))$/;
 
   function headers(type, extra) {
     return Object.assign({
@@ -316,7 +316,7 @@ function createServer(opts) {
   function sweepNow(ids) { ids.forEach((id) => vault.deleteFile(id)); }
 
   function info() {
-    return { app: 'TJS', version: PKG.version, license: 'AGPL-3.0-or-later', source: opts.source, clinic: db.state.settings.messaging && db.state.settings.messaging.clinicName || '',
+    return { app: 'TJS', version: PKG.version, license: 'AGPL-3.0-or-later', author: 'Meenakshi Ramesh', source: opts.source, clinic: db.state.settings.messaging && db.state.settings.messaging.clinicName || '',
       encryptedAtRest: !!process.env.THERAPY_DATA_PASSPHRASE, https: secure, demo: !!db.state.seeded,
       demoAccounts: db.state.seeded ? db.state.users.map((u) => ({ login: u.email || u.name, name: u.name, role: u.role })) : null };
   }

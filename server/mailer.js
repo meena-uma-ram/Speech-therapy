@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-// Copyright (C) 2026 Meenakshi Ramesh
+// Copyright (C) 2026 Meenakshi Ramesh. Additional terms under AGPL section 7 (author credit): see NOTICE.
 /*
  * Sends email through the clinic's own account (Google Workspace / Gmail, Microsoft 365 / Outlook, Zoho, any SMTP server).
  * No dependencies: SMTP over TLS (port 465) or STARTTLS (port 587), AUTH PLAIN or LOGIN, MIME with attachments.

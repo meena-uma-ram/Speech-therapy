@@ -43,8 +43,12 @@ test('serves the app marked as server mode, and never the data folder', async ()
     assert.strictEqual((await c('GET', 'server/server.js')).status, 404);
     assert.strictEqual((await c('GET', 'js/../server/server.js')).status, 404);
     assert.strictEqual((await c('GET', 'LICENSE')).status, 200);
+    const notice = await c('GET', 'NOTICE');
+    assert.strictEqual(notice.status, 200, 'the additional terms are served next to the licence');
+    assert.match(notice.body, /Created by Meenakshi Ramesh/);
     const info = (await c('GET', 'api/info')).body;
     assert.strictEqual(info.license, 'AGPL-3.0-or-later');
+    assert.strictEqual(info.author, 'Meenakshi Ramesh');
     assert.strictEqual(info.source, 'https://example.org/src');
     assert.strictEqual((await c('GET', 'api/state')).status, 401);
   } finally { await s.stop(); }

@@ -38,12 +38,25 @@ TJS is now network software (the clinic server), so the GPL would have left exac
 
 | You want to… | Allowed? | Conditions |
 |---|---|---|
-| Use it in your clinic, unchanged | Yes | None beyond keeping the licence notices |
+| Use it in your clinic, unchanged | Yes | Keep the licence notices and the author credit |
 | Change it for your own clinic | Yes | If staff or others use the changed version over a network, offer them the changed source (the **Licence & source code** card on the Privacy page links to it; point `--source` at your copy) |
 | Give or sell copies to other clinics | Yes | Under AGPL-3.0, with source code, licence text and notices. You may charge for copies, setup, hosting and support |
 | Run it as a paid hosted service for clinics | Yes | Offer every user the source of the version you run, including your changes |
 | Make a closed, proprietary version | **No** | Unless you own all the copyright (see dual licensing below) |
-| Use the name "TJS" or your logo for someone else's version | Not granted | The licence covers copyright, not trademarks. Register a trademark if the name matters |
+| Remove or hide "Created by Meenakshi Ramesh" | **No** | Additional term 1 in [NOTICE](../NOTICE) (AGPL section 7(b)) |
+| Use the name "TJS" or your logo for someone else's version | **No**, without written agreement | Additional terms 2–3 in NOTICE (section 7(c) and 7(e)). Also register a trademark if the name matters |
+
+### Additional terms: the author's name stays on it
+
+The AGPL lets the author add a few kinds of terms (section 7), and nobody who receives the software may remove them. TJS uses three, written out in [NOTICE](../NOTICE):
+
+1. **Author credit (7(b)).** The copyright notices stay in the code, and "Created by Meenakshi Ramesh" stays visible on screen: in the footer of every screen, including sign-in, and in the *Licence & source code* card on the Privacy page.
+2. **Changed versions say so (7(c)).** A modified version must say it is modified and by whom, and must not present itself as the original or as approved by her.
+3. **The name (7(e)).** No right to use "TJS", its logo or her name to promote another product, beyond the required credit.
+
+Breaking them ends the licence (section 8), as with any other breach.
+
+**What these terms cannot do:** they do not make people ask permission before they use, copy or change TJS. The AGPL gives that permission to everyone, and under section 7 any stricter condition can be removed by the recipient. If you ever want "no use without my permission", that means leaving the AGPL for a proprietary licence. You can do that for future versions while you own all the copyright, but copies already given out under the AGPL keep their AGPL rights.
 
 **Your clinic's records are not covered by the licence.** Patient data entered in the app stays the clinic's (and the patients'). The AGPL never requires anyone to publish data, only source code.
 
@@ -56,7 +69,7 @@ TJS is now network software (the clinic server), so the GPL would have left exac
 - The copyright owner is **Meenakshi Ramesh**: `Copyright (C) 2026 Meenakshi Ramesh` is in the README, the server and every source file header. If you later form a company and assign the copyright to it, update these lines.
 - **Accept outside contributions with a Developer Certificate of Origin (DCO):** contributors add `Signed-off-by:` to each commit, confirming they have the right to contribute it under the project's licence. They keep their copyright; the project gets clear permission.
 - **Dual licensing.** Only someone who owns *all* the copyright can also sell the code under another licence. If you might want that later, ask contributors to sign a Contributor Licence Agreement (CLA) instead of a DCO. Most strong-copyleft projects don't, precisely so no one can close the code later.
-- Keep `AGPL-3.0-or-later` in `package.json` and an SPDX line (`SPDX-License-Identifier: AGPL-3.0-or-later`) in new files.
+- Put an SPDX line (`SPDX-License-Identifier: AGPL-3.0-or-later`) and the copyright line with the NOTICE reference in new files. `package.json` says `SEE LICENSE IN NOTICE`, because the licence is the AGPL plus the additional terms.
 
 ### AI-assisted code: a caution
 

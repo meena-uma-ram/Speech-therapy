@@ -175,9 +175,11 @@ Try it with demo data: `npm run server:demo`, then open http://localhost:8080.
 
 ## Licence
 
-Copyright (C) 2026 Meenakshi Ramesh.
+Copyright (C) 2026 Meenakshi Ramesh. **TJS was created by Meenakshi Ramesh.**
 
-**GNU Affero General Public License v3.0 or later** ([LICENSE](LICENSE)), a strong copyleft licence. Anyone may use, study, change and share TJS, but changed versions must stay under the same licence with their source code, **including when they are only offered over a network** (section 13), so nobody can turn it into a closed product or a closed hosted service. The licence covers the software, not your clinic's records. What this means for clinics, contributors and anyone who hosts or sells it, plus the data protection law for this setup (DPDP Act 2023 and Rules 2025, IT Act, CERT-In, GDPR), is in [docs/LEGAL.md](docs/LEGAL.md).
+**GNU Affero General Public License v3.0 or later** ([LICENSE](LICENSE)), a strong copyleft licence, **with additional terms under section 7** ([NOTICE](NOTICE)). Anyone may use, study, change and share TJS, but changed versions must stay under the same licence with their source code, **including when they are only offered over a network** (section 13), so nobody can turn it into a closed product or a closed hosted service.
+
+**The author's name must stay on it.** Every copy and changed version must keep the copyright notices and show the credit "Created by Meenakshi Ramesh" on screen, as TJS does in its footer and on the Privacy page. A changed version must say that it is changed and by whom, and may not call itself TJS or claim her approval without her written agreement. The licence covers the software, not your clinic's records. What this means for clinics, contributors and anyone who hosts or sells it, plus the data protection law for this setup (DPDP Act 2023 and Rules 2025, IT Act, CERT-In, GDPR), is in [docs/LEGAL.md](docs/LEGAL.md).
 
 ## Daily work
 
