@@ -1,0 +1,25 @@
+// TJS Pay: PayPal + AI billing for independent therapy practices.
+// A separate Worker from the main TJS app, so the live TJS deploy is never affected.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "tjs-pay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "tjs-pay", "database_id": "REPLACE_WITH_YOUR_D1_ID" }
+  ],
+  // Every hour: check PayPal for payments. At 09:00 UTC also send reminders that are due.
+  "triggers": { "crons": ["0 * * * *"] },
+  "vars": {
+    // "sandbox" talks to the PayPal sandbox. "mock" simulates PayPal for local testing only.
+    "PAYPAL_MODE": "sandbox",
+    "AI_MODEL": "claude-haiku-5-5",
+    "CURRENCY": "GBP",
+    "PRACTICE_NAME": "Northern Voices Speech Therapy"
+  }
+}

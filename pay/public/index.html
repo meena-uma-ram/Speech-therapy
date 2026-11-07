@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TJS Pay</title>
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#442c37">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="pay.css">
+</head>
+<body>
+  <a class="skip" href="#view">Skip to content</a>
+  <header class="top"><div class="top-in">
+    <a class="logo" href="#" data-act="tab" data-id="week"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="3 3 94 94"><path fill="#A04454" d="M50 48C6 40 9 5 31 10C43 12 49 28 50 48ZM52 50C60 6 95 9 90 31C88 43 72 49 52 50ZM50 52C94 60 91 95 69 90C57 88 51 72 50 52ZM48 50C40 94 5 91 10 69C12 57 28 51 48 50Z"/></svg><span>TJS Pay</span></a>
+    
+    <nav class="tabs" role="tablist" aria-label="TJS Pay">
+      <button class="tab" role="tab" data-act="tab" data-tab="week">Overview</button>
+      <button class="tab" role="tab" data-act="tab" data-tab="patients">Patients</button>
+      <button class="tab" role="tab" data-act="tab" data-tab="money">Finances</button>
+      <button class="tab" role="tab" data-act="tab" data-tab="settings">Settings</button>
+    </nav>
+    <span class="practice" id="practice"></span>
+  </div></header>
+  <p class="demo-note" id="demo-note"></p>
+  <main id="view" tabindex="-1"></main>
+  <footer>TJS Pay is part of TJS, made by Meenakshi Ramesh, a speech-language therapist. Open source under the AGPL.</footer>
+  <dialog id="dlg" aria-label="Details"></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>

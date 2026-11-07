@@ -1,0 +1,128 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { makePractice } from '../src/practice.js';
+import { mockPaypal } from '../src/paypal.js';
+
+async function fresh(ai = null) {
+  const D = {}; const pp = mockPaypal(D);
+  const calls = [];
+  const spy = { ...pp, createAndSend: async (x) => { calls.push(['send', x.invoice.id]); return pp.createAndSend(x); }, remind: async (id, x) => { calls.push(['remind', id]); }, recordPayment: async (id, x) => { calls.push(['record', id, x.method, x.pence]); return pp.recordPayment(id, x); } };
+  const P = makePractice({ paypal: spy, ai, linkFor: async (id) => 'https://x/paid#i=' + id });
+  await P.seed(D);
+  return { D, P, pp, calls };
+}
+const inv = (D, pid, status) => D.invoices.find((i) => i.patient_id === pid && (!status || i.status === status));
+
+test('seed: unpaid invoices are created in PayPal, paid history is not', async () => {
+  const { D, calls } = await fresh();
+  assert.equal(D.patients.length, 6);
+  assert.equal(calls.filter((c) => c[0] === 'send').length, 3); // Freya, Liam, Tomás
+});
+
+test('allocate: oldest first, overpayment kept as credit', async () => {
+  const { P } = await fresh();
+  const r = P._test.allocate(10000, [
+    { id: 'b', total_pence: 6000, paid_pence: 0, status: 'SENT', sent_at: '2026-10-20' },
+    { id: 'a', total_pence: 3000, paid_pence: 0, status: 'SENT', sent_at: '2026-10-01' },
+  ]);
+  assert.deepEqual(r.allocation, [{ invoice_id: 'a', pence: 3000 }, { invoice_id: 'b', pence: 6000 }]);
+  assert.equal(r.credit_pence, 1000);
+});
+
+test('plain words without AI: name only, bare numbers, references', async () => {
+  const { D, P } = await fresh();
+  let r = await P.handle(D, 'claims/parse', { text: 'Liam paid' });
+  assert.equal(r.who, 'Liam'); assert.equal(r.pence, 13500); assert.equal(r.assumed, true);
+  r = await P.handle(D, 'claims/parse', { text: 'Siobhan paid 135 by bank ref MUR-88213' });
+  assert.equal(r.who, 'Liam'); assert.equal(r.pence, 13500); assert.equal(r.method, 'bank'); assert.equal(r.reference, 'MUR-88213');
+  r = await P.handle(D, 'claims/parse', { text: 'someone paid 20' });
+  assert.ok(r.unclear);
+});
+
+test('AI parse can only pick a real patient; code still does the sums', async () => {
+  const { D, P } = await fresh({ parsePayment: async () => ({ patient_id: 'p_nobody', amount: 50, method: 'cash' }), invoiceNote: async () => { throw new Error('x'); } });
+  const r = await P.handle(D, 'claims/parse', { text: 'Liam paid 50 cash' });
+  assert.equal(r.patient_id, null);
+  assert.ok(r.unclear);
+});
+
+test('recording a payment writes it to the PayPal invoice and splits correctly', async () => {
+  const { D, P, calls } = await fresh();
+  await P.handle(D, 'claims/record', { patient_id: 'p_liam', pence: 20000, method: 'cash' });
+  const i = inv(D, 'p_liam');
+  assert.equal(i.status, 'MARKED_AS_PAID');
+  assert.equal(D.patients.find((p) => p.id === 'p_liam').credit_pence, 6500);
+  assert.deepEqual(calls.find((c) => c[0] === 'record').slice(2), ['cash', 13500]);
+});
+
+test('PayPal payment is picked up by a sync (webhook or hourly)', async () => {
+  const { D, P, pp } = await fresh();
+  const i = inv(D, 'p_freya', 'SENT');
+  await pp.simulatePay(i.paypal_id);
+  assert.equal(await P.syncAll(D), 1);
+  assert.equal(i.status, 'PAID');
+  assert.equal(D.payments[0].method, 'paypal');
+});
+
+test('reminders: one at a time, never twice a day, never after payment', async () => {
+  const { D, P, calls } = await fresh();
+  const first = await P.reminders(D);
+  assert.equal(first, 3);
+  assert.equal(await P.reminders(D), 0);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 3);
+});
+
+test('edited reminder text is used once, then cleared', async () => {
+  const { D, P } = await fresh();
+  const i = inv(D, 'p_liam');
+  await P.handle(D, `invoices/${i.id}/reminder-save`, { text: 'Hi {name}, about {amount} for {child}.' });
+  const r = await P.handle(D, `invoices/${i.id}/reminder-text`);
+  assert.equal(r.filled, 'Hi Siobhan, about £135.00 for Liam.');
+  await P.handle(D, `invoices/${i.id}/reminder-now`, {});
+  assert.equal(i.next_reminder, null);
+  assert.equal(i.last_reminder, 'Hi Siobhan, about £135.00 for Liam.');
+});
+
+test('blocks: session 8 sends the next block, sessions 9-10 still use the first', async () => {
+  const { D, P } = await fresh();
+  for (let k = 0; k < 4; k++) await P.handle(D, 'sessions', { patient_id: 'p_zara' });
+  const blocks = D.invoices.filter((i) => i.patient_id === 'p_zara' && i.kind === 'block');
+  assert.equal(blocks.length, 2);
+  assert.equal(blocks.find((b) => b.period === 'Block 2').total_pence, 54000);
+  assert.equal(D.sessions.filter((s) => s.invoice_id === blocks.find((b) => b.period === 'Block 1').id).length, 10);
+  assert.equal(D.sessions.filter((s) => s.invoice_id === blocks.find((b) => b.period === 'Block 2').id).length, 1);
+});
+
+test('family report then confirm; a second report is refused', async () => {
+  const { D, P } = await fresh();
+  const i = inv(D, 'p_freya', 'SENT');
+  P.familyClaim(D, i.id, { method: 'bank', amount: '60' });
+  assert.throws(() => P.familyClaim(D, i.id, { method: 'bank' }));
+  await P.handle(D, `claims/${D.claims[0].id}/confirm`);
+  assert.equal(i.status, 'MARKED_AS_PAID');
+  assert.equal(P.family(D, i.id).paid, true);
+});
+
+test('invoice wording falls back to standard text when the AI fails', async () => {
+  const { D, P } = await fresh({ invoiceNote: async () => { throw new Error('down'); } });
+  const r = await P.handle(D, 'invoices/draft', { patient_id: 'p_amara' });
+  const i = D.invoices.find((x) => x.id === r.draft);
+  assert.equal(i.note_by_ai, false);
+  assert.match(i.note, /£180\.00/);
+});
+
+test('finances add up', async () => {
+  const { D, P } = await fresh();
+  const lastMonth = new Date(); lastMonth.setUTCDate(0);
+  const m = await P.handle(D, 'money', { month: lastMonth.toISOString().slice(0, 7) });
+  assert.equal(m.profit, m.paidIn - m.fees - m.spent);
+  assert.ok(m.byService.length > 0);
+});
+
+test('reminders go in order even if several are overdue', async () => {
+  const { D, P } = await fresh();
+  const liam = D.invoices.find((i) => i.patient_id === 'p_liam');
+  await P.reminders(D);
+  assert.equal(liam.reminder_count, 2);
+  assert.match(liam.last_reminder, /still unpaid/);
+});
