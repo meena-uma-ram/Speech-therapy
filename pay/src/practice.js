@@ -35,6 +35,13 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   const how = (m) => ({ bank: 'by bank transfer', cash: 'in cash', cheque: 'by cheque', other: 'another way', paypal: 'through PayPal' })[m];
 
   const pat = (D, id) => D.patients.find((p) => p.id === id);
+  const dept = (D, id) => (D.departments || []).find((d) => d.id === id);
+  /** The department an invoice line belongs to: stored on the line, else its service's department. */
+  const lineDept = (D, it) => it.dept_id || (svc(D, it.service_id) || {}).department_id || ((D.departments || [])[0] || {}).id;
+  function tagLine(D, it, service_id) {
+    const sv = svc(D, service_id), d = sv && dept(D, sv.department_id);
+    return d ? { ...it, service_id, dept_id: d.id, code: d.code, dept_name: d.name } : { ...it, service_id };
+  }
   const inv = (D, id) => D.invoices.find((i) => i.id === id);
   const svc = (D, id) => D.services.find((s) => s.id === id);
   const billTo = (p) => p.payer.type === 'family' ? (p.caregivers.find((c) => c.invoices) || p.caregivers[0]) : { name: p.payer.name, email: p.payer.email, org: true };
@@ -137,7 +144,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   }
   async function newBlock(D, p, why) {
     const size = D.settings.block_size;
-    const i = await makeInvoice(D, p, { kind: 'block', period: `Block ${blocks(D, p.id).length + 1}`, items: [{ name: `${size} × ${svc(D, p.service_id).name}${D.settings.block_discount ? ` (${D.settings.block_discount}% block discount)` : ''}`, pence: blockPrice(D, p) }], blockSize: size });
+    const i = await makeInvoice(D, p, { kind: 'block', period: `Block ${blocks(D, p.id).length + 1}`, items: [tagLine(D, { name: `${size} × ${svc(D, p.service_id).name}${D.settings.block_discount ? ` (${D.settings.block_discount}% block discount)` : ''}`, pence: blockPrice(D, p) }, p.service_id)], blockSize: size });
     if (D.settings.renew_action === 'send') { await send(D, i, { quiet: true }); log(D, 'sent', `${why} Next block invoice sent through PayPal to ${toName(i.to)}: ${p.known_as}, ${gbp(i.total_pence)}.`, p.id); }
     else log(D, 'draft', `${why} Next block invoice for ${p.known_as} saved as a draft.`, p.id);
     return i;
@@ -161,7 +168,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     let pick, period, kind;
     if (p.plan === 'monthly') { const mo = waiting[0].date.slice(0, 7); pick = waiting.filter((s) => s.date.startsWith(mo)); period = fmonth(mo); kind = 'monthly'; }
     else { pick = p.plan === 'session' ? [waiting[waiting.length - 1]] : waiting; period = pick.length === 1 ? fdate(pick[0].date) : `${fdate(pick[0].date)} to ${fdate(pick[pick.length - 1].date)}`; kind = 'session'; }
-    const items = pick.map((s) => ({ name: `${svc(D, s.service_id).name}, ${fdate(s.date)}${s.where === 'online' ? ' (online)' : ''}`, pence: s.price_pence }));
+    const items = pick.map((s) => tagLine(D, { name: `${svc(D, s.service_id).name}, ${fdate(s.date)}${s.where === 'online' ? ' (online)' : ''}`, pence: s.price_pence }, s.service_id));
     const i = await makeInvoice(D, p, { kind, period, items, sessionIds: pick.map((s) => s.id) });
     log(D, 'draft', `Draft invoice: ${p.known_as}, ${period}, ${gbp(i.total_pence)}${i.note_by_ai ? ' (message written by AI)' : ''}.`, p.id);
     return i.id;
@@ -235,20 +242,36 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     const d = (k) => addDays(today(), -k);
     Object.assign(D, {
       settings: {
-        practice: 'Northern Voices Speech Therapy', therapist: 'Sarah', reminder_days: [3, 7, 14], block_size: 10, block_discount: 10, renew_at: 8, renew_action: 'send', fee_percent: 2.9, fee_fixed_pence: 30,
+        practice: 'Northern Voices Children’s Hospital', therapist: 'the billing office', reminder_days: [3, 7, 14], block_size: 10, block_discount: 10, renew_at: 8, renew_action: 'send', fee_percent: 2.9, fee_fixed_pence: 30,
         reminder_texts: [
           'Hi {name}, a quick reminder that the invoice for {child}, {period} ({amount}) is still open. If you have already paid by bank transfer or cash, you can tell us with the link below.',
           'Hi {name}, {amount} for {child}, {period} is still unpaid. If something is wrong with the invoice, or the timing is difficult, please reply and we can sort it out.',
           'Hi {name}, this is the last automatic reminder for {child}, {period} ({amount}). Please pay or get in touch this week. Thank you.',
         ],
       },
+      // Departments and their codes. hospital_percent: the hospital's share of what each department collects
+      // (after PayPal fees), for rooms, admin and equipment. The rest is paid to the department with PayPal Payouts.
+      departments: [
+        ['ent', 'ENT-01', 'Ear, Nose and Throat (ENT)', 25], ['paed', 'PAED-01', 'Paediatrics', 25], ['neuro', 'NEU-01', 'Neurology', 25],
+        ['cardio', 'CARD-01', 'Cardiology', 25], ['pt', 'PT-01', 'Physiotherapy', 20], ['ot', 'OT-01', 'Occupational Therapy', 20],
+        ['avt', 'AVT-01', 'Auditory-Verbal Therapy', 20], ['slt', 'SLT-01', 'Speech and Language Therapy', 20], ['aud', 'AUD-01', 'Audiology', 20], ['dx', 'DX-01', 'Diagnostics and Assessment', 25],
+      ].map(([k, code, name, pc]) => ({ id: 'dep_' + k, code, name, hospital_percent: pc, payout_email: `${code.toLowerCase()}.payouts@example.org` })),
       services: [
-        { id: 'svc_assess', name: 'Assessment', minutes: 60, price_pence: 12000 },
-        { id: 'svc_45', name: 'Therapy session', minutes: 45, price_pence: 6000 },
-        { id: 'svc_30', name: 'Short therapy session', minutes: 30, price_pence: 4500 },
-        { id: 'svc_check', name: 'Online check-in', minutes: 20, price_pence: 3000 },
-        { id: 'svc_intensive', name: 'Intensive day', minutes: 180, price_pence: 30000 },
-        { id: 'svc_travel', name: 'Travel to home or school', minutes: 0, price_pence: 2000 },
+        { id: 'svc_assess', name: 'Assessment', minutes: 60, price_pence: 12000, department_id: 'dep_dx' },
+        { id: 'svc_45', name: 'Therapy session', minutes: 45, price_pence: 6000, department_id: 'dep_slt' },
+        { id: 'svc_30', name: 'Short therapy session', minutes: 30, price_pence: 4500, department_id: 'dep_slt' },
+        { id: 'svc_check', name: 'Online check-in', minutes: 20, price_pence: 3000, department_id: 'dep_slt' },
+        { id: 'svc_intensive', name: 'Intensive day', minutes: 180, price_pence: 30000, department_id: 'dep_slt' },
+        { id: 'svc_travel', name: 'Travel to home or school', minutes: 0, price_pence: 2000, department_id: 'dep_slt' },
+        { id: 'svc_ent', name: 'ENT consultation', minutes: 30, price_pence: 15000, department_id: 'dep_ent' },
+        { id: 'svc_paed', name: 'Paediatric consultation', minutes: 30, price_pence: 16000, department_id: 'dep_paed' },
+        { id: 'svc_eeg', name: 'EEG and neurology review', minutes: 60, price_pence: 28000, department_id: 'dep_neuro' },
+        { id: 'svc_echo', name: 'ECG and echocardiogram', minutes: 45, price_pence: 24000, department_id: 'dep_cardio' },
+        { id: 'svc_pt', name: 'Physiotherapy session', minutes: 45, price_pence: 6500, department_id: 'dep_pt' },
+        { id: 'svc_ot', name: 'Occupational therapy session', minutes: 45, price_pence: 6500, department_id: 'dep_ot' },
+        { id: 'svc_avt', name: 'Auditory-verbal therapy session', minutes: 60, price_pence: 7000, department_id: 'dep_avt' },
+        { id: 'svc_hear', name: 'Hearing test', minutes: 45, price_pence: 8500, department_id: 'dep_aud' },
+        { id: 'svc_aid', name: 'Hearing aid fitting', minutes: 60, price_pence: 22000, department_id: 'dep_aud' },
       ],
       patients: [], sessions: [], invoices: [], payments: [], claims: [], expenses: [], events: [],
     });
@@ -266,12 +289,23 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     const quick = (p, period, total, kind) => ({ ...standardNote(D, p, period, total, kind), by_ai: false });
     // Paid history lives in TJS Pay only. Unpaid invoices are created for real in PayPal (the sandbox), so they can be paid and reminded.
     const old = async (p, kind, period, ses, sentDaysAgo, paidDaysAgo, method, ref) => {
-      const items = ses.map((s) => ({ name: svc(D, s.service_id).name + ', ' + fdate(s.date), pence: s.price_pence }));
+      const items = ses.map((s) => tagLine(D, { name: svc(D, s.service_id).name + ', ' + fdate(s.date), pence: s.price_pence }, s.service_id));
       const i = await makeInvoice(D, p, { kind, period, items, sessionIds: ses.map((s) => s.id), words: quick(p, period, items.reduce((t, x) => t + x.pence, 0), kind) });
       if (paidDaysAgo != null) { Object.assign(i, { status: 'SENT', sent_at: d(sentDaysAgo), due_date: d(sentDaysAgo - 14) }); recordLocal(D, i, i.total_pence, method, ref, d(paidDaysAgo)); }
       else { await send(D, i, { quiet: true }); Object.assign(i, { sent_at: d(sentDaysAgo), due_date: d(sentDaysAgo - 14) }); }
       return i;
     };
+    // Paid visits to the other departments, so every department has money to settle.
+    const visit = async (pid, list, sentAgo, paidAgo, method, ref) => old(pat(D, pid), 'session', fdate(d(list[0][0])), list.map(([k, sid, where]) => S(pid, d(k), sid, where || 'in person')), sentAgo, paidAgo, method, ref);
+    await visit('p_arjun', [[40, 'svc_ent'], [40, 'svc_hear']], 39, 37, 'paypal');
+    await visit('p_arjun', [[8, 'svc_ent']], 7, 5, 'paypal');
+    await visit('p_amara', [[44, 'svc_aid']], 43, 41, 'paypal');
+    await visit('p_amara', [[19, 'svc_avt', 'online'], [12, 'svc_avt', 'online']], 11, 9, 'paypal');
+    await visit('p_freya', [[36, 'svc_paed'], [33, 'svc_eeg']], 32, 29, 'bank', 'JENSEN-0921');
+    await visit('p_freya', [[6, 'svc_paed']], 5, 2, 'paypal');
+    await visit('p_liam', [[27, 'svc_echo']], 26, 24, 'paypal');
+    await visit('p_zara', [[22, 'svc_pt'], [15, 'svc_pt']], 14, 12, 'paypal');
+    await visit('p_tomas', [[16, 'svc_ot', 'at school'], [9, 'svc_ot', 'at school']], 8, 4, 'bank', 'NFC-PO-88530');
     for (const [k, pk] of [[25, 24], [18, 17], [11, 3]]) await old(pat(D, 'p_arjun'), 'session', fdate(d(k)), [S('p_arjun', d(k), 'svc_45')], k, pk, 'paypal');
     S('p_arjun', d(4), 'svc_45');
     await old(pat(D, 'p_amara'), 'monthly', fmonth(twoAgo), ['04', '11', '18', '25'].map((x) => S('p_amara', `${twoAgo}-${x}`, 'svc_30', 'online')), 34, 31, 'paypal');
@@ -282,11 +316,12 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     const lm = await old(pat(D, 'p_liam'), 'monthly', fmonth(twoAgo), ['08', '15', '22'].map((x) => S('p_liam', `${twoAgo}-${x}`, 'svc_30')), 20, null);
     Object.assign(lm, { reminder_count: 1, last_reminder_at: d(17) });
     const zp = pat(D, 'p_zara');
-    const zb = await makeInvoice(D, zp, { kind: 'block', period: 'Block 1', items: [{ name: '10 × Therapy session (10% block discount)', pence: 54000 }], blockSize: 10, words: quick(zp, 'Block 1', 54000, 'block') });
+    const zb = await makeInvoice(D, zp, { kind: 'block', period: 'Block 1', items: [tagLine(D, { name: '10 × Therapy session (10% block discount)', pence: 54000 }, 'svc_45')], blockSize: 10, words: quick(zp, 'Block 1', 54000, 'block') });
     Object.assign(zb, { status: 'SENT', sent_at: d(52), due_date: d(38) }); recordLocal(D, zb, 54000, 'bank', 'KHAN BLOCK1', d(50));
     [49, 42, 35, 28, 21, 14, 7].forEach((k) => S('p_zara', d(k), 'svc_45', 'in person', zb.id));
     await old(pat(D, 'p_tomas'), 'monthly', fmonth(twoAgo), [S('p_tomas', `${twoAgo}-06`, 'svc_assess', 'at school'), S('p_tomas', `${twoAgo}-06`, 'svc_travel'), ...['13', '20', '27'].map((x) => S('p_tomas', `${twoAgo}-${x}`, 'svc_45', 'at school'))], 33, 20, 'bank', 'NFC-PO-88213');
     await old(pat(D, 'p_tomas'), 'monthly', fmonth(lastMonth), ['03', '10', '17', '24'].map((x) => S('p_tomas', `${lastMonth}-${x}`, 'svc_45', 'at school')), 5, null);
+    D.payouts = [];
     [[twoAgo, '01', 'Room hire at the community centre', 'Rent', 40000], [twoAgo, '09', 'Assessment forms', 'Materials', 8500], [twoAgo, '30', 'Mileage, school visits', 'Travel', 4200], [lastMonth, '01', 'Room hire at the community centre', 'Rent', 40000], [lastMonth, '12', 'HCPC registration (monthly share)', 'Professional', 1800], [lastMonth, '20', 'Picture cards and toys', 'Materials', 3150], [lastMonth, '28', 'Mileage, school visits', 'Travel', 3800], [today().slice(0, 7), '01', 'Room hire at the community centre', 'Rent', 40000]]
       .forEach(([mo, dd, what, cat, pence]) => D.expenses.push({ id: uid('exp'), date: `${mo}-${dd}`, what, category: cat, pence }));
     D.events = [];
@@ -352,6 +387,19 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
         if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
         return { plan: await assistant(D, b.request) };
       }
+      case 'departments': {
+        if (p[1] === 'settings') {
+          (Array.isArray(b.departments) ? b.departments : []).forEach((x) => { const d = dept(D, x.id); if (!d) return; const pc = parseFloat(x.hospital_percent); if (Number.isFinite(pc) && pc >= 0 && pc <= 100) d.hospital_percent = Math.round(pc); if (x.payout_email !== undefined) d.payout_email = String(x.payout_email).trim().slice(0, 120); });
+          log(D, 'info', 'Department settings saved.');
+        }
+        return settlement(D, /^\d{4}-\d{2}$/.test(b.month || '') ? b.month : today().slice(0, 7));
+      }
+      case 'payouts': {
+        if (p[1] === 'run') await runPayouts(D, String(b.month || ''));
+        else if (p[1] === 'refresh') await refreshPayouts(D);
+        else throw new Error('Not found');
+        const st = state(D, mode); st.settlement = settlement(D, /^\d{4}-\d{2}$/.test(b.month || '') ? b.month : today().slice(0, 7)); return st;
+      }
       case 'reminders': { const sent = await reminders(D); const st = state(D, mode); st.sent = sent; return st; }
       case 'expenses': {
         if (p[1] === 'delete') { D.expenses = D.expenses.filter((e) => e.id !== b.id); return finances(D, b.month); }
@@ -374,11 +422,78 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     throw new Error('Not found');
   }
 
+  // ---------- departments: who earned each payment, and paying them through PayPal Payouts ----------
+  // Every payment is split across departments in proportion to its invoice's lines (largest remainder, so the
+  // pennies always add up). PayPal fees are split the same way. The hospital keeps each department's set share
+  // of the rest; the department's part is paid out with the PayPal Payouts API once administration approves.
+  function split(pence, parts) {
+    const total = parts.reduce((t, x) => t + x.w, 0);
+    if (!total) return [];
+    const out = parts.map((x) => ({ key: x.key, pence: Math.floor(pence * x.w / total), r: (pence * x.w) % total }));
+    let left = pence - out.reduce((t, x) => t + x.pence, 0);
+    out.slice().sort((a, b) => b.r - a.r).forEach((x) => { if (left > 0) { x.pence += 1; left -= 1; } });
+    return out.map(({ key, pence: p2 }) => ({ key, pence: p2 }));
+  }
+  function deptSplit(D, payment) {
+    const i = inv(D, payment.invoice_id);
+    if (!i) return [];
+    const w = {};
+    i.items.forEach((it) => { const k = lineDept(D, it); w[k] = (w[k] || 0) + it.pence; });
+    return split(payment.pence, Object.entries(w).map(([key, wt]) => ({ key, w: wt }))).map((x) => ({ dept_id: x.key, pence: x.pence }));
+  }
+  const FINAL_OK = ['SUCCESS', 'UNCLAIMED', 'PENDING', 'ONHOLD', 'NEW'];
+  const paidOut = (D, ym, did) => (D.payouts || []).filter((b) => b.month === ym).flatMap((b) => b.items).filter((x) => x.dept_id === did && FINAL_OK.includes(x.status)).reduce((t, x) => t + x.pence, 0);
+  function settlement(D, ym) {
+    const inMonth = (d) => d && d.slice(0, 7) === ym;
+    const rows = Object.fromEntries((D.departments || []).map((d) => [d.id, { id: d.id, code: d.code, name: d.name, hospital_percent: d.hospital_percent, payout_email: d.payout_email || '', sessions: 0, minutes: 0, worked_pence: 0, collected: 0, fees: 0 }]));
+    D.sessions.filter((x) => inMonth(x.date)).forEach((x) => { const r = rows[(svc(D, x.service_id) || {}).department_id]; if (r) { r.sessions += x.minutes ? 1 : 0; r.minutes += x.minutes; r.worked_pence += x.price_pence; } });
+    D.payments.filter((x) => inMonth(x.date)).forEach((x) => {
+      const fee = x.method === 'paypal' ? Math.round(x.pence * D.settings.fee_percent / 100) + D.settings.fee_fixed_pence : 0;
+      const parts = deptSplit(D, x);
+      const feeParts = split(fee, parts.map((y) => ({ key: y.dept_id, w: y.pence })));
+      parts.forEach((y) => { if (rows[y.dept_id]) rows[y.dept_id].collected += y.pence; });
+      feeParts.forEach((y) => { if (rows[y.key]) rows[y.key].fees += y.pence; });
+    });
+    const list = Object.values(rows).map((r) => {
+      const net = r.collected - r.fees, hospital = Math.round(net * r.hospital_percent / 100), due = Math.max(0, net - hospital), out = paidOut(D, ym, r.id);
+      return { ...r, hours: Math.round(r.minutes / 6) / 10, net, hospital, due, paid_out: out, to_pay: Math.max(0, due - out) };
+    });
+    const sum = (k) => list.reduce((t, r) => t + r[k], 0);
+    return { month: ym, label: fmonth(ym), departments: list, totals: { sessions: sum('sessions'), collected: sum('collected'), fees: sum('fees'), hospital: sum('hospital'), due: sum('due'), paid_out: sum('paid_out'), to_pay: sum('to_pay') }, payouts: (D.payouts || []).filter((b) => b.month === ym) };
+  }
+  async function runPayouts(D, ym) {
+    if (!/^\d{4}-\d{2}$/.test(ym || '') || ym > today().slice(0, 7)) throw new Error('Choose a month that has started.');
+    if (!paypal.createPayout) throw new Error('PayPal Payouts is not available here.');
+    const st = settlement(D, ym);
+    const pay = st.departments.filter((r) => r.to_pay > 0 && r.payout_email);
+    if (!pay.length) throw new Error(`Nothing to pay out for ${st.label}.`);
+    const id = uid('po');
+    const r = await paypal.createPayout({
+      batchId: id, subject: `${D.settings.practice}: department payout, ${st.label}`,
+      items: pay.map((x) => ({ email: x.payout_email, pence: x.to_pay, itemId: `${x.code}-${ym}-${id.slice(-4)}`, note: `${x.code} ${x.name}: ${st.label}. Collected ${gbp(x.collected)}, PayPal fees ${gbp(x.fees)}, hospital share ${x.hospital_percent}%.` })),
+    });
+    const batch = { id, month: ym, batch_id: r.batch_id, status: r.status || 'PENDING', created_at: now(), total_pence: pay.reduce((t, x) => t + x.to_pay, 0), items: pay.map((x) => ({ dept_id: x.id, code: x.code, pence: x.to_pay, email: x.payout_email, item_id: `${x.code}-${ym}-${id.slice(-4)}`, status: 'PENDING' })) };
+    D.payouts = [batch, ...(D.payouts || [])].slice(0, 60);
+    log(D, 'payout', `PayPal Payouts: ${gbp(batch.total_pence)} to ${pay.length} department${pay.length === 1 ? '' : 's'} for ${st.label} (batch ${r.batch_id}).`);
+    return batch;
+  }
+  async function refreshPayouts(D) {
+    let changed = 0;
+    for (const b of (D.payouts || []).filter((x) => !['SUCCESS', 'DENIED', 'CANCELED'].includes(x.status) || x.items.some((y) => ['PENDING', 'UNCLAIMED', 'ONHOLD', 'NEW'].includes(y.status)))) {
+      try {
+        const r = await paypal.getPayout(b.batch_id);
+        if (r.status !== b.status) { b.status = r.status; changed++; }
+        r.items.forEach((y) => { const x = b.items.find((z) => z.item_id === y.item_id); if (x && x.status !== y.status) { x.status = y.status; changed++; if (!FINAL_OK.includes(y.status)) log(D, 'error', `Payout to ${x.code} for ${fmonth(b.month)}: ${y.status.toLowerCase()}. It can be paid again.`); } });
+      } catch (e) { log(D, 'error', `Could not check payout batch ${b.batch_id}: ${e.message}`); }
+    }
+    return changed;
+  }
+
   // ---------- the billing assistant ----------
   // The AI plans; this code checks and does. Read tools return billing facts only. propose_action only
   // adds a numbered proposal to the plan; each one is checked again and run only when the therapist approves it.
   const daysLate = (i) => i.due_date && i.due_date < today() ? daysBetween(i.due_date, today()) : 0;
-  const ACTIONS = ['reminder', 'invoice', 'send_draft', 'confirm_payment'];
+  const ACTIONS = ['reminder', 'invoice', 'send_draft', 'confirm_payment', 'payout'];
   function checkAction(D, a) {
     if (a.type === 'reminder') {
       const i = inv(D, a.id);
@@ -408,6 +523,12 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       if (!c) return { error: 'No reported payment with that id is waiting.' };
       return { summary: `Mark ${gbp(c.amount_pence)} ${how(c.method)} for ${pat(D, c.patient_id).known_as} as received and record it on the PayPal invoice (check your bank first)`, patient_id: c.patient_id };
     }
+    if (a.type === 'payout') {
+      if (!/^\d{4}-\d{2}$/.test(a.id) || a.id > today().slice(0, 7)) return { error: 'For a payout, id is a month (YYYY-MM) that has started.' };
+      const st = settlement(D, a.id), pay = st.departments.filter((r) => r.to_pay > 0 && r.payout_email);
+      if (!pay.length) return { error: `Nothing to pay out for ${st.label}.` };
+      return { summary: `Pay ${pay.length} department${pay.length === 1 ? '' : 's'} ${gbp(pay.reduce((t, r) => t + r.to_pay, 0))} for ${st.label} through PayPal Payouts (${pay.map((r) => r.code).join(', ')})` };
+    }
     return { error: 'Unknown action.' };
   }
   async function doAction(D, a) {
@@ -415,6 +536,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     if (a.type === 'send_draft') return send(D, inv(D, a.id));
     if (a.type === 'invoice') { const id = await draftFor(D, a.id); return send(D, inv(D, id)); }
     if (a.type === 'confirm_payment') return confirm(D, a.id);
+    if (a.type === 'payout') return runPayouts(D, a.id);
   }
 
   const TOOLS = [
@@ -423,9 +545,10 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     { name: 'list_patients', description: 'Billing facts for every patient: billing type, who pays, sessions waiting to be invoiced and their value, drafts, amount owed and credit. No clinical information.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
     { name: 'list_reported_payments', description: 'Payments families or the therapist reported outside PayPal (bank transfer, cash, cheque) that are waiting for the therapist to confirm they arrived.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
     { name: 'month_summary', description: 'Money for one month: paid in, estimated PayPal fees, expenses, profit, sessions and hours, split by payer and payment method.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'], additionalProperties: false }, strict: true },
-    { name: 'propose_action', description: 'Add one action to the plan for the therapist to approve. Nothing happens until they approve it. reminder: id is an invoice id; sends the next reminder through PayPal. invoice: id is a patient id; invoices their waiting sessions and sends it through PayPal. send_draft: id is a draft invoice id. confirm_payment: id is a reported payment id. Each action is checked; an error explains why it was not added.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ACTIONS }, id: { type: 'string' }, reason: { type: 'string', description: 'One short sentence the therapist will see.' } }, required: ['type', 'id', 'reason'], additionalProperties: false }, strict: true },
+    { name: 'department_summary', description: 'One month by department (code and name): sessions, money collected (each payment split by its invoice lines), PayPal fees, the hospital share, what the department is due, what has been paid out with PayPal Payouts, and what is still to pay. Also the payout batches for that month.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'], additionalProperties: false }, strict: true },
+    { name: 'propose_action', description: 'Add one action to the plan for administration to approve. Nothing happens until they approve it. reminder: id is an invoice id; sends the next reminder through PayPal. invoice: id is a patient id; invoices their waiting sessions and sends it through PayPal. send_draft: id is a draft invoice id. confirm_payment: id is a reported payment id. payout: id is a month (YYYY-MM); pays every department what it is still owed for that month through PayPal Payouts. Each action is checked; an error explains why it was not added.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ACTIONS }, id: { type: 'string' }, reason: { type: 'string', description: 'One short sentence the therapist will see.' } }, required: ['type', 'id', 'reason'], additionalProperties: false }, strict: true },
   ];
-  const STEP = { list_unpaid_invoices: 'Looked at unpaid invoices', check_paypal: 'Checked payment status with PayPal', list_patients: 'Looked at patients and sessions to invoice', list_reported_payments: 'Looked at payments families reported', month_summary: 'Added up the month' };
+  const STEP = { department_summary: 'Added up the month by department', list_unpaid_invoices: 'Looked at unpaid invoices', check_paypal: 'Checked payment status with PayPal', list_patients: 'Looked at patients and sessions to invoice', list_reported_payments: 'Looked at payments families reported', month_summary: 'Added up the month' };
 
   async function runTool(D, plan, name, input) {
     if (name !== 'propose_action' && STEP[name] && !plan.steps.includes(STEP[name])) plan.steps.push(STEP[name]);
@@ -444,6 +567,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     if (name === 'list_patients') return D.patients.map((p) => { const waiting = D.sessions.filter((s) => s.patient_id === p.id && !s.invoice_id); const open = D.invoices.filter((i) => i.patient_id === p.id && isOpen(i)); return { patient_id: p.id, known_as: p.known_as, billing: { session: 'after each session', monthly: 'monthly statement', block: 'prepaid blocks' }[p.plan], paid_by: p.payer.type === 'family' ? `${toName(billTo(p))} (family)` : p.payer.name, sessions_to_invoice: waiting.length, value_to_invoice: gbp(waiting.reduce((t, s) => t + s.price_pence, 0)), has_draft: D.invoices.some((i) => i.patient_id === p.id && i.status === 'DRAFT'), owed: gbp(open.reduce((t, i) => t + outstanding(i), 0)), credit: gbp(p.credit_pence) }; });
     if (name === 'list_reported_payments') return D.claims.filter((c) => c.status === 'pending').map((c) => ({ payment_id: c.id, patient: pat(D, c.patient_id).known_as, amount: gbp(c.amount_pence), method: c.method, reference: c.reference, reported_by: c.source, invoice_id: c.invoice_id || null }));
     if (name === 'month_summary') { const f = finances(D, /^\d{4}-\d{2}$/.test(input.month || '') ? input.month : today().slice(0, 7)); return { month: f.label, paid_in: gbp(f.paidIn), paypal_fees_estimate: gbp(f.fees), expenses: gbp(f.spent), profit: gbp(f.profit), sessions: f.sessionCount, hours: f.hours, by_payer: f.byPayer.map((x) => `${x.name}: ${gbp(x.pence)}`), by_method: f.byMethod.map((x) => `${x.name}: ${gbp(x.pence)}`) }; }
+    if (name === 'department_summary') { const st = settlement(D, /^\d{4}-\d{2}$/.test(input.month || '') ? input.month : today().slice(0, 7)); return { month: st.label, departments: st.departments.map((r) => ({ code: r.code, name: r.name, sessions: r.sessions, collected: gbp(r.collected), paypal_fees: gbp(r.fees), hospital_share: `${r.hospital_percent}% (${gbp(r.hospital)})`, due: gbp(r.due), paid_out: gbp(r.paid_out), still_to_pay: gbp(r.to_pay) })), totals: { collected: gbp(st.totals.collected), to_pay: gbp(st.totals.to_pay) }, payout_batches: st.payouts.map((b) => ({ batch: b.batch_id, status: b.status, total: gbp(b.total_pence) })) }; }
     if (name === 'propose_action') {
       const a = { type: input.type, id: String(input.id || '') };
       if (plan.actions.some((x) => x.type === a.type && x.id === a.id)) return { added: false, error: 'Already in the plan.' };
@@ -459,8 +583,14 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   /** Without the AI (no key, daily limit reached, or an error): the same tools, driven by simple rules. */
   async function assistantByRules(D, plan, request) {
     const t = request.toLowerCase();
-    const all = !/remind|chase|owe|late|overdue|unpaid|invoice|bill|paid|confirm|month|profit/.test(t);
     const propose = async (type, id, reason) => { try { await runTool(D, plan, 'propose_action', { type, id, reason }); } catch { /* not eligible: skip */ } };
+    const all = !/remind|chase|owe|late|overdue|unpaid|invoice|bill|paid|confirm|month|profit|payout|pay out|department|settle/.test(t);
+    if (/payout|pay out|pay the dep|department|settle/.test(t)) {
+      const ym = /this month/.test(t) ? today().slice(0, 7) : addDays(today().slice(0, 8) + '01', -1).slice(0, 7);
+      const st = await runTool(D, plan, 'department_summary', { month: ym });
+      await propose('payout', ym, `${st.month}: ${st.totals.to_pay} still owed to departments.`);
+      return `${st.month}: ${st.totals.collected} collected across departments, ${st.totals.to_pay} still to pay out. ${plan.actions.length ? 'I’ve proposed the payout below. Nothing is sent until you approve.' : 'There’s nothing to pay out.'}`;
+    }
     const lines = [];
     if (all || /remind|chase|owe|late|overdue|unpaid|paid/.test(t)) {
       await runTool(D, plan, 'check_paypal', { invoice_ids: [] });
@@ -489,11 +619,13 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     const plan = { id: uid('plan'), request, created_at: now(), steps: [], actions: [], text: '', by_ai: false, status: 'open' };
     if (ai && ai.assistant) {
       const s = D.settings;
-      const system = `You are the billing assistant inside TJS Pay for ${s.practice}, an independent speech and language therapy practice in the UK. The therapist is ${s.therapist}. Today is ${today()}.
+      const system = `You are the billing assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the central administration (billing office); ${s.therapist} is using you. Today is ${today()}.
+Departments, each with a code: ${(D.departments || []).map((d) => `${d.code} ${d.name}`).join('; ')}. One hospital PayPal account receives every payment; each invoice line carries its department's code. Each month the administration pays each department its share (after PayPal fees and the hospital's share) with PayPal Payouts.
 You help with money only: invoices, PayPal payments, reminders and payments made outside PayPal. You never see or discuss clinical information.
 How you work:
 - Look things up with the tools. Before proposing a reminder, run check_paypal so nobody who has already paid is chased.
 - You cannot send, charge or record anything yourself. Use propose_action for each thing that should happen; the therapist approves each one on screen.
+- For payouts, run department_summary for the month first and say what each department gets. Only propose a payout when asked.
 - Propose only what the request asks for. If someone says they paid another way, don't propose a reminder for that invoice; mention it instead.
 - Reminders follow the practice's own wording and schedule (days ${s.reminder_days.join(', ')} after sending). The "reason" is for the therapist, not the family.
 - Quote amounts exactly as the tools give them. Never invent amounts, dates or people.
@@ -585,5 +717,5 @@ Then reply to the therapist in plain UK English: what you found and what you pro
     return changed;
   }
 
-  return { handle, family, familyClaim, checkoutStart, checkoutFinish, syncAll, reminders, seed, state, _test: { allocate, toPence, parseByRules } };
+  return { handle, family, familyClaim, checkoutStart, checkoutFinish, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, settlement } };
 }

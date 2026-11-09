@@ -205,3 +205,61 @@ test('checkout: the family pays the amount owed, recorded on the PayPal invoice 
   assert.equal(i.paid_pence, 13500);
   await assert.rejects(P.checkoutStart(D, i.id), /already settled/);
 });
+
+// ---------- departments and PayPal Payouts ----------
+const lastMonthOf = (D) => { const t = new Date(); t.setUTCDate(1); t.setUTCDate(0); return t.toISOString().slice(0, 7); };
+
+test('departments: ten with unique codes, and every invoice line carries one', async () => {
+  const { D } = await fresh();
+  assert.equal(D.departments.length, 10);
+  assert.equal(new Set(D.departments.map((d) => d.code)).size, 10);
+  for (const i of D.invoices) for (const it of i.items) assert.ok(it.code && D.departments.some((d) => d.id === it.dept_id), `${i.id} ${it.name}`);
+});
+
+test('split: pennies always add up, and a mixed invoice is shared by its lines', async () => {
+  const { D, P } = await fresh();
+  const parts = P._test.split(1001, [{ key: 'a', w: 1 }, { key: 'b', w: 1 }, { key: 'c', w: 1 }]);
+  assert.equal(parts.reduce((t, x) => t + x.pence, 0), 1001);
+  const mixed = D.invoices.find((i) => i.items.some((it) => it.code === 'ENT-01') && i.items.some((it) => it.code === 'AUD-01'));
+  const pay = D.payments.find((x) => x.invoice_id === mixed.id);
+  const s = P._test.deptSplit(D, pay);
+  assert.deepEqual(s.map((x) => x.pence).sort((a, b) => a - b), [8500, 15000]);
+});
+
+test('settlement: departments add up to the month’s finances; hospital share and fees come off', async () => {
+  const { D, P } = await fresh();
+  for (const ym of [lastMonthOf(D), new Date().toISOString().slice(0, 7)]) {
+    const st = await P.handle(D, 'departments', { month: ym });
+    const f = await P.handle(D, 'money', { month: ym });
+    assert.equal(st.totals.collected, f.paidIn);
+    assert.equal(st.totals.fees, f.fees);
+    for (const r of st.departments) assert.equal(r.due + r.hospital + r.fees, Math.max(r.collected, r.hospital + r.fees + r.due));
+  }
+});
+
+test('payouts: one PayPal batch pays every department its share once; a failed item can be paid again', async () => {
+  const { D, P, pp } = await fresh();
+  const ym = new Date().toISOString().slice(0, 7);
+  const before = await P.handle(D, 'departments', { month: ym });
+  assert.ok(before.totals.to_pay > 0);
+  const st = await P.handle(D, 'payouts/run', { month: ym });
+  const b = D.payouts[0];
+  assert.equal(b.total_pence, before.totals.to_pay);
+  assert.equal(st.settlement.totals.to_pay, 0);
+  await assert.rejects(P.handle(D, 'payouts/run', { month: ym }), /Nothing to pay out/);
+  pp.failPayoutItem(b.batch_id, b.items[0].item_id);
+  await P.refreshPayouts(D);
+  assert.equal(b.items[0].status, 'FAILED');
+  const after = await P.handle(D, 'departments', { month: ym });
+  assert.equal(after.totals.to_pay, b.items[0].pence);
+});
+
+test('assistant without AI: "pay the departments" proposes last month’s payout, done only on approval', async () => {
+  const { D, P } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Pay the departments for last month' });
+  assert.deepEqual(plan.actions.map((a) => [a.type, a.id]), [['payout', lastMonthOf(D)]]);
+  assert.equal((D.payouts || []).length, 0);
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] });
+  assert.ok(st.results[0].ok);
+  assert.equal(D.payouts.length, 1);
+});

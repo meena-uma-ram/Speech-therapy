@@ -69,7 +69,8 @@ async function withPractice(env, fn, origin) {
   if (origin && D.origin !== origin) D.origin = origin;
   const before = version ? JSON.stringify(D) : '';
   const P = practiceFor(env, D);
-  if (!D.settings) await P.seed(D);
+  // First visit, or data saved before departments existed: load the demo hospital.
+  if (!D.settings || !D.departments) await P.seed(D);
   const out = await fn(P, D);
   if (JSON.stringify(D) !== before) await save(env, D, version);
   return out;
@@ -87,6 +88,7 @@ async function handleApi(req, env, url) {
     if (modeOf(env) !== 'mock' && !(await paypal(env, {}).verifyWebhook(req.headers, event))) return fail('Signature check failed', 401);
     const ppId = event.resource?.invoice?.id || event.resource?.id;
     if (ppId && String(event.event_type || '').startsWith('INVOICING.INVOICE.')) await withPractice(env, (P, D) => P.syncAll(D, ppId));
+    if (String(event.event_type || '').startsWith('PAYMENT.PAYOUTS')) await withPractice(env, (P, D) => P.refreshPayouts(D));
     return json({ ok: true });
   }
 
@@ -147,6 +149,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil(withPractice(env, async (P, D) => {
       await P.syncAll(D);
+      await P.refreshPayouts(D);
       if (new Date(event.scheduledTime).getUTCHours() === 9) await P.reminders(D);
     }).catch((e) => console.error('scheduled run failed', e)));
   },

@@ -41,10 +41,10 @@ export function paypal(env, D) {
         ? { billing_info: { business_name: to.name, email_address: env.DEMO_RECIPIENT_EMAIL || to.email } }
         : { billing_info: { name: { given_name: to.name.split(' ')[0], surname: to.name.split(' ').slice(1).join(' ') || to.name.split(' ')[0] }, email_address: env.DEMO_RECIPIENT_EMAIL || to.email } };
       const created = await call('POST', '/v2/invoicing/invoices', {
-        detail: { currency_code: currency, reference: invoice.id, note: note.slice(0, 4000), payment_term: { due_date: dueDate } },
+        detail: { currency_code: currency, reference: [invoice.id, ...new Set(invoice.items.map((it) => it.code).filter(Boolean))].join(' ').slice(0, 120), note: note.slice(0, 4000), payment_term: { due_date: dueDate } },
         invoicer: { business_name: practice.slice(0, 100) },
         primary_recipients: [recipient],
-        items: invoice.items.map((it) => ({ name: it.name.slice(0, 200), quantity: '1', unit_amount: { currency_code: currency, value: pounds(it.pence) }, unit_of_measure: 'QUANTITY' })),
+        items: invoice.items.map((it) => ({ name: ((it.code ? it.code + ' · ' : '') + it.name).slice(0, 200), description: it.dept_name ? `${it.dept_name} (department ${it.code})`.slice(0, 1000) : undefined, quantity: '1', unit_amount: { currency_code: currency, value: pounds(it.pence) }, unit_of_measure: 'QUANTITY' })),
         configuration: { allow_tip: false, partial_payment: { allow_partial_payment: invoice.kind === 'monthly' } },
       }, { Prefer: 'return=representation' });
       await call('POST', `/v2/invoicing/invoices/${created.id}/send`, { subject: subject.slice(0, 100), note: note.slice(0, 1000), send_to_invoicer: false, send_to_recipient: true });
@@ -76,6 +76,19 @@ export function paypal(env, D) {
       const u = o.purchase_units?.[0] || {}, cap = u.payments?.captures?.[0] || {};
       return { status: o.status === 'COMPLETED' && cap.status === 'COMPLETED' ? 'COMPLETED' : (cap.status || o.status), custom_id: cap.custom_id || u.custom_id || u.reference_id, capture_id: cap.id || null, pence: cap.amount && cap.amount.currency_code === currency ? Math.round(parseFloat(cap.amount.value) * 100) : 0 };
     },
+    // PayPal Payouts: the hospital pays each department its share for a month, in one batch.
+    // In the sandbox every department's payout goes to DEMO_PAYOUT_EMAIL (or the demo family account), so it can be seen.
+    async createPayout({ batchId, subject, items }) {
+      const r = await call('POST', '/v1/payments/payouts', {
+        sender_batch_header: { sender_batch_id: batchId, email_subject: subject.slice(0, 255), email_message: 'Your department’s share for the month, from the hospital billing office.' },
+        items: items.map((x) => ({ recipient_type: 'EMAIL', receiver: env.DEMO_PAYOUT_EMAIL || env.DEMO_RECIPIENT_EMAIL || x.email, amount: { currency, value: pounds(x.pence) }, note: x.note.slice(0, 4000), sender_item_id: x.itemId })),
+      });
+      return { batch_id: r.batch_header?.payout_batch_id, status: r.batch_header?.batch_status || 'PENDING' };
+    },
+    async getPayout(batchId) {
+      const r = await call('GET', `/v1/payments/payouts/${encodeURIComponent(batchId)}?page_size=100`);
+      return { status: r.batch_header?.batch_status, items: (r.items || []).map((x) => ({ item_id: x.payout_item?.sender_item_id, status: x.transaction_status })) };
+    },
     async verifyWebhook(headers, event) {
       if (!env.PAYPAL_WEBHOOK_ID) return false;
       const r = await call('POST', '/v1/notifications/verify-webhook-signature', {
@@ -100,6 +113,9 @@ export function mockPaypal(D) {
     async verifyWebhook() { return true; },
     async createOrder({ invoiceId, pence }) { const id = 'MOCK-ORDER-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { order: true, invoiceId, pence }; return { id }; },
     async captureOrder(id) { const o = store[id]; if (!o || !o.order) throw new Error('Order not found'); if (o.captured) return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; o.captured = 'MOCK-CAP-' + id.slice(-8); return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; },
+    async createPayout({ items }) { const id = 'MOCK-BATCH-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { payout: true, status: 'PENDING', items: items.map((x) => ({ item_id: x.itemId, status: 'PENDING' })) }; return { batch_id: id, status: 'PENDING' }; },
+    async getPayout(id) { const b = store[id]; if (!b) throw new Error('Batch not found'); b.status = 'SUCCESS'; b.items.forEach((x) => { if (x.status === 'PENDING') x.status = 'SUCCESS'; }); return { status: b.status, items: b.items.map((x) => ({ ...x })) }; },
+    failPayoutItem(id, itemId) { const x = store[id].items.find((y) => y.item_id === itemId); x.status = 'FAILED'; },
     async simulatePay(id) { const x = store[id]; if (x) { x.paid = x.total; x.status = 'PAID'; } },
   };
 }
