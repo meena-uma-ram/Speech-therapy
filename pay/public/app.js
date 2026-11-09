@@ -51,8 +51,8 @@
     if (btn) btn.disabled = true;
     try {
       const d = await window.TJSPayAPI(path, body);
-      if (d && d.patients) { S = d; if (!path.startsWith('expenses')) M = null; DEP = d.settlement || null; }
-      if (d && d.departments && d.totals) DEP = d;
+      if (d && d.patients) { S = d; if (!path.startsWith('expenses')) M = null; DEP = d.budgets || null; }
+      if (d && d.fy && d.totals) DEP = d;
       if (d && d.paidIn !== undefined) M = d;
       if (done) await done(d);
       render();
@@ -128,9 +128,8 @@
     if (V.tab === 'money') { view.innerHTML = M ? moneyView() : '<p class="muted">Adding it up…</p>'; if (!M) loadMoney(); }
     if (V.tab === 'settings') view.innerHTML = settingsView();
     if (V.tab === 'depts' || V.tab === 'dept') {
-      const want = V.tab === 'dept' ? S.today.slice(0, 7) : V.dmonth;
-      if (DEP && DEP.month === want) view.innerHTML = V.tab === 'dept' ? myDeptView(dep(role)) : deptsView();
-      else { view.innerHTML = '<p class="muted">Adding it up by department…</p>'; loadDep(want); }
+      if (DEP && DEP.fy) view.innerHTML = V.tab === 'dept' ? myDeptView(dep(role)) : deptsView();
+      else { view.innerHTML = '<p class="muted">Adding up department budgets…</p>'; loadDep(); }
     }
   }
 
@@ -141,6 +140,10 @@
       const p = pat(c.patient_id), i = S.invoices.find((x) => x.id === c.invoice_id);
       out.push({ html: `<p><b>${esc(p.known_as)}</b>: ${esc(toName(billTo(p)) )} says ${m(c.amount_pence)} was paid ${esc(how(c.method))}${i ? ` for ${esc(i.period)}` : ''}.</p><p class="muted">Check it has arrived${c.reference ? `, ref ${esc(c.reference)}` : ''}.</p>`,
         actions: `<button class="btn small" data-act="confirm" data-id="${esc(c.id)}">Received</button><button class="btn small line" data-act="reject" data-id="${esc(c.id)}">Not received</button>` });
+    });
+    (S.requests || []).filter((r) => r.status === 'pending').forEach((r) => {
+      const d = dep(r.dept_id);
+      out.push({ html: `<p><span class="code">${esc(d.code)}</span> asks for ${m(r.pence)}: ${esc(r.purpose)}.</p><p class="muted">To ${esc(r.payee_name)}. Check it against their budget.</p>`, actions: `<button class="btn small" data-act="tab" data-id="depts">Review</button>` });
     });
     S.invoices.filter((i) => i.status === 'DRAFT').forEach((i) => {
       const p = pat(i.patient_id);
@@ -194,7 +197,7 @@
   }
 
   // ----- the billing assistant -----
-  const EXAMPLES = ['Who owes us money? Chase anyone more than two weeks late.', 'Invoice everything that’s waiting.', 'Pay the departments for last month.', 'How did each department do this month?'];
+  const EXAMPLES = ['Who owes us money? Chase anyone more than two weeks late.', 'Invoice everything that’s waiting.', 'Review the money requests from departments.', 'Which departments are close to their budget?'];
   function assistantView() {
     const P = V.plan;
     let out = '';
@@ -237,55 +240,71 @@
     });
   }
 
-  // ----- departments (administration) -----
+  // ----- departments: budgets and money requests -----
   const dep = (id) => (S.departments || []).find((d) => d.id === id);
   const depOfSvc = (sid) => dep((svc(sid) || {}).department_id);
-  const STATUS = { SUCCESS: ['paid', 'Paid'], UNCLAIMED: ['', 'Waiting to be claimed'], PENDING: ['', 'Processing'], ONHOLD: ['', 'On hold'], FAILED: ['late', 'Failed'], RETURNED: ['late', 'Returned'], BLOCKED: ['late', 'Blocked'], DENIED: ['late', 'Denied'], REFUNDED: ['late', 'Refunded'], REVERSED: ['late', 'Reversed'] };
-  const st = (x) => { const [c, t] = STATUS[x] || ['', x]; return `<span class="tag ${c}">${esc(t)}</span>`; };
-  async function loadDep(ym) { try { DEP = await window.TJSPayAPI('departments', { month: ym }); render(); } catch (e) { toast(e.message, true); } }
+  const RQ = { pending: ['todo', 'Waiting for administration'], sending: ['', 'Sent with PayPal'], paid: ['paid', 'Paid with PayPal'], unclaimed: ['', 'Waiting to be claimed'], failed: ['late', 'Payout failed'], rejected: ['late', 'Not approved'] };
+  const rqTag = (x) => { const [c, t] = RQ[x] || ['', x]; return `<span class="tag ${c}">${esc(t)}</span>`; };
+  const leftM = (p) => `<span class="m${p < 0 ? ' neg' : ''}">${gbp(p)}</span>`;
+  const bar = (used, budget) => { const pc = budget ? Math.min(100, Math.round(used / budget * 100)) : 0; return `<span class="budget-bar${pc >= 90 ? ' hi' : ''}" role="img" aria-label="${pc}% used"><i class="w${Math.round(pc / 5) * 5}"></i></span>`; };
+  async function loadDep() { try { DEP = await window.TJSPayAPI('departments', {}); render(); } catch (e) { toast(e.message, true); } }
+  function requestRow(r, admin) {
+    const acts = admin && ['pending', 'failed'].includes(r.status)
+      ? `<div class="actions"><button class="btn small${r.left_after < 0 ? ' warn' : ''}" data-act="rq-approve" data-id="${esc(r.id)}" data-over="${r.left_after < 0 ? 1 : ''}">${r.left_after < 0 ? 'Approve over budget' : 'Approve and pay with PayPal'}</button><button class="btn small line" data-act="rq-reject" data-id="${esc(r.id)}">Reject</button></div>` : '';
+    return `<li class="rq"><div><p>${admin ? `<span class="code">${esc(r.code)}</span> ` : ''}<b>${m(r.pence)}</b> ${esc(r.purpose)} ${rqTag(r.status)}</p>
+      <p class="muted">To ${esc(r.payee_name)}${r.pay_to === 'supplier' ? ' (supplier)' : ''}, ${esc(r.payee_email)} · asked ${esc(day(r.created_at))}${['pending', 'failed'].includes(r.status) ? ` · budget left after: ${leftM(r.left_after)}` : r.decided_at ? ` · decided ${esc(day(r.decided_at))}` : ''}${r.reason ? ` · ${esc(r.reason)}` : ''}</p></div>${acts}</li>`;
+  }
   function deptsView() {
-    const D = DEP, thisMonth = S.today.slice(0, 7), T = D.totals;
-    return `<div class="page-h"><h1>Departments: ${esc(D.label)}</h1>
-      <div class="month-nav"><button class="btn small line" data-act="dmonth" data-id="-1">‹ Previous</button><button class="btn small line" data-act="dmonth" data-id="1"${D.month >= thisMonth ? ' disabled' : ''}>Next ›</button></div></div>
-    <p class="muted dep-intro">One hospital PayPal account receives every payment. Each invoice line carries its department’s code, so each payment is split between departments by its lines. After PayPal fees and the hospital’s share, each department is paid with <b>PayPal Payouts</b>.</p>
-    <section class="panel"><div class="panel-h"><h2>Settlement</h2><div class="actions">${T.to_pay ? `<button class="btn small" data-act="payout">Pay departments ${esc(gbp(T.to_pay))} with PayPal Payouts</button>` : '<span class="muted">Nothing left to pay out</span>'}</div></div>
-      <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th class="num">Sessions</th><th class="num">Collected</th><th class="num">PayPal fees</th><th class="num">Hospital share</th><th class="num">Department due</th><th class="num">Paid out</th><th class="num">To pay</th></tr></thead><tbody>
-      ${D.departments.map((r) => `<tr><td><span class="code">${esc(r.code)}</span></td><td>${esc(r.name)}</td><td class="num">${r.sessions}</td><td class="num">${m(r.collected)}</td><td class="num">${m(r.fees)}</td><td class="num">${m(r.hospital)} <span class="muted">${r.hospital_percent}%</span></td><td class="num">${m(r.due)}</td><td class="num">${m(r.paid_out)}</td><td class="num">${r.to_pay ? `<b>${m(r.to_pay)}</b>` : '<span class="muted">–</span>'}</td></tr>`).join('')}
-      <tr class="total"><td></td><td>All departments</td><td class="num">${T.sessions}</td><td class="num">${m(T.collected)}</td><td class="num">${m(T.fees)}</td><td class="num">${m(T.hospital)}</td><td class="num">${m(T.due)}</td><td class="num">${m(T.paid_out)}</td><td class="num">${m(T.to_pay)}</td></tr></tbody></table></div></section>
-    <section class="panel"><div class="panel-h"><h2>PayPal Payouts for ${esc(D.label)}</h2>${D.payouts.length ? '<button class="btn small line" data-act="payout-refresh">Check status with PayPal</button>' : ''}</div>
-      ${D.payouts.length ? `<ul class="rows">${D.payouts.map((b) => `<li><p><b>${m(b.total_pence)}</b> to ${count(b.items.length, 'department', 'departments')} ${st(b.status)} <span class="muted">Batch ${esc(b.batch_id)}, ${esc(day(b.created_at))}</span></p>
-        <div class="tags payout-items">${b.items.map((x) => `<span class="pi"><span class="code">${esc(x.code)}</span> ${m(x.pence)} ${st(x.status)}</span>`).join('')}</div></li>`).join('')}</ul>` : '<p class="empty">No payouts for this month yet.</p>'}</section>
-    <section class="panel"><div class="panel-h"><h2>Department settings</h2><button class="btn small" data-act="save-depts">Save</button></div>
-      <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th>Hospital keeps (%)</th><th>PayPal payout email</th></tr></thead><tbody>
-      ${S.departments.map((d) => `<tr data-dep="${esc(d.id)}"><td><span class="code">${esc(d.code)}</span></td><td>${esc(d.name)}</td><td><input class="pc" inputmode="numeric" value="${d.hospital_percent}" aria-label="Hospital share for ${esc(d.code)}"></td><td><input class="em" type="email" value="${esc(d.payout_email || '')}" aria-label="Payout email for ${esc(d.code)}"></td></tr>`).join('')}</tbody></table></div>
-      <p class="note">In the PayPal sandbox demo, every payout goes to the demo account so you can see it arrive.</p></section>`;
+    const B = DEP, T = B.totals, waiting = B.requests.filter((r) => ['pending', 'failed'].includes(r.status)), done = B.requests.filter((r) => !['pending', 'failed'].includes(r.status));
+    return `<div class="page-h"><h1>Departments</h1><span class="muted">Financial year ${esc(B.fy)}</span></div>
+    <p class="muted dep-intro">The hospital allocates each department a budget for the year. Departments log what they spend and ask for money when they need it. You see what is used and left, then approve (the money is sent with <b>PayPal Payouts</b>, to the department’s PayPal account or straight to a supplier) or reject.</p>
+    <section class="panel"><div class="panel-h"><h2>Money requests</h2><div class="actions">${done.some((r) => ['sending', 'unclaimed'].includes(r.status)) ? '<button class="btn small line" data-act="payout-refresh">Check status with PayPal</button>' : ''}<span class="muted">${waiting.length} waiting</span></div></div>
+      ${waiting.length ? `<ul class="rows">${waiting.map((r) => requestRow(r, true)).join('')}</ul>` : '<p class="empty">No requests waiting.</p>'}
+      ${done.length ? `<details class="done"><summary>Decided (${done.length})</summary><ul class="rows">${done.map((r) => requestRow(r, true)).join('')}</ul></details>` : ''}</section>
+    <section class="panel"><div class="panel-h"><h2>Budgets ${esc(B.fy)}</h2><span class="muted">${m(T.used)} used of ${m(T.budget)}</span></div>
+      <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th class="num">Budget</th><th class="num">Used</th><th></th><th class="num">Left</th><th class="num">Waiting</th><th class="num">Income <span class="muted">(report)</span></th></tr></thead><tbody>
+      ${B.departments.map((r) => `<tr><td><span class="code">${esc(r.code)}</span></td><td>${esc(r.name)}</td><td class="num">${m(r.budget)}</td><td class="num">${m(r.used)}</td><td>${bar(r.used, r.budget)}</td><td class="num">${leftM(r.left)}</td><td class="num">${r.waiting ? `${m(r.waiting_pence)} <span class="muted">(${r.waiting})</span>` : '<span class="muted">–</span>'}</td><td class="num">${m(r.income)}</td></tr>`).join('')}
+      <tr class="total"><td></td><td>All departments</td><td class="num">${m(T.budget)}</td><td class="num">${m(T.used)}</td><td>${bar(T.used, T.budget)}</td><td class="num">${leftM(T.left)}</td><td class="num">${m(T.waiting_pence)}</td><td class="num">${m(T.income)}</td></tr></tbody></table></div>
+      <p class="note">Used = spending the department logged + requests paid with PayPal. Income is what patients paid for each department’s services (from the codes on invoice lines); it is shown for reporting and doesn’t change budgets.</p></section>
+    <section class="panel"><div class="panel-h"><h2>Spending logged by departments</h2></div>${B.spend.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Code</th><th>What</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${B.spend.slice(0, 20).map((x) => `<tr><td>${esc(day(x.date))}</td><td><span class="code">${esc(x.code)}</span></td><td>${esc(x.what)}</td><td>${esc(x.category)}</td><td class="num">${m(x.pence)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Nothing logged yet.</p>'}</section>
+    <section class="panel"><div class="panel-h"><h2>Budgets and PayPal accounts</h2><button class="btn small" data-act="save-depts">Save</button></div>
+      <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th>Budget ${esc(B.fy)} (£)</th><th>Department’s PayPal email</th></tr></thead><tbody>
+      ${S.departments.map((d) => `<tr data-dep="${esc(d.id)}"><td><span class="code">${esc(d.code)}</span></td><td>${esc(d.name)}</td><td><input class="bd" inputmode="decimal" value="${((d.budget_pence || 0) / 100).toFixed(0)}" aria-label="Budget for ${esc(d.code)}"></td><td><input class="em" type="email" value="${esc(d.payout_email || '')}" aria-label="PayPal email for ${esc(d.code)}"></td></tr>`).join('')}</tbody></table></div>
+      <p class="note">Departments need only a PayPal account that can receive money at this email; no PayPal app or keys. In the sandbox demo, every payout goes to the demo account so you can see it arrive.</p></section>`;
   }
 
   // ----- my department (department staff) -----
   function myDeptView(d) {
     const r = DEP.departments.find((x) => x.id === d.id) || {};
+    const mine = DEP.requests.filter((x) => x.dept_id === d.id);
+    const spend = DEP.spend.filter((x) => x.dept_id === d.id);
     const svcs = S.services.filter((v) => v.department_id === d.id);
-    const ses = S.sessions.filter((x) => (svc(x.service_id) || {}).department_id === d.id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 15);
-    const pays = DEP.payouts.flatMap((b) => b.items.filter((x) => x.dept_id === d.id).map((x) => ({ ...x, at: b.created_at })));
-    return `<div class="page-h"><h1><span class="code big">${esc(d.code)}</span> ${esc(d.name)}</h1><span class="muted">${esc(DEP.label)}</span></div>
-    <div class="figs dep-figs"><div class="fig"><span>Sessions</span><b>${r.sessions || 0}</b></div><div class="fig"><span>Collected for you</span><b class="m">${gbp(r.collected || 0)}</b></div><div class="fig"><span>Your share so far</span><b class="m">${gbp(r.due || 0)}</b></div><div class="fig"><span>Paid to you</span><b class="m">${gbp(r.paid_out || 0)}</b></div></div>
+    return `<div class="page-h"><h1><span class="code big">${esc(d.code)}</span> ${esc(d.name)}</h1><span class="muted">Financial year ${esc(DEP.fy)}</span></div>
+    <div class="figs dep-figs"><div class="fig"><span>Budget</span><b class="m">${gbp(r.budget)}</b></div><div class="fig"><span>Used</span><b class="m">${gbp(r.used)}</b>${bar(r.used, r.budget)}</div><div class="fig${r.left < 0 ? ' late' : ''}"><span>Left</span><b class="m">${gbp(r.left)}</b></div><div class="fig"><span>Waiting for administration</span><b class="m">${gbp(r.waiting_pence)}</b></div></div>
     <div class="two-col"><div>
-      <section class="panel"><div class="panel-h"><h2>Log a session</h2></div><div class="logform">
+      <section class="panel"><div class="panel-h"><h2>Ask for money</h2></div><div class="form">
+        <div class="two"><label>How much (£)<input id="rq-amt" inputmode="decimal"></label><label>Pay to<select id="rq-to"><option value="department">Our PayPal account${d.payout_email ? ` (${esc(d.payout_email)})` : ''}</option><option value="supplier">A supplier</option></select></label></div>
+        <label>What it’s for<input id="rq-purpose" maxlength="200" placeholder="e.g. Hearing aid batteries and repair kits"></label>
+        <div class="two" id="rq-sup" hidden><label>Supplier<input id="rq-sname" maxlength="80"></label><label>Supplier’s PayPal email<input id="rq-semail" type="email" maxlength="120"></label></div>
+        <div class="actions"><button class="btn" data-act="rq-ask">Send to administration</button><span class="muted fs-82">Administration checks it against your budget and pays it with PayPal.</span></div></div></section>
+      <section class="panel"><div class="panel-h"><h2>Our requests</h2></div>${mine.length ? `<ul class="rows">${mine.map((x) => requestRow(x, false)).join('')}</ul>` : '<p class="empty">No requests yet.</p>'}</section>
+      <section class="panel"><div class="panel-h"><h2>Log spending</h2></div><div class="logform">
+        <label>Date<input type="date" id="sp-date" value="${esc(S.today)}" max="${esc(S.today)}"></label>
+        <label>What<input id="sp-what" maxlength="100" placeholder="e.g. Disposable specula"></label>
+        <label>Category<select id="sp-cat"><option>Supplies</option><option>Equipment</option><option>Staff</option><option>Training</option><option>Travel</option><option>Other</option></select></label>
+        <label>Amount (£)<input id="sp-amt" inputmode="decimal" size="8"></label>
+        <button class="btn" data-act="sp-log">Log</button></div>
+        <p class="note">For money spent another way, e.g. on the hospital card. It counts against your budget.</p>
+        ${spend.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>What</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${spend.slice(0, 10).map((x) => `<tr><td>${esc(day(x.date))}</td><td>${esc(x.what)}</td><td>${esc(x.category)}</td><td class="num">${m(x.pence)}</td></tr>`).join('')}</tbody></table></div>` : ''}</section>
+    </div><aside>
+      <section class="panel"><div class="panel-h"><h2>Log a session</h2></div><div class="form">
         <label>Patient<select id="ds-pat">${S.patients.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
-        <label>Service<select id="ds-svc">${svcs.map((v) => `<option value="${esc(v.id)}">${esc(v.name)}, ${v.minutes} min (${esc(gbp(v.price_pence))})</option>`).join('')}</select></label>
+        <label>Service<select id="ds-svc">${svcs.map((v) => `<option value="${esc(v.id)}">${esc(v.name)} (${esc(gbp(v.price_pence))})</option>`).join('')}</select></label>
         <label>Date<input type="date" id="ds-date" value="${esc(S.today)}" max="${esc(S.today)}"></label>
         <label>Where<select id="ds-where"><option>in person</option><option>online</option><option>at school</option><option>at home</option></select></label>
-        <button class="btn" data-act="dept-log">Log</button></div>
-        <p class="note">The billing office invoices it through PayPal with your code, ${esc(d.code)}.</p></section>
-      <section class="panel"><div class="panel-h"><h2>Recent sessions</h2></div>${ses.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Patient</th><th>Service</th><th>Billing</th></tr></thead><tbody>${ses.map((x) => { const i = S.invoices.find((y) => y.id === x.invoice_id); return `<tr><td>${esc(day(x.date))}</td><td>${esc(pat(x.patient_id).known_as)}</td><td>${esc(svc(x.service_id).name)}</td><td>${!i ? '<span class="tag todo">With billing office</span>' : PAID.includes(i.status) ? '<span class="tag paid">Paid</span>' : '<span class="tag">Invoiced</span>'}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="empty">No sessions yet.</p>'}</section>
-    </div><aside>
-      <section class="panel"><div class="panel-h"><h2>Payouts to ${esc(d.code)}</h2></div>${pays.length ? `<ul class="stat-list">${pays.map((x) => `<li><span>${esc(day(x.at))} ${st(x.status)}</span><b class="m">${gbp(x.pence)}</b></li>`).join('')}</ul>` : '<p class="empty">None this month yet. The billing office pays departments through PayPal Payouts.</p>'}</section>
-      <section class="panel"><div class="panel-b"><p class="muted fs-85">Hospital share: ${d.hospital_percent}% of what is collected after PayPal fees. Invoices, reminders and payments are handled by the billing office.</p></div></section>
+        <div class="actions"><button class="btn" data-act="dept-log">Log</button></div></div>
+        <p class="note">The billing office invoices patients through PayPal with your code, ${esc(d.code)}. Income this year: ${esc(gbp(r.income))}.</p></section>
     </aside></div>`;
-  }
-  async function runPayout(btn) {
-    if (!window.confirm(`Pay ${gbp(DEP.totals.to_pay)} to departments for ${DEP.label} with PayPal Payouts?`)) return;
-    await act(btn, 'payouts/run', { month: DEP.month }, () => toast('Payout sent to PayPal.'));
   }
 
   // ----- patients -----
@@ -558,10 +577,14 @@
       case 'reject': act(b, `claims/${id}/reject`, {}, () => toast('Marked as not received.')); break;
       case 'reminders': act(b, 'reminders', {}, (d) => toast(d.sent ? `${count(d.sent, 'reminder', 'reminders')} sent.` : 'No reminders due.')); break;
       case 'parse': parse(b); break;
-      case 'dmonth': { const [y, mo] = (V.dmonth || DEP.month).split('-').map(Number); V.dmonth = new Date(Date.UTC(y, mo - 1 + Number(id), 1)).toISOString().slice(0, 7); DEP = null; render(); break; }
-      case 'payout': runPayout(b); break;
-      case 'payout-refresh': act(b, 'payouts/refresh', { month: DEP.month }, () => toast('Checked with PayPal.')); break;
-      case 'save-depts': act(b, 'departments/settings', { month: DEP.month, departments: [...document.querySelectorAll('[data-dep]')].map((r) => ({ id: r.dataset.dep, hospital_percent: r.querySelector('.pc').value, payout_email: r.querySelector('.em').value })) }, () => { toast('Saved.'); act(null, 'state'); }); break;
+      case 'payout-refresh': act(b, 'payouts/refresh', {}, () => toast('Checked with PayPal.')); break;
+      case 'save-depts': act(b, 'departments/settings', { departments: [...document.querySelectorAll('[data-dep]')].map((r) => ({ id: r.dataset.dep, budget: r.querySelector('.bd').value, payout_email: r.querySelector('.em').value })) }, () => { toast('Saved.'); act(null, 'state'); }); break;
+      case 'rq-approve': { const r = DEP.requests.find((x) => x.id === id); const over = !!b.dataset.over;
+        if (!window.confirm(over ? `This takes ${r.code} ${gbp(-r.left_after)} over its budget. Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal anyway?` : `Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal?`)) break;
+        act(b, `requests/${id}/approve`, { over_budget: over }, () => toast('Sent with PayPal Payouts.')); break; }
+      case 'rq-reject': { const why = window.prompt('Why isn’t it approved? The department will see this.'); if (why === null) break; act(b, `requests/${id}/reject`, { reason: why }, () => toast('Marked as not approved.')); break; }
+      case 'rq-ask': act(b, 'requests', { dept_id: role, amount: $('rq-amt').value, purpose: $('rq-purpose').value.trim(), pay_to: $('rq-to').value, payee_name: $('rq-sname').value.trim(), payee_email: $('rq-semail').value.trim() }, () => toast('Sent to administration.')); break;
+      case 'sp-log': act(b, 'spend', { dept_id: role, date: $('sp-date').value, what: $('sp-what').value.trim(), category: $('sp-cat').value, amount: $('sp-amt').value }, () => toast('Logged against your budget.')); break;
       case 'dept-log': act(b, 'sessions', { patient_id: $('ds-pat').value, service_id: $('ds-svc').value, date: $('ds-date').value, where: $('ds-where').value }, () => toast('Logged. The billing office will invoice it.')); break;
       case 'ask-ex': ask(b.dataset.q); break;
       case 'approve': approve(b); break;
@@ -582,6 +605,7 @@
   });
 
   document.addEventListener('change', (ev) => {
+    if (ev.target.id === 'rq-to') { $('rq-sup').hidden = ev.target.value !== 'supplier'; return; }
     if (ev.target.id !== 'role') return;
     role = ev.target.value; try { localStorage.setItem('tjs-pay-role', role); } catch { /* ignore */ }
     V.tab = role === 'admin' ? 'week' : 'dept'; V.patient = null; DEP = null; render(); window.scrollTo(0, 0);
@@ -590,7 +614,7 @@
   document.addEventListener('input', (ev) => { if (ev.target.id === 'asst-q') V.ask = ev.target.value; });
 
   (async function start() {
-    try { S = await window.TJSPayAPI('state'); V.month = S.today.slice(0, 7); V.dmonth = prevMonth(); render(); }
+    try { S = await window.TJSPayAPI('state'); V.month = S.today.slice(0, 7); render(); }
     catch (e) { $('view').innerHTML = `<p>TJS Pay couldn’t load: ${esc(e.message)}</p>`; }
   })();
 })();

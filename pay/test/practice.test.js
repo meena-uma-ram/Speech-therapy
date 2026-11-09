@@ -226,40 +226,56 @@ test('split: pennies always add up, and a mixed invoice is shared by its lines',
   assert.deepEqual(s.map((x) => x.pence).sort((a, b) => a - b), [8500, 15000]);
 });
 
-test('settlement: departments add up to the month’s finances; hospital share and fees come off', async () => {
+test('budgets: income by department adds up to the year’s payments; used + left = budget', async () => {
   const { D, P } = await fresh();
-  for (const ym of [lastMonthOf(D), new Date().toISOString().slice(0, 7)]) {
-    const st = await P.handle(D, 'departments', { month: ym });
-    const f = await P.handle(D, 'money', { month: ym });
-    assert.equal(st.totals.collected, f.paidIn);
-    assert.equal(st.totals.fees, f.fees);
-    for (const r of st.departments) assert.equal(r.due + r.hospital + r.fees, Math.max(r.collected, r.hospital + r.fees + r.due));
-  }
+  const B = await P.handle(D, 'departments', {});
+  const fy = P._test.fyOf(new Date().toISOString().slice(0, 10));
+  const paid = D.payments.filter((x) => x.date >= fy.start && x.date <= fy.end).reduce((t, x) => t + x.pence, 0);
+  assert.equal(B.totals.income, paid);
+  for (const r of B.departments) assert.equal(r.used + r.left, r.budget);
+  assert.equal(B.totals.waiting, 3);
 });
 
-test('payouts: one PayPal batch pays every department its share once; a failed item can be paid again', async () => {
-  const { D, P, pp } = await fresh();
-  const ym = new Date().toISOString().slice(0, 7);
-  const before = await P.handle(D, 'departments', { month: ym });
-  assert.ok(before.totals.to_pay > 0);
-  const st = await P.handle(D, 'payouts/run', { month: ym });
-  const b = D.payouts[0];
-  assert.equal(b.total_pence, before.totals.to_pay);
-  assert.equal(st.settlement.totals.to_pay, 0);
-  await assert.rejects(P.handle(D, 'payouts/run', { month: ym }), /Nothing to pay out/);
-  pp.failPayoutItem(b.batch_id, b.items[0].item_id);
+test('requests: a department asks, administration pays with PayPal Payouts, and it counts against the budget', async () => {
+  const { D, P } = await fresh();
+  await assert.rejects(P.handle(D, 'requests', { dept_id: 'dep_ot', amount: '120', purpose: 'Weighted blankets', pay_to: 'supplier', payee_email: 'not-an-email' }), /supplier’s PayPal email/);
+  const st = await P.handle(D, 'requests', { dept_id: 'dep_ot', amount: '120', purpose: 'Weighted blankets' });
+  const r = D.requests[0];
+  assert.equal(r.status, 'pending'); assert.equal(r.payee_email, 'ot-01.payouts@example.org');
+  const before = st.budgets.departments.find((x) => x.id === 'dep_ot');
+  const after = (await P.handle(D, `requests/${r.id}/approve`, {})).budgets.departments.find((x) => x.id === 'dep_ot');
+  assert.equal(r.status, 'sending'); assert.ok(r.payout.batch_id);
+  assert.equal(after.left, before.left - 12000);
+  await assert.rejects(P.handle(D, `requests/${r.id}/approve`, {}), /already been handled/);
   await P.refreshPayouts(D);
-  assert.equal(b.items[0].status, 'FAILED');
-  const after = await P.handle(D, 'departments', { month: ym });
-  assert.equal(after.totals.to_pay, b.items[0].pence);
+  assert.equal(r.status, 'paid');
 });
 
-test('assistant without AI: "pay the departments" proposes last month’s payout, done only on approval', async () => {
+test('requests: over budget needs an explicit decision; a failed payout stops counting and can be approved again', async () => {
+  const { D, P, pp } = await fresh();
+  const neuro = D.requests.find((x) => x.dept_id === 'dep_neuro' && x.status === 'pending');
+  await assert.rejects(P.handle(D, `requests/${neuro.id}/approve`, {}), /over its budget/);
+  await P.handle(D, `requests/${neuro.id}/approve`, { over_budget: true });
+  assert.match(neuro.reason, /over budget/);
+  const left = () => P._test.budgets(D).departments.find((x) => x.id === 'dep_neuro').left;
+  assert.ok(left() < 0);
+  pp.failPayoutItem(neuro.payout.batch_id, neuro.payout.item_id);
+  await P.refreshPayouts(D);
+  assert.equal(neuro.status, 'failed');
+  assert.ok(left() > 0);
+  const pt = D.requests.find((x) => x.dept_id === 'dep_pt');
+  await P.handle(D, `requests/${pt.id}/reject`, { reason: 'Use the existing stock first.' });
+  assert.equal(pt.status, 'rejected');
+  await assert.rejects(P.handle(D, `requests/${pt.id}/approve`, {}), /already been handled/);
+});
+
+test('assistant without AI: money requests that fit the budget are proposed; the over-budget one is left to administration', async () => {
   const { D, P } = await fresh();
-  const { plan } = await P.handle(D, 'assistant', { request: 'Pay the departments for last month' });
-  assert.deepEqual(plan.actions.map((a) => [a.type, a.id]), [['payout', lastMonthOf(D)]]);
-  assert.equal((D.payouts || []).length, 0);
-  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] });
-  assert.ok(st.results[0].ok);
-  assert.equal(D.payouts.length, 1);
+  const { plan } = await P.handle(D, 'assistant', { request: 'Review the money requests from departments' });
+  const depts = plan.actions.map((a) => D.requests.find((r) => r.id === a.id).dept_id).sort();
+  assert.deepEqual(depts, ['dep_aud', 'dep_pt']);
+  assert.match(plan.text, /over budget/);
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1, 2] });
+  assert.ok(st.results.every((x) => x.ok));
+  assert.equal(D.requests.filter((r) => r.status === 'sending').length, 2);
 });

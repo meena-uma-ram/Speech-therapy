@@ -10,14 +10,15 @@ Small practices lose hours a month to billing: invoices, checking who has paid, 
 
 ## What it does
 
-TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED-01, NEU-01, CARD-01, PT-01, OT-01, AVT-01, SLT-01, AUD-01, DX-01). The **administration (billing office)** handles all billing. **Department staff** log sessions and see their own figures. One hospital PayPal account receives every payment, and each department is paid its share with **PayPal Payouts**.
+TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED-01, NEU-01, CARD-01, PT-01, OT-01, AVT-01, SLT-01, AUD-01, DX-01). The **administration (billing office)** handles billing and the departments' budgets. One hospital PayPal account receives every payment; each invoice line carries its department code, so income per department can be reported. The hospital **allocates each department a budget** for the financial year. **Department staff** log what they spend and **ask for money** when they need it; administration checks it against the budget and pays it with **PayPal Payouts**, to the department's PayPal account or straight to a supplier.
 
 | | |
 |---|---|
 | **Billing assistant** | Ask in plain words: *"Who owes me money? Chase anyone more than two weeks late."* An AI agent looks up the invoices, **checks each one with PayPal live**, and proposes numbered actions (reminders, invoices, drafts to send, payments to confirm). The therapist ticks and approves; the billing code checks each action again and does it. |
 | **Departments and codes** | Every service belongs to a department, and every invoice line carries the department code (on the PayPal invoice too: `SLT-01 · Therapy session`). A family's invoice can mix departments, e.g. an ENT consultation and a hearing test. |
-| **Settlement and PayPal Payouts** | *Departments* (administration only): for any month, each payment is split between departments by its invoice lines, to the penny. PayPal fees are split the same way. The hospital keeps each department's set share, and the rest is paid out in one PayPal Payouts batch, after confirmation. Payout status comes back from PayPal (webhook and hourly check). A failed payout can be paid again; a paid one never twice. |
-| **Roles** | *Signed in as* switches between the billing office and each department (a demo switch; in real use each person signs in). Department staff get *My department*: log a session for any patient with their department's services, see what was collected for them, their share and the payouts they received. |
+| **Budgets** | *Departments* (administration): each department's budget for the financial year (April to March), what is used (spending logged + requests paid), what is left, requests waiting, and income from patients by department code (for reporting only). |
+| **Money requests, paid with PayPal Payouts** | A department asks for an amount, says what it's for, and whether it goes to its own PayPal account or to a supplier's. Administration sees the budget left after it, then approves (PayPal Payouts sends the money) or rejects with a reason. Going over budget needs an explicit decision. Payout status comes back from PayPal (webhook and hourly check); a failed payout stops counting against the budget and can be approved again. Departments need only a PayPal account that can receive money, no PayPal app or keys. |
+| **Roles** | *Signed in as* switches between the billing office and each department (a demo switch; in real use each person signs in). Department staff get *My department*: their budget, used and left; ask for money; log spending; follow their requests; log a session with their department's services. |
 | **Overview** | One list of what needs the therapist: drafts to send, sessions to invoice, and payments families say they've made. Plus every unpaid invoice with its next reminder. |
 | **Patients** | Filter by *to invoice, waiting, overdue, paid up*. Each patient has sessions, invoices and payments. Flexible names ("known as"), several caregivers, and who pays (family, school, local authority, charity). |
 | **Billing types** | Per session, monthly statement, or prepaid blocks. When a block reaches the session the clinic chooses (e.g. 8 of 10), the next block's invoice goes out automatically. |
@@ -44,8 +45,8 @@ The therapist asks in plain words. Claude (`AGENT_MODEL`, Claude Opus 5.5 by def
 | `list_patients` | Billing facts only: billing type, payer, sessions waiting to be invoiced, owed, credit |
 | `list_reported_payments` | Bank transfers and cash that families reported, waiting to be confirmed |
 | `month_summary` | Paid in, PayPal fees, expenses, profit for a month |
-| `department_summary` | One month by department code: collected, fees, hospital share, due, paid out, still to pay |
-| `propose_action` | Adds a numbered proposal to the plan: `reminder`, `invoice`, `send_draft`, `confirm_payment` or `payout` (a month). It does **not** do it. |
+| `department_budgets` | Budgets by department code (budget, used, left) and every money request with the budget left after it |
+| `propose_action` | Adds a numbered proposal to the plan: `reminder`, `invoice`, `send_draft`, `confirm_payment` or `pay_request`. A request that would go over budget is refused here and left to administration. It does **not** do it. |
 
 The agent is told to check PayPal before proposing a reminder, so nobody who has just paid is chased. The screen shows what it checked, its answer, and the proposals with tick boxes. **Approve selected** runs each one through the same tested code as the buttons, after checking it again (an invoice paid in the meantime is skipped). Tools use strict schemas; the request uses Anthropic's server-side refusal fallback. Without an AI key, past the daily limit, or on any AI error, the same tools are driven by built-in rules.
 
@@ -75,7 +76,7 @@ All calls are made server-side in the Worker (`src/paypal.js`). The secret never
 | Record bank transfer, cash or cheque | `POST /v2/invoicing/invoices/{id}/payments` |
 | Check status and amount paid | `GET /v2/invoicing/invoices/{id}` |
 | Family pays now (PayPal Checkout) | `POST /v2/checkout/orders`, `POST /v2/checkout/orders/{id}/capture`, PayPal JS SDK buttons |
-| Pay departments their share | `POST /v1/payments/payouts` (one batch per settlement) |
+| Pay an approved money request (to a department or a supplier) | `POST /v1/payments/payouts` |
 | Payout status | `GET /v1/payments/payouts/{batch_id}` |
 | Verify webhooks | `POST /v1/notifications/verify-webhook-signature` |
 | Webhook events | `INVOICING.INVOICE.PAID`, `.UPDATED`, `.CANCELLED`; `PAYMENT.PAYOUTSBATCH.*` |
@@ -101,7 +102,7 @@ The billing logic (`src/practice.js`) is one module with PayPal and AI passed in
 
 1. At [developer.paypal.com](https://developer.paypal.com), go to **Testing tools → Sandbox accounts**. Create a **Business** account with country **United Kingdom** (the practice) and a **Personal** account (the families). Note the personal account's email and password.
 2. Go to **Apps & Credentials → Sandbox → Create app**, linked to the UK business account. Copy the client ID and secret.
-3. In the app's settings, make sure **Payouts** is ticked under features (needed for department payouts).
+3. In the app's settings, make sure **Payouts** is ticked under features (needed to pay money requests).
 
 ### 2. Deploy
 
@@ -116,7 +117,7 @@ npx wrangler secret put PAYPAL_CLIENT_SECRET
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put LINK_SECRET            # any long random string
 npx wrangler secret put DEMO_RECIPIENT_EMAIL   # the sandbox personal account email
-npx wrangler secret put DEMO_PAYOUT_EMAIL      # optional: where department payouts go in the sandbox (defaults to the one above)
+npx wrangler secret put DEMO_PAYOUT_EMAIL      # optional: where payouts go in the sandbox (defaults to the one above)
 npm run deploy
 ```
 
@@ -131,12 +132,12 @@ In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypa
 ```bash
 npm run db:local
 npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 23 tests: billing logic, the assistant's checks, Checkout, departments and payouts
+npm test             # 24 tests: billing logic, the assistant's checks, Checkout, department budgets and requests
 ```
 
 ## Try the demo
 
-**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office and a department, open **Departments** to settle a month with PayPal Payouts, and start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
+**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office and a department, open **Departments** to approve a money request (one fits the budget, one goes over), and start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
 
 Six made-up patients cover every case:
 

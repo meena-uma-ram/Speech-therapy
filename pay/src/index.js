@@ -70,7 +70,7 @@ async function withPractice(env, fn, origin) {
   const before = version ? JSON.stringify(D) : '';
   const P = practiceFor(env, D);
   // First visit, or data saved before departments existed: load the demo hospital.
-  if (!D.settings || !D.departments) await P.seed(D);
+  if (!D.settings || !D.departments || !D.requests) await P.seed(D);
   const out = await fn(P, D);
   if (JSON.stringify(D) !== before) await save(env, D, version);
   return out;
