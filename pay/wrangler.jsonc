@@ -8,7 +8,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/paid", "/paid.html"]
   },
   "d1_databases": [
     { "binding": "DB", "database_name": "tjs-pay", "database_id": "REPLACE_WITH_YOUR_D1_ID" }
@@ -18,7 +18,12 @@
   "vars": {
     // "sandbox" talks to the PayPal sandbox. "mock" simulates PayPal for local testing only.
     "PAYPAL_MODE": "sandbox",
+    // Short writing jobs (invoice notes, reading payments, rewording reminders)
     "AI_MODEL": "claude-haiku-5-5",
+    // The billing assistant, which plans with tools
+    "AGENT_MODEL": "claude-opus-5-5",
+    // Most AI requests per day (UTC). After that, standard wording and built-in rules take over.
+    "AI_DAILY_LIMIT": "150",
     "CURRENCY": "GBP",
     "PRACTICE_NAME": "Northern Voices Speech Therapy"
   }

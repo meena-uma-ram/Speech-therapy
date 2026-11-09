@@ -218,3 +218,28 @@ footer { text-align: center; color: var(--muted); font-size: .8rem; padding: 0 1
 
 .brand-full { display: block; width: 120px; height: auto; margin: 0 auto 6px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .brand-full { background: #f6f5f5; border-radius: 12px; padding: 6px; } }
+
+/* Billing assistant */
+.asst { margin-bottom: 16px; border-color: var(--line-2); }
+.asst-note { font-size: .82rem; }
+.asst-row { display: flex; gap: 8px; }
+.asst-row input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: 7px; background: var(--surface); }
+.asst-ex { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.asst-ex .filter { font-size: .8rem; text-align: left; }
+.asst-out { margin-top: 12px; padding: 12px 14px; border-radius: 8px; background: var(--primary-soft); font-size: .92rem; }
+.asst-steps { list-style: none; margin: 0 0 8px; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: .8rem; }
+.asst-steps li::before { content: "✓ "; color: var(--good); }
+.asst-text { margin-bottom: 8px; }
+.asst-actions { list-style: none; margin: 0 0 10px; padding: 0; }
+.asst-actions li { display: flex; gap: 8px; align-items: flex-start; padding: 7px 0; border-top: 1px solid var(--line); }
+.asst-actions input { margin-top: 4px; }
+.asst-actions .tag { flex: none; margin-top: 2px; }
+.spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line-2); border-top-color: var(--primary); border-radius: 50%; vertical-align: -1px; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+@media (max-width: 520px) { .asst-row { flex-direction: column; } }
+
+/* PayPal Checkout on the family page */
+.pay-now { margin: 12px 0 18px; }
+.pay-now .or { text-align: center; color: var(--muted); font-size: .85rem; margin: 14px 0 0; }
+#paypal-buttons { margin-top: 10px; min-height: 45px; }

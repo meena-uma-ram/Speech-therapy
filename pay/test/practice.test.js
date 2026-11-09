@@ -126,3 +126,82 @@ test('reminders go in order even if several are overdue', async () => {
   assert.equal(liam.reminder_count, 2);
   assert.match(liam.last_reminder, /still unpaid/);
 });
+
+// ---------- billing assistant ----------
+test('assistant without AI: "chase anyone more than two weeks late" proposes only Liam, and nothing is sent before approval', async () => {
+  const { D, P, calls } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Who owes me money? Chase anyone more than two weeks late.' });
+  assert.equal(plan.by_ai, false);
+  assert.deepEqual(plan.actions.map((a) => [a.type, D.invoices.find((i) => i.id === a.id).patient_id]), [['reminder', 'p_liam']]);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 0);
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] });
+  assert.deepEqual(st.results.map((r) => r.ok), [true]);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 1);
+  assert.equal(inv(D, 'p_liam').reminder_count, 2);
+  await assert.rejects(P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] }), /already been handled/);
+});
+
+test('assistant without AI: "invoice everything" proposes Arjun and Amara, and approval sends through PayPal', async () => {
+  const { D, P, calls } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Invoice everything that’s waiting' });
+  assert.deepEqual(plan.actions.map((a) => [a.type, a.id]).sort(), [['invoice', 'p_amara'], ['invoice', 'p_arjun']]);
+  const before = calls.filter((c) => c[0] === 'send').length;
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1, 2] });
+  assert.ok(st.results.every((r) => r.ok));
+  assert.equal(calls.filter((c) => c[0] === 'send').length, before + 2);
+  assert.equal(D.sessions.filter((s) => ['p_arjun', 'p_amara'].includes(s.patient_id) && !s.invoice_id).length, 0);
+});
+
+test('assistant with AI: invalid proposals are refused, and every action is checked again at approval', async () => {
+  let seen = [];
+  const fakeAi = {
+    async assistant({ tools, run }) {
+      assert.ok(tools.every((t) => t.strict && t.input_schema.additionalProperties === false));
+      const open = await run('list_unpaid_invoices', {});
+      const paid = (await run('list_patients', {})).find((p) => p.known_as === 'Arjun');
+      seen = open.map((o) => o.patient);
+      await assert.rejects(run('propose_action', { type: 'reminder', id: 'inv_nope', reason: 'x' }), /No invoice/);
+      await assert.rejects(run('propose_action', { type: 'invoice', id: 'p_zara', reason: 'x' }), /no sessions waiting/);
+      for (const o of open) await run('propose_action', { type: 'reminder', id: o.invoice_id, reason: 'late' });
+      assert.equal((await run('propose_action', { type: 'reminder', id: open[0].invoice_id, reason: 'again' })).added, false);
+      assert.ok(paid);
+      return { text: 'Three invoices are unpaid. I proposed reminders 1 to 3.' };
+    },
+  };
+  const { D, P, pp, calls } = await fresh(fakeAi);
+  const { plan } = await P.handle(D, 'assistant', { request: 'chase everyone' });
+  assert.equal(plan.by_ai, true);
+  assert.deepEqual(seen.sort(), ['Freya', 'Liam', 'Tomás']);
+  assert.equal(plan.actions.length, 3);
+  // Freya pays through PayPal before the therapist approves: her reminder must not go out.
+  const freya = inv(D, 'p_freya', 'SENT');
+  await pp.simulatePay(freya.paypal_id);
+  await P.handle(D, 'invoices/' + freya.id + '/refresh', {});
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: plan.actions.map((a) => a.n) });
+  const fr = st.results.find((r) => plan.actions.find((a) => a.n === r.n).id === freya.id);
+  assert.equal(fr.ok, false); assert.match(fr.text, /already paid/);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 2);
+});
+
+test('assistant falls back to the rules when the AI fails', async () => {
+  const { D, P } = await fresh({ assistant: async () => { throw new Error('daily AI limit reached'); } });
+  const { plan } = await P.handle(D, 'assistant', { request: 'chase anyone late' });
+  assert.equal(plan.by_ai, false);
+  assert.ok(plan.steps.some((s) => /AI unavailable/.test(s)));
+  assert.ok(plan.actions.length >= 1);
+});
+
+// ---------- PayPal Checkout on the family page ----------
+test('checkout: the family pays the amount owed, recorded on the PayPal invoice as a PayPal payment', async () => {
+  const { D, P, calls } = await fresh();
+  const i = inv(D, 'p_liam', 'SENT');
+  const o = await P.checkoutStart(D, i.id);
+  await assert.rejects(P.checkoutFinish(D, i.id, 'SOME-OTHER-ORDER'), /could not be matched/);
+  const r = await P.checkoutFinish(D, i.id, o.id);
+  assert.equal(r.paid, '£135.00');
+  assert.equal(i.status, 'PAID');
+  assert.deepEqual(calls.filter((c) => c[0] === 'record').pop(), ['record', i.paypal_id, 'paypal', 13500]);
+  await P.handle(D, 'invoices/' + i.id + '/refresh', {}); // the hourly check must not count it twice
+  assert.equal(i.paid_pence, 13500);
+  await assert.rejects(P.checkoutStart(D, i.id), /already settled/);
+});

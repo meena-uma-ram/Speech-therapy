@@ -3,7 +3,7 @@
 // PAYPAL_MODE=mock simulates PayPal for local testing; the submitted demo uses the real sandbox.
 const BASE = { sandbox: 'https://api-m.sandbox.paypal.com', live: 'https://api-m.paypal.com' };
 const pounds = (p) => (p / 100).toFixed(2);
-const METHOD = { bank: 'BANK_TRANSFER', cash: 'CASH', cheque: 'CHECK', other: 'OTHER' };
+const METHOD = { bank: 'BANK_TRANSFER', cash: 'CASH', cheque: 'CHECK', paypal: 'PAYPAL', other: 'OTHER' };
 
 export function paypal(env, D) {
   const mode = env.PAYPAL_MODE || 'sandbox';
@@ -62,6 +62,20 @@ export function paypal(env, D) {
       const paid = i.payments?.paid_amount?.value;
       return { status: i.status, paid_pence: paid ? Math.round(parseFloat(paid) * 100) : 0 };
     },
+    // PayPal Checkout (Orders v2): the family pays the amount owed straight from the family page.
+    async createOrder({ invoiceId, pence, description, brand }) {
+      const o = await call('POST', '/v2/checkout/orders', {
+        intent: 'CAPTURE',
+        purchase_units: [{ reference_id: invoiceId, custom_id: invoiceId, description: description.slice(0, 127), amount: { currency_code: currency, value: pounds(pence) } }],
+        application_context: { brand_name: (brand || '').slice(0, 127) || undefined, shipping_preference: 'NO_SHIPPING', user_action: 'PAY_NOW' },
+      }, { Prefer: 'return=minimal' });
+      return { id: o.id };
+    },
+    async captureOrder(orderId) {
+      const o = await call('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/capture`, {}, { 'PayPal-Request-Id': 'capture-' + orderId, Prefer: 'return=representation' });
+      const u = o.purchase_units?.[0] || {}, cap = u.payments?.captures?.[0] || {};
+      return { status: o.status === 'COMPLETED' && cap.status === 'COMPLETED' ? 'COMPLETED' : (cap.status || o.status), custom_id: cap.custom_id || u.custom_id || u.reference_id, capture_id: cap.id || null, pence: cap.amount && cap.amount.currency_code === currency ? Math.round(parseFloat(cap.amount.value) * 100) : 0 };
+    },
     async verifyWebhook(headers, event) {
       if (!env.PAYPAL_WEBHOOK_ID) return false;
       const r = await call('POST', '/v1/notifications/verify-webhook-signature', {
@@ -84,6 +98,8 @@ export function mockPaypal(D) {
     async recordPayment(id, { pence }) { const x = store[id]; if (!x) return; x.paid += pence; x.status = x.paid >= x.total ? 'MARKED_AS_PAID' : 'PARTIALLY_PAID'; },
     async get(id) { const x = store[id] || { status: 'SENT', paid: 0 }; return { status: x.status, paid_pence: x.paid }; },
     async verifyWebhook() { return true; },
+    async createOrder({ invoiceId, pence }) { const id = 'MOCK-ORDER-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { order: true, invoiceId, pence }; return { id }; },
+    async captureOrder(id) { const o = store[id]; if (!o || !o.order) throw new Error('Order not found'); if (o.captured) return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; o.captured = 'MOCK-CAP-' + id.slice(-8); return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; },
     async simulatePay(id) { const x = store[id]; if (x) { x.paid = x.total; x.status = 'PAID'; } },
   };
 }

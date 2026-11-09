@@ -41,11 +41,23 @@ async function checkLink(env, id, token) {
   return diff === 0;
 }
 
+// A cap on AI requests per day (UTC), so a public demo link can't run up the Anthropic bill.
+// When it is reached, every AI job falls back to standard wording and rules.
+function aiGuard(env, D) {
+  const limit = parseInt(env.AI_DAILY_LIMIT || '150', 10);
+  return () => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (!D.ai_usage || D.ai_usage.day !== day) D.ai_usage = { day, requests: 0 };
+    if (D.ai_usage.requests >= limit) throw new Error('daily AI limit reached');
+    D.ai_usage.requests += 1;
+  };
+}
+
 function practiceFor(env, D) {
   const origin = env.PUBLIC_URL || D.origin || '';
   return makePractice({
     paypal: paypal(env, D),
-    ai: claude(env),
+    ai: claude(env, aiGuard(env, D)),
     linkFor: async (id) => `${origin}/paid#i=${id}&t=${await sign(env, id)}`,
   });
 }
@@ -84,7 +96,20 @@ async function handleApi(req, env, url) {
     if (!(await checkLink(env, id, url.searchParams.get('t')))) return fail('This link is not valid.', 404);
     const { D } = await load(env);
     const f = D.settings && practiceFor(env, D).family(D, id);
-    return f ? json(f) : fail('This link is not valid.', 404);
+    if (!f) return fail('This link is not valid.', 404);
+    // PayPal Checkout buttons: the client ID is public by design; the secret never leaves the Worker.
+    if (!f.paid) f.checkout = modeOf(env) === 'mock' ? { mock: true } : env.PAYPAL_CLIENT_ID ? { client_id: env.PAYPAL_CLIENT_ID, currency: env.CURRENCY || 'GBP' } : null;
+    return json(f);
+  }
+  if (path === '/api/public/checkout/create' && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.i, b.t))) return fail('This link is not valid.', 404);
+    return json(await withPractice(env, (P, D) => P.checkoutStart(D, b.i)));
+  }
+  if (path === '/api/public/checkout/capture' && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.i, b.t)) || typeof b.order_id !== 'string') return fail('This link is not valid.', 404);
+    return json(await withPractice(env, (P, D) => P.checkoutFinish(D, b.i, b.order_id)));
   }
   if (path === '/api/public/claim' && method === 'POST') {
     const b = await body(req);
@@ -109,7 +134,14 @@ export default {
       try { return await handleApi(req, env, url); }
       catch (e) { console.error(e); return fail(e.message || 'Something went wrong.', 500); }
     }
-    return env.ASSETS.fetch(req);
+    const res = await env.ASSETS.fetch(req);
+    // The family page loads PayPal's Checkout buttons, so it allows PayPal's domains. Every other page stays 'self' only.
+    if (url.pathname === '/paid' || url.pathname === '/paid.html') {
+      const out = new Response(res.body, res);
+      out.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' https://*.paypal.com https://*.paypalobjects.com; connect-src 'self' https://*.paypal.com; frame-src https://*.paypal.com; img-src 'self' data: https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+      return out;
+    }
+    return res;
   },
   // Every hour: check PayPal for payments (so the webhook is optional). At 09:00 UTC: send reminders that are due.
   async scheduled(event, env, ctx) {

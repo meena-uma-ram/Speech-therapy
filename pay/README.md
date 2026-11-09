@@ -12,19 +12,38 @@ Small practices lose hours a month to billing: invoices, checking who has paid, 
 
 | | |
 |---|---|
+| **Billing assistant** | Ask in plain words: *"Who owes me money? Chase anyone more than two weeks late."* An AI agent looks up the invoices, **checks each one with PayPal live**, and proposes numbered actions (reminders, invoices, drafts to send, payments to confirm). The therapist ticks and approves; the billing code checks each action again and does it. |
 | **Overview** | One list of what needs the therapist: drafts to send, sessions to invoice, and payments families say they've made. Plus every unpaid invoice with its next reminder. |
 | **Patients** | Filter by *to invoice, waiting, overdue, paid up*. Each patient has sessions, invoices and payments. Flexible names ("known as"), several caregivers, and who pays (family, school, local authority, charity). |
 | **Billing types** | Per session, monthly statement, or prepaid blocks. When a block reaches the session the clinic chooses (e.g. 8 of 10), the next block's invoice goes out automatically. |
 | **PayPal invoices** | Every invoice is created and sent with the PayPal Invoicing API, in GBP. Families and funders pay by PayPal or card. |
 | **Payments arrive by themselves** | A PayPal webhook, plus an hourly check, marks invoices paid as soon as PayPal has the money. |
 | **Reminders** | Sent through PayPal on the days the clinic sets (3, 7 and 14 by default), one at a time and in order. The wording is editable for everyone in Settings, or for one invoice before it goes. |
-| **Paid another way** | Every invoice and reminder links to a signed page where the family says they paid by bank transfer or cash. The therapist confirms it, and the payment is recorded on the PayPal invoice, so PayPal holds the complete record. |
+| **Pay now on the family page** | Every invoice and reminder links to a signed family page with **PayPal Checkout** buttons (PayPal, card, and whatever PayPal offers the family). The payment is captured server-side for exactly the amount owed and recorded on the PayPal invoice. |
+| **Paid another way** | The same page lets the family say they paid by bank transfer or cash instead. The therapist confirms it, and the payment is recorded on the PayPal invoice, so PayPal holds the complete record. |
 | **Record a payment in plain words** | "Liam paid 135 cash" → the right invoice, split across invoices if needed, with any overpayment kept as credit. |
 | **Finances** | Profit for the month (paid in, estimated PayPal fees, expenses), work done by service as a pie chart, who paid and how, plus a CSV for the accountant. |
 
 ## How AI is used (Anthropic Claude)
 
-`src/ai.js` gives the AI three small jobs, each with a safe fallback:
+`src/ai.js` uses the official Anthropic SDK (`@anthropic-ai/sdk`). The AI has one agent and three small jobs, each with a safe fallback.
+
+### The billing assistant (an agent with tools)
+
+The therapist asks in plain words. Claude (`AGENT_MODEL`, Claude Opus 5.5 by default) runs a tool-use loop over tools that the billing code defines and runs (`src/practice.js`, *the billing assistant*):
+
+| Tool | What it does |
+|---|---|
+| `list_unpaid_invoices` | Unpaid invoices: who, who pays, owed, days late, reminders sent, whether the family says they paid another way |
+| `check_paypal` | Asks the PayPal Invoicing API right now whether invoices are paid, and records any payment found |
+| `list_patients` | Billing facts only: billing type, payer, sessions waiting to be invoiced, owed, credit |
+| `list_reported_payments` | Bank transfers and cash that families reported, waiting to be confirmed |
+| `month_summary` | Paid in, PayPal fees, expenses, profit for a month |
+| `propose_action` | Adds a numbered proposal to the plan: `reminder`, `invoice`, `send_draft` or `confirm_payment`. It does **not** do it. |
+
+The agent is told to check PayPal before proposing a reminder, so nobody who has just paid is chased. The screen shows what it checked, its answer, and the proposals with tick boxes. **Approve selected** runs each one through the same tested code as the buttons, after checking it again (an invoice paid in the meantime is skipped). Tools use strict schemas; the request uses Anthropic's server-side refusal fallback. Without an AI key, past the daily limit, or on any AI error, the same tools are driven by built-in rules.
+
+### Three small jobs (`AI_MODEL`, Claude Haiku 5.5)
 
 1. **Writes the message on each invoice:** a short, friendly note for families, and businesslike wording for councils and schools.
 2. **Reads payments typed in plain words.** It extracts who, how much, how and the reference. It may only choose a patient that exists.
@@ -33,12 +52,13 @@ Small practices lose hours a month to billing: invoices, checking who has paid, 
 **Design rules:**
 - **The AI writes and reads words only.** Every amount, split, credit and date is plain, tested code (`src/practice.js`, `test/practice.test.js`).
 - **The AI never sees clinical information:** billing facts only, never notes, goals or diagnoses.
-- **Nothing is sent without a human.** Invoices are drafted for review. Reminders use the clinic's own wording.
+- **Nothing is sent without a human.** The assistant only proposes; the therapist approves. Invoices are drafted for review. Reminders use the clinic's own wording.
+- **A daily cap.** `AI_DAILY_LIMIT` (150 requests a day by default) stops a public demo link from running up the AI bill. Past it, the built-in rules and standard wording take over.
 - **If the AI is unavailable,** standard wording and rule-based reading take over, so billing never stops.
 
 ## How PayPal is used
 
-All calls are made server-side in the Worker (`src/paypal.js`). Credentials never reach the browser.
+All calls are made server-side in the Worker (`src/paypal.js`). The secret never reaches the browser; the Checkout buttons use only the public client ID.
 
 | Purpose | Endpoint |
 |---|---|
@@ -48,6 +68,7 @@ All calls are made server-side in the Worker (`src/paypal.js`). Credentials neve
 | Send reminder | `POST /v2/invoicing/invoices/{id}/remind` |
 | Record bank transfer, cash or cheque | `POST /v2/invoicing/invoices/{id}/payments` |
 | Check status and amount paid | `GET /v2/invoicing/invoices/{id}` |
+| Family pays now (PayPal Checkout) | `POST /v2/checkout/orders`, `POST /v2/checkout/orders/{id}/capture`, PayPal JS SDK buttons |
 | Verify webhooks | `POST /v1/notifications/verify-webhook-signature` |
 | Webhook events | `INVOICING.INVOICE.PAID`, `.UPDATED`, `.CANCELLED` |
 
@@ -55,11 +76,11 @@ All calls are made server-side in the Worker (`src/paypal.js`). Credentials neve
 
 ```
 Therapist screen (public/)          Family page (public/paid.html, signed link)
-          │                                   │
-          ▼                                   ▼
-   Cloudflare Worker (src/index.js) ──► Claude API (words only)
-     │  secrets stay here        ▲
-     ├──► PayPal Invoicing API   │ webhook: invoice paid
+          │                           │  PayPal Checkout buttons
+          ▼                           ▼
+   Cloudflare Worker (src/index.js) ──► Claude API: billing assistant (tools) + wording
+     │  secrets stay here
+     ├──► PayPal Invoicing + Orders APIs  ◄── webhook: invoice paid
      ├──► Cloudflare D1: the practice's billing data, versioned
      └──► Cron, hourly: check PayPal for payments. 09:00 UTC: send due reminders
 ```
@@ -100,10 +121,12 @@ In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypa
 ```bash
 npm run db:local
 npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 13 tests for the billing logic
+npm test             # 18 tests: billing logic, the assistant's checks, Checkout
 ```
 
 ## Try the demo
+
+**Judges and reviewers:** start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
 
 Six made-up patients cover every case:
 

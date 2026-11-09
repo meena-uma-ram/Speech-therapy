@@ -3,7 +3,7 @@
 (function () {
   'use strict';
   let S = null, M = null;
-  const V = { tab: 'week', filter: 'all', patient: null, month: null };
+  const V = { tab: 'week', filter: 'all', patient: null, month: null, ask: '', plan: null, busy: false, results: null };
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const gbp = (p) => (p < 0 ? '−' : '') + '£' + (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -93,7 +93,7 @@
     return esc(c.name) + (c.relation ? ` <span class="muted">(${esc(c.relation.toLowerCase())})</span>` : '');
   }
   function blockInfo(p) {
-    const blocks = S.invoices.filter((i) => i.patient_id === p.id && i.kind === 'block').sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const blocks = S.invoices.filter((i) => i.patient_id === p.id && i.kind === 'block').sort((a, b) => a.created_at.localeCompare(b.created_at) || (parseInt(a.period.replace(/\D+/g, ''), 10) || 0) - (parseInt(b.period.replace(/\D+/g, ''), 10) || 0));
     const used = (b) => S.sessions.filter((s) => s.invoice_id === b.id).length;
     const cur = blocks.find((b) => used(b) < b.block_size) || blocks[blocks.length - 1];
     if (!cur) return '';
@@ -152,6 +152,7 @@
     const monthIn = S.payments.filter((p) => p.date.slice(0, 7) === ym).reduce((t, p) => t + p.pence, 0);
     const owed = open.reduce((t, i) => t + outstanding(i), 0), late = open.filter(isLate).reduce((t, i) => t + outstanding(i), 0);
     return `<div class="page-h"><h1>Overview</h1><span class="muted">${new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span></div>
+    ${assistantView()}
     <div class="two-col"><div>
       <section class="panel" aria-labelledby="h-todo"><div class="panel-h"><h2 id="h-todo">To do</h2><span class="muted">${needs.length}</span></div>
         ${needs.length ? `<ul class="rows">${needs.map((n) => `<li class="todo"><div>${n.html}</div><div class="actions">${n.actions}</div></li>`).join('')}</ul>` : '<p class="empty">Nothing to do.</p>'}</section>
@@ -176,6 +177,50 @@
         <div id="pw-out" aria-live="polite"></div></div></section>
       <section class="panel"><div class="panel-b"><p class="muted" style="font-size:.85rem">Reminders go out automatically each morning. To send any that are due right now:</p><div class="actions" style="margin-top:8px"><button class="btn small line" data-act="reminders">Send due reminders</button></div></div></section>
     </aside></div>`;
+  }
+
+  // ----- the billing assistant -----
+  const EXAMPLES = ['Who owes me money? Chase anyone more than two weeks late.', 'Invoice everything that’s waiting.', 'Has anyone paid since yesterday?', 'How is this month going?'];
+  function assistantView() {
+    const P = V.plan;
+    let out = '';
+    if (V.busy) out = `<div class="asst-out"><p class="muted"><span class="spin" aria-hidden="true"></span> Looking at your invoices and checking PayPal…</p></div>`;
+    else if (P) {
+      const done = P.status === 'done' || V.results;
+      const res = (n) => (V.results || []).find((r) => r.n === n);
+      out = `<div class="asst-out">
+        ${P.steps.length ? `<ul class="asst-steps">${P.steps.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+        <p class="asst-text">${esc(P.text).replace(/\n+/g, '<br>')}</p>
+        ${P.actions.length ? `<ol class="asst-actions">${P.actions.map((a) => { const r = res(a.n); return `<li>
+          ${done ? `<span class="tag ${r ? (r.ok ? 'paid' : 'late') : ''}">${r ? (r.ok ? 'Done' : 'Not done') : 'Skipped'}</span>` : `<input type="checkbox" id="aa-${a.n}" data-n="${a.n}" checked>`}
+          <label for="aa-${a.n}"><b>${a.n}.</b> ${esc(a.summary)}${a.reason ? `<span class="muted"> · ${esc(a.reason)}</span>` : ''}${r && !r.ok ? `<span class="muted"> · ${esc(r.text)}</span>` : ''}</label></li>`; }).join('')}</ol>
+          ${done ? '' : `<div class="actions"><button class="btn small" data-act="approve">Approve selected</button><button class="btn small line" data-act="dismiss">Dismiss</button><span class="muted asst-note">Nothing is sent until you approve.</span></div>`}` : ''}
+        ${!P.by_ai ? '<p class="muted asst-note">Answered with the built-in rules (AI not used).</p>' : ''}
+      </div>`;
+    }
+    return `<section class="panel asst" aria-labelledby="h-asst"><div class="panel-h"><h2 id="h-asst">Billing assistant</h2><span class="muted asst-note">${S.ai ? 'AI plans, you approve' : 'Built-in rules'}</span></div><div class="panel-b">
+      <form id="asst-f" class="asst-row"><label class="sr" for="asst-q">Ask the billing assistant</label>
+        <input id="asst-q" maxlength="600" autocomplete="off" placeholder="${esc(EXAMPLES[0])}" value="${esc(V.ask)}">
+        <button class="btn" type="submit"${V.busy ? ' disabled' : ''}>Ask</button></form>
+      <div class="asst-ex">${EXAMPLES.map((e) => `<button class="filter" type="button" data-act="ask-ex" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+      ${out}</div></section>`;
+  }
+  async function ask(q) {
+    q = String(q || '').trim();
+    if (!q) return toast('Type a question first.', true);
+    V.ask = q; V.busy = true; V.plan = null; V.results = null; render();
+    try { const d = await window.TJSPayAPI('assistant', { request: q }); V.plan = d.plan; S = await window.TJSPayAPI('state'); }
+    catch (e) { toast(e.message, true); }
+    finally { V.busy = false; render(); }
+  }
+  async function approve(btn) {
+    const numbers = [...document.querySelectorAll('.asst-actions input[type=checkbox]:checked')].map((c) => Number(c.dataset.n));
+    if (!numbers.length) return toast('Tick at least one action, or press Dismiss.', true);
+    await act(btn, 'assistant/approve', { plan_id: V.plan.id, numbers }, (d) => {
+      V.results = d.results; V.plan.status = 'done';
+      const ok = d.results.filter((r) => r.ok).length;
+      toast(ok === d.results.length ? `${count(ok, 'action', 'actions')} done.` : `${ok} of ${d.results.length} done. See the notes.`, ok !== d.results.length);
+    });
   }
 
   // ----- patients -----
@@ -448,6 +493,9 @@
       case 'reject': act(b, `claims/${id}/reject`, {}, () => toast('Marked as not received.')); break;
       case 'reminders': act(b, 'reminders', {}, (d) => toast(d.sent ? `${count(d.sent, 'reminder', 'reminders')} sent.` : 'No reminders due.')); break;
       case 'parse': parse(b); break;
+      case 'ask-ex': ask(b.dataset.q); break;
+      case 'approve': approve(b); break;
+      case 'dismiss': V.plan = null; V.results = null; render(); break;
       case 'log': act(b, 'sessions', { patient_id: id, date: $('ls-date').value, service_id: $('ls-svc').value, where: $('ls-where').value }, () => toast('Logged.')); break;
       case 'add-patient': openAddPatient(); break;
       case 'month': { const [y, m] = V.month.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + Number(id), 1)); V.month = d.toISOString().slice(0, 7); M = null; render(); break; }
@@ -462,6 +510,9 @@
       case 'seed': if (window.confirm('Reset the demo data?')) act(b, 'seed', {}, () => { M = null; V.patient = null; V.tab = 'week'; toast('Demo data reset.'); }); break;
     }
   });
+
+  document.addEventListener('submit', (ev) => { if (ev.target.id === 'asst-f') { ev.preventDefault(); ask($('asst-q').value); } });
+  document.addEventListener('input', (ev) => { if (ev.target.id === 'asst-q') V.ask = ev.target.value; });
 
   (async function start() {
     try { S = await window.TJSPayAPI('state'); V.month = S.today.slice(0, 7); render(); }

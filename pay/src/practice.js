@@ -122,7 +122,9 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   }
 
   // ---------- billing ----------
-  const blocks = (D, pid) => D.invoices.filter((i) => i.patient_id === pid && i.kind === 'block' && i.status !== 'CANCELLED').sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const blockNo = (i) => parseInt(String(i.period).replace(/\D+/g, ''), 10) || 0;
+  // Oldest first. Two blocks can be created in the same millisecond, so the block number breaks ties.
+  const blocks = (D, pid) => D.invoices.filter((i) => i.patient_id === pid && i.kind === 'block' && i.status !== 'CANCELLED').sort((a, b) => a.created_at.localeCompare(b.created_at) || blockNo(a) - blockNo(b));
   const usedIn = (D, b) => D.sessions.filter((s) => s.invoice_id === b.id).length;
   const blockPrice = (D, p) => Math.round(svc(D, p.service_id).price_pence * D.settings.block_size * (100 - D.settings.block_discount) / 100);
   async function makeInvoice(D, p, { kind, period, items, sessionIds = [], blockSize, words }) {
@@ -292,7 +294,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   }
 
   // ---------- what the screen sends ----------
-  const state = (D, mode) => ({ mode, today: today(), ...D, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
+  const state = (D, mode) => ({ mode, today: today(), ...D, mock_paypal: undefined, plans: undefined, ai_usage: undefined, ai: !!ai, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
 
   async function handle(D, path, b = {}, mode) {
     const p = path.split('/');
@@ -346,6 +348,10 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
         } else throw new Error('Not found');
         return state(D, mode);
       }
+      case 'assistant': {
+        if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
+        return { plan: await assistant(D, b.request) };
+      }
       case 'reminders': { const sent = await reminders(D); const st = state(D, mode); st.sent = sent; return st; }
       case 'expenses': {
         if (p[1] === 'delete') { D.expenses = D.expenses.filter((e) => e.id !== b.id); return finances(D, b.month); }
@@ -366,6 +372,190 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       }
     }
     throw new Error('Not found');
+  }
+
+  // ---------- the billing assistant ----------
+  // The AI plans; this code checks and does. Read tools return billing facts only. propose_action only
+  // adds a numbered proposal to the plan; each one is checked again and run only when the therapist approves it.
+  const daysLate = (i) => i.due_date && i.due_date < today() ? daysBetween(i.due_date, today()) : 0;
+  const ACTIONS = ['reminder', 'invoice', 'send_draft', 'confirm_payment'];
+  function checkAction(D, a) {
+    if (a.type === 'reminder') {
+      const i = inv(D, a.id);
+      if (!i) return { error: 'No invoice with that id.' };
+      const p = pat(D, i.patient_id);
+      if (!isOpen(i)) return { error: `${p.known_as}, ${i.period} is already paid.` };
+      if (!i.paypal_id) return { error: 'That invoice has not been sent through PayPal yet.' };
+      if (i.last_reminder_at === today()) return { error: `${p.known_as}, ${i.period} was already reminded today.` };
+      const n = i.reminder_count + 1;
+      return { summary: `Send reminder ${n} to ${toName(i.to)} for ${p.known_as}, ${i.period} (${gbp(outstanding(i))} owed${daysLate(i) ? `, ${daysLate(i)} days late` : ''})`, patient_id: p.id };
+    }
+    if (a.type === 'send_draft') {
+      const i = inv(D, a.id);
+      if (!i || i.status !== 'DRAFT') return { error: 'No draft invoice with that id.' };
+      return { summary: `Send the draft invoice to ${toName(i.to)} for ${pat(D, i.patient_id).known_as}, ${i.period} (${gbp(i.total_pence)})`, patient_id: i.patient_id };
+    }
+    if (a.type === 'invoice') {
+      const p = pat(D, a.id);
+      if (!p) return { error: 'No patient with that id.' };
+      const waiting = D.sessions.filter((s) => s.patient_id === p.id && !s.invoice_id);
+      if (!waiting.length) return { error: `${p.known_as} has no sessions waiting to be invoiced.` };
+      if (D.invoices.some((i) => i.patient_id === p.id && i.status === 'DRAFT')) return { error: `${p.known_as} already has a draft. Propose send_draft instead.` };
+      return { summary: `Invoice ${p.known_as}'s ${waiting.length === 1 ? 'session' : `${waiting.length} sessions`} and send it through PayPal to ${toName(billTo(p))}`, patient_id: p.id };
+    }
+    if (a.type === 'confirm_payment') {
+      const c = D.claims.find((x) => x.id === a.id && x.status === 'pending');
+      if (!c) return { error: 'No reported payment with that id is waiting.' };
+      return { summary: `Mark ${gbp(c.amount_pence)} ${how(c.method)} for ${pat(D, c.patient_id).known_as} as received and record it on the PayPal invoice (check your bank first)`, patient_id: c.patient_id };
+    }
+    return { error: 'Unknown action.' };
+  }
+  async function doAction(D, a) {
+    if (a.type === 'reminder') return sendReminder(D, inv(D, a.id));
+    if (a.type === 'send_draft') return send(D, inv(D, a.id));
+    if (a.type === 'invoice') { const id = await draftFor(D, a.id); return send(D, inv(D, id)); }
+    if (a.type === 'confirm_payment') return confirm(D, a.id);
+  }
+
+  const TOOLS = [
+    { name: 'list_unpaid_invoices', description: 'Every invoice that has been sent and is not fully paid, as TJS Pay last knew it: who it is for, who pays, amount owed, dates, how many days late, reminders sent, and whether the family has said they paid another way. Run check_paypal first if you need up-to-the-minute status.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+    { name: 'check_paypal', description: 'Ask PayPal now whether these invoices have been paid. Any payment PayPal has taken is recorded straight away. Use it before proposing reminders so nobody who has paid is chased.', input_schema: { type: 'object', properties: { invoice_ids: { type: 'array', items: { type: 'string' }, description: 'Invoice ids from list_unpaid_invoices. Empty means every unpaid invoice.' } }, required: ['invoice_ids'], additionalProperties: false }, strict: true },
+    { name: 'list_patients', description: 'Billing facts for every patient: billing type, who pays, sessions waiting to be invoiced and their value, drafts, amount owed and credit. No clinical information.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+    { name: 'list_reported_payments', description: 'Payments families or the therapist reported outside PayPal (bank transfer, cash, cheque) that are waiting for the therapist to confirm they arrived.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
+    { name: 'month_summary', description: 'Money for one month: paid in, estimated PayPal fees, expenses, profit, sessions and hours, split by payer and payment method.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'], additionalProperties: false }, strict: true },
+    { name: 'propose_action', description: 'Add one action to the plan for the therapist to approve. Nothing happens until they approve it. reminder: id is an invoice id; sends the next reminder through PayPal. invoice: id is a patient id; invoices their waiting sessions and sends it through PayPal. send_draft: id is a draft invoice id. confirm_payment: id is a reported payment id. Each action is checked; an error explains why it was not added.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ACTIONS }, id: { type: 'string' }, reason: { type: 'string', description: 'One short sentence the therapist will see.' } }, required: ['type', 'id', 'reason'], additionalProperties: false }, strict: true },
+  ];
+  const STEP = { list_unpaid_invoices: 'Looked at unpaid invoices', check_paypal: 'Checked payment status with PayPal', list_patients: 'Looked at patients and sessions to invoice', list_reported_payments: 'Looked at payments families reported', month_summary: 'Added up the month' };
+
+  async function runTool(D, plan, name, input) {
+    if (name !== 'propose_action' && STEP[name] && !plan.steps.includes(STEP[name])) plan.steps.push(STEP[name]);
+    if (name === 'list_unpaid_invoices') return D.invoices.filter(isOpen).map((i) => { const p = pat(D, i.patient_id); return { invoice_id: i.id, patient: p.known_as, paid_by: i.to.org ? i.to.name : `${toName(i.to)} (family)`, period: i.period, owed: gbp(outstanding(i)), sent_on: i.sent_at, due_on: i.due_date, days_since_sent: daysBetween(i.sent_at, today()), days_late: daysLate(i), reminders_sent: i.reminder_count, last_reminder_on: i.last_reminder_at, family_says_paid_another_way: D.claims.some((c) => c.invoice_id === i.id && c.status === 'pending') }; });
+    if (name === 'check_paypal') {
+      const ids = Array.isArray(input.invoice_ids) && input.invoice_ids.length ? input.invoice_ids : D.invoices.filter((i) => isOpen(i) && i.paypal_id).map((i) => i.id);
+      const out = [];
+      for (const id of ids.slice(0, 20)) {
+        const i = inv(D, id); if (!i) { out.push({ invoice_id: id, error: 'not found' }); continue; }
+        const paidNow = isOpen(i) ? await refresh(D, i) : false;
+        out.push({ invoice_id: id, patient: pat(D, i.patient_id).known_as, period: i.period, paid_just_now: paidNow, still_owed: gbp(outstanding(i)), status: isOpen(i) ? 'unpaid' : 'paid' });
+      }
+      plan.checked = (plan.checked || 0) + out.length;
+      return out;
+    }
+    if (name === 'list_patients') return D.patients.map((p) => { const waiting = D.sessions.filter((s) => s.patient_id === p.id && !s.invoice_id); const open = D.invoices.filter((i) => i.patient_id === p.id && isOpen(i)); return { patient_id: p.id, known_as: p.known_as, billing: { session: 'after each session', monthly: 'monthly statement', block: 'prepaid blocks' }[p.plan], paid_by: p.payer.type === 'family' ? `${toName(billTo(p))} (family)` : p.payer.name, sessions_to_invoice: waiting.length, value_to_invoice: gbp(waiting.reduce((t, s) => t + s.price_pence, 0)), has_draft: D.invoices.some((i) => i.patient_id === p.id && i.status === 'DRAFT'), owed: gbp(open.reduce((t, i) => t + outstanding(i), 0)), credit: gbp(p.credit_pence) }; });
+    if (name === 'list_reported_payments') return D.claims.filter((c) => c.status === 'pending').map((c) => ({ payment_id: c.id, patient: pat(D, c.patient_id).known_as, amount: gbp(c.amount_pence), method: c.method, reference: c.reference, reported_by: c.source, invoice_id: c.invoice_id || null }));
+    if (name === 'month_summary') { const f = finances(D, /^\d{4}-\d{2}$/.test(input.month || '') ? input.month : today().slice(0, 7)); return { month: f.label, paid_in: gbp(f.paidIn), paypal_fees_estimate: gbp(f.fees), expenses: gbp(f.spent), profit: gbp(f.profit), sessions: f.sessionCount, hours: f.hours, by_payer: f.byPayer.map((x) => `${x.name}: ${gbp(x.pence)}`), by_method: f.byMethod.map((x) => `${x.name}: ${gbp(x.pence)}`) }; }
+    if (name === 'propose_action') {
+      const a = { type: input.type, id: String(input.id || '') };
+      if (plan.actions.some((x) => x.type === a.type && x.id === a.id)) return { added: false, error: 'Already in the plan.' };
+      if (plan.actions.length >= 12) return { added: false, error: 'The plan is full (12 actions).' };
+      const c = checkAction(D, a);
+      if (c.error) throw new Error(c.error);
+      plan.actions.push({ n: plan.actions.length + 1, ...a, summary: c.summary, reason: String(input.reason || '').slice(0, 200), patient_id: c.patient_id });
+      return { added: true, number: plan.actions.length, summary: c.summary };
+    }
+    throw new Error('Unknown tool.');
+  }
+
+  /** Without the AI (no key, daily limit reached, or an error): the same tools, driven by simple rules. */
+  async function assistantByRules(D, plan, request) {
+    const t = request.toLowerCase();
+    const all = !/remind|chase|owe|late|overdue|unpaid|invoice|bill|paid|confirm|month|profit/.test(t);
+    const propose = async (type, id, reason) => { try { await runTool(D, plan, 'propose_action', { type, id, reason }); } catch { /* not eligible: skip */ } };
+    const lines = [];
+    if (all || /remind|chase|owe|late|overdue|unpaid|paid/.test(t)) {
+      await runTool(D, plan, 'check_paypal', { invoice_ids: [] });
+      const open = await runTool(D, plan, 'list_unpaid_invoices', {});
+      const minLate = (t.match(/(\d+)\s*(day|week)/) || []).length ? parseInt(t.match(/(\d+)\s*(day|week)/)[1], 10) * (/week/.test(t) ? 7 : 1) : (/two weeks|fortnight/.test(t) ? 14 : 0);
+      lines.push(open.length ? `${open.length} invoice${open.length === 1 ? ' is' : 's are'} unpaid: ${open.map((o) => `${o.patient} ${o.owed}`).join(', ')}.` : 'Nobody owes you anything right now.');
+      if (all || /remind|chase/.test(t)) for (const o of open) if (!o.family_says_paid_another_way && (minLate ? o.days_since_sent >= minLate : o.days_late > 0)) await propose('reminder', o.invoice_id, `Sent ${o.days_since_sent} days ago; ${o.reminders_sent ? o.reminders_sent + ' reminder' + (o.reminders_sent === 1 ? '' : 's') + ' so far' : 'no reminders yet'}.`);
+    }
+    if (all || /invoice|bill/.test(t)) {
+      const ps = await runTool(D, plan, 'list_patients', {});
+      for (const p of ps) if (p.sessions_to_invoice && !p.has_draft) await propose('invoice', p.patient_id, `${p.sessions_to_invoice} session${p.sessions_to_invoice === 1 ? '' : 's'} waiting (${p.value_to_invoice}).`);
+      for (const i of D.invoices.filter((x) => x.status === 'DRAFT')) await propose('send_draft', i.id, 'Draft waiting to be sent.');
+    }
+    if (all || /confirm|paid/.test(t)) {
+      const r = await runTool(D, plan, 'list_reported_payments', {});
+      if (r.length) lines.push(`${r.length} payment${r.length === 1 ? '' : 's'} reported outside PayPal ${r.length === 1 ? 'is' : 'are'} waiting for you to check.`);
+    }
+    if (/month|profit/.test(t)) { const f = await runTool(D, plan, 'month_summary', { month: today().slice(0, 7) }); lines.push(`${f.month}: ${f.paid_in} paid in, ${f.profit} profit after fees and expenses.`); }
+    lines.push(plan.actions.length ? `I’ve proposed ${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} below. Nothing is sent until you approve.` : 'There’s nothing to do right now.');
+    return lines.join(' ');
+  }
+
+  async function assistant(D, request) {
+    request = String(request || '').trim().slice(0, 600);
+    if (!request) throw new Error('Ask the assistant something first.');
+    const plan = { id: uid('plan'), request, created_at: now(), steps: [], actions: [], text: '', by_ai: false, status: 'open' };
+    if (ai && ai.assistant) {
+      const s = D.settings;
+      const system = `You are the billing assistant inside TJS Pay for ${s.practice}, an independent speech and language therapy practice in the UK. The therapist is ${s.therapist}. Today is ${today()}.
+You help with money only: invoices, PayPal payments, reminders and payments made outside PayPal. You never see or discuss clinical information.
+How you work:
+- Look things up with the tools. Before proposing a reminder, run check_paypal so nobody who has already paid is chased.
+- You cannot send, charge or record anything yourself. Use propose_action for each thing that should happen; the therapist approves each one on screen.
+- Propose only what the request asks for. If someone says they paid another way, don't propose a reminder for that invoice; mention it instead.
+- Reminders follow the practice's own wording and schedule (days ${s.reminder_days.join(', ')} after sending). The "reason" is for the therapist, not the family.
+- Quote amounts exactly as the tools give them. Never invent amounts, dates or people.
+Then reply to the therapist in plain UK English: what you found and what you proposed, referring to proposals by number. At most 120 words, no tables, no headings, no emojis.`;
+      try {
+        const r = await ai.assistant({ system, request, tools: TOOLS, run: (name, input) => runTool(D, plan, name, input) });
+        plan.text = r.text || 'Done.'; plan.by_ai = true;
+      } catch (e) {
+        plan.steps.push(`AI unavailable (${String(e.message || e).slice(0, 80)}), so the built-in rules were used`);
+        plan.text = await assistantByRules(D, plan, request);
+      }
+    } else plan.text = await assistantByRules(D, plan, request);
+    D.plans = [plan, ...(D.plans || [])].slice(0, 5);
+    log(D, 'info', `Assistant: “${request.slice(0, 80)}”. ${plan.actions.length ? `${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} proposed.` : 'Nothing to approve.'}`);
+    return plan;
+  }
+
+  /** The therapist approves some or all of a plan. Each action is checked again, then done by the billing code. */
+  async function approve(D, planId, numbers) {
+    const plan = (D.plans || []).find((x) => x.id === planId);
+    if (!plan || plan.status !== 'open') throw new Error('This plan has already been handled. Ask the assistant again.');
+    const pick = new Set((Array.isArray(numbers) ? numbers : []).map(Number));
+    const results = [];
+    for (const a of plan.actions.filter((x) => pick.has(x.n))) {
+      const c = checkAction(D, a);
+      if (c.error) { results.push({ n: a.n, ok: false, text: c.error }); continue; }
+      try { await doAction(D, a); results.push({ n: a.n, ok: true, text: c.summary }); }
+      catch (e) { results.push({ n: a.n, ok: false, text: e.message }); log(D, 'error', `Assistant action failed: ${c.summary}: ${e.message}`, a.patient_id); }
+    }
+    plan.status = 'done'; plan.results = results;
+    if (results.length) log(D, 'info', `Approved ${results.filter((r) => r.ok).length} of ${plan.actions.length} assistant action${plan.actions.length === 1 ? '' : 's'}.`);
+    return results;
+  }
+
+  // ---------- PayPal Checkout on the family page ----------
+  async function checkoutStart(D, id) {
+    const i = inv(D, id);
+    if (!i || !isOpen(i)) throw new Error('This invoice is already settled. Thank you.');
+    if (!paypal.createOrder) throw new Error('Paying here is not available.');
+    const p = pat(D, i.patient_id), pence = outstanding(i);
+    const o = await paypal.createOrder({ invoiceId: i.id, pence, description: `${D.settings.practice}: ${p.known_as}, ${i.period}`, brand: D.settings.practice });
+    i.checkout = { order_id: o.id, pence, at: now() };
+    return { id: o.id };
+  }
+  async function checkoutFinish(D, id, orderId) {
+    const i = inv(D, id);
+    if (!i || !i.checkout || i.checkout.order_id !== orderId) throw new Error('This payment could not be matched to the invoice.');
+    const c = await paypal.captureOrder(orderId);
+    if (c.status !== 'COMPLETED' || c.custom_id !== i.id || !(c.pence > 0)) throw new Error('PayPal did not complete the payment.');
+    const p = pat(D, i.patient_id);
+    const toInvoice = Math.min(c.pence, outstanding(i)), extra = c.pence - toInvoice;
+    if (toInvoice > 0) {
+      if (i.paypal_id) {
+        try { await paypal.recordPayment(i.paypal_id, { method: 'paypal', pence: toInvoice, date: today(), note: `Paid with PayPal Checkout, capture ${c.capture_id}` }); }
+        catch (e) { log(D, 'error', `Paid with PayPal Checkout, but the PayPal invoice could not be updated: ${e.message}`, p.id); }
+      }
+      recordLocal(D, i, toInvoice, 'paypal', 'Checkout ' + c.capture_id);
+    }
+    if (extra > 0) p.credit_pence += extra;
+    i.checkout = null;
+    log(D, 'paid', `${toName(i.to)} paid ${gbp(c.pence)} for ${p.known_as}, ${i.period} with PayPal Checkout on the family page${extra ? `; ${gbp(extra)} kept as credit` : ''}.`, p.id);
+    return { paid: gbp(c.pence) };
   }
 
   // ---------- the family's "I paid another way" page ----------
@@ -395,5 +585,5 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     return changed;
   }
 
-  return { handle, family, familyClaim, syncAll, reminders, seed, state, _test: { allocate, toPence, parseByRules } };
+  return { handle, family, familyClaim, checkoutStart, checkoutFinish, syncAll, reminders, seed, state, _test: { allocate, toPence, parseByRules } };
 }
