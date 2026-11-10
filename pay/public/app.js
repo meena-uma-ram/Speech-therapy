@@ -128,7 +128,9 @@
       if (t.dataset.tab === 'week') t.innerHTML = 'Overview' + (needs ? `<span class="count">${needs}</span>` : '');
       if (t.dataset.tab === 'depts') t.innerHTML = 'Budgets and requests' + (asks ? `<span class="count">${asks}</span>` : '');
     });
-    $('demo-note').textContent = S.mode === 'review' ? 'Review copy: made-up patients, PayPal simulated in your browser. The real app uses the PayPal sandbox.' : S.mode === 'mock' ? 'Test mode: PayPal is simulated. Made-up patients only.' : 'PayPal sandbox demo: made-up patients, no real money.';
+    $('demo-note').innerHTML = S.clinic
+      ? (S.mode === 'live' ? '' : 'PayPal sandbox: test money only. Switch PAYPAL_MODE to live when you are ready.')
+      : `${S.mode === 'mock' ? 'Test mode: PayPal is simulated.' : 'Public demo: made-up hospital and patients, PayPal sandbox, no real money.'} <a href="/own">Use TJS Pay in your clinic</a> with your own PayPal account.`;
     const view = $('view');
     if (V.tab === 'week') view.innerHTML = weekView();
     if (V.tab === 'patients') view.innerHTML = V.patient ? patientView(pat(V.patient)) : patientsView();
@@ -284,7 +286,7 @@
     <section class="panel"><div class="panel-h"><h2>Spending logged by departments</h2></div>${B.spend.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Code</th><th>What</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${B.spend.slice(0, 20).map((x) => `<tr><td>${esc(day(x.date))}</td><td><span class="code">${esc(x.code)}</span></td><td>${esc(x.what)}</td><td>${esc(x.category)}</td><td class="num">${m(x.pence)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Nothing logged yet.</p>'}</section>
     <section class="panel"><div class="panel-h"><h2>Budgets and PayPal accounts</h2><button class="btn small" data-act="save-depts">Save</button></div>
       <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th>Budget ${esc(B.fy)} (£)</th><th>Department’s PayPal email</th></tr></thead><tbody>
-      ${S.departments.map((d) => `<tr data-dep="${esc(d.id)}"><td><span class="code">${esc(d.code)}</span></td><td>${esc(d.name)}</td><td><input class="bd" inputmode="decimal" value="${((d.budget_pence || 0) / 100).toFixed(0)}" aria-label="Budget for ${esc(d.code)}"></td><td><input class="em" type="email" value="${esc(d.payout_email || '')}" aria-label="PayPal email for ${esc(d.code)}"></td></tr>`).join('')}</tbody></table></div>
+      ${S.departments.map((d) => `<tr data-dep="${esc(d.id)}"><td><input class="cd" value="${esc(d.code)}" maxlength="12" aria-label="Code"></td><td><input class="nm" value="${esc(d.name)}" maxlength="60" aria-label="Department name"></td><td><input class="bd" inputmode="decimal" value="${((d.budget_pence || 0) / 100).toFixed(0)}" aria-label="Budget for ${esc(d.code)}"></td><td><input class="em" type="email" value="${esc(d.payout_email || '')}" aria-label="PayPal email for ${esc(d.code)}"></td></tr>`).join('')}</tbody></table></div>
       <p class="note">Departments need only a PayPal account that can receive money at this email; no PayPal app or keys. In the sandbox demo, every payout goes to the demo account so you can see it arrive.</p></section>`;
   }
 
@@ -568,7 +570,7 @@
         ${texts.map((t, k) => `<label>Reminder ${k + 1} <span class="muted">(day ${s.reminder_days[k]})</span><textarea data-reminder="${k}" maxlength="1200">${esc(t)}</textarea></label>`).join('')}
         <p class="muted chips">These fill in automatically: <code>{name}</code> the person paying, <code>{child}</code>, <code>{amount}</code>, <code>{period}</code>, <code>{practice}</code>. A “tell us you paid another way” link is added at the end. You can also change the next reminder for one invoice from Overview.</p></div></section>
     </div>
-    <div class="actions" data-mt16><button class="btn" data-act="save-settings">Save</button><button class="btn warn" data-act="seed">Reset demo data</button></div>`;
+    <div class="actions" data-mt16><button class="btn" data-act="save-settings">Save</button>${S.clinic ? '' : '<button class="btn warn" data-act="seed">Reset demo data</button>'}</div>`;
   }
 
   // ---------- dialogs ----------
@@ -700,7 +702,7 @@
       case 'ap-noshow': if (window.confirm('Mark as a no-show? A held deposit is kept as the no-show fee.')) act(b, `appointments/${id}/no-show`, {}, () => toast('Marked as a no-show.')); break;
       case 'ap-cancel': if (window.confirm('Cancel this appointment? A held deposit is released.')) act(b, `appointments/${id}/cancel`, {}, () => toast('Cancelled.')); break;
       case 'payout-refresh': act(b, 'payouts/refresh', {}, () => toast('Checked with PayPal.')); break;
-      case 'save-depts': act(b, 'departments/settings', { departments: [...document.querySelectorAll('[data-dep]')].map((r) => ({ id: r.dataset.dep, budget: r.querySelector('.bd').value, payout_email: r.querySelector('.em').value })) }, () => { toast('Saved.'); act(null, 'state'); }); break;
+      case 'save-depts': act(b, 'departments/settings', { departments: [...document.querySelectorAll('[data-dep]')].map((r) => ({ id: r.dataset.dep, code: r.querySelector('.cd').value, name: r.querySelector('.nm').value, budget: r.querySelector('.bd').value, payout_email: r.querySelector('.em').value })) }, () => { toast('Saved.'); act(null, 'state'); }); break;
       case 'rq-approve': { const r = DEP.requests.find((x) => x.id === id); const over = !!b.dataset.over;
         if (!window.confirm(over ? `This takes ${r.code} ${gbp(-r.left_after)} over its budget. Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal anyway?` : `Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal?`)) break;
         act(b, `requests/${id}/approve`, { over_budget: over }, () => toast('Sent with PayPal Payouts.')); break; }

@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Use TJS Pay in your clinic</title>
+  <meta name="referrer" content="no-referrer">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="pay.css">
+</head>
+<body>
+  <main class="own">
+    <p><a href="/">‹ Back to the demo</a></p>
+    <h1>Use TJS Pay in your clinic</h1>
+    <p class="lead">The demo runs on the developer’s test PayPal account. A clinic never uses that: <b>payments go to whichever PayPal account the copy is connected to</b>. So each clinic runs <b>its own copy</b>, connected to <b>its own PayPal account</b>, with its data in <b>its own database</b>. It’s free and open source (AGPL).</p>
+
+    <section class="panel"><div class="panel-h"><h2>What you need</h2></div><div class="panel-b"><ul>
+      <li>A <b>PayPal Business</b> account for the clinic (this is where patients’ payments arrive).</li>
+      <li>A free <b>Cloudflare</b> account (it runs the app and keeps your data).</li>
+      <li>A free <b>GitHub</b> account (Cloudflare copies the code there for you).</li>
+      <li>Optional: an <b>Anthropic</b> API key for the AI assistants. Without it, TJS Pay uses its built-in rules.</li>
+    </ul></div></section>
+
+    <section class="panel"><div class="panel-h"><h2>Five steps</h2></div><div class="panel-b"><ol class="steps">
+      <li><b>Get your PayPal keys.</b> At <span class="mono">developer.paypal.com</span> → Apps &amp; Credentials → <b>Sandbox</b> → Create app (type Merchant). Tick <b>Invoicing</b> and <b>Payouts</b>. Copy the Client ID and Secret. Start with Sandbox (test money); you can switch to Live later.</li>
+      <li><b>Deploy.</b> Click the button below and sign in to Cloudflare and GitHub.<br><a class="btn deploy" href="https://deploy.workers.cloudflare.com/?url=https://github.com/meena-uma-ram/Speech-therapy/tree/main/pay" rel="noopener">Deploy to Cloudflare</a></li>
+      <li><b>Enter your secrets</b> when Cloudflare asks: <span class="mono">PAYPAL_CLIENT_ID</span>, <span class="mono">PAYPAL_CLIENT_SECRET</span>, an <span class="mono">ADMIN_PASSCODE</span> your staff will type to open TJS Pay (required), a long random <span class="mono">LINK_SECRET</span>, and optionally <span class="mono">ANTHROPIC_API_KEY</span>. Set <span class="mono">PRACTICE_NAME</span> to your clinic’s name. If you aren’t asked, add them afterwards in Cloudflare: your Worker → Settings → Variables and Secrets.</li>
+      <li><b>Open your copy</b> (Cloudflare shows its address) and enter the passcode. It starts <b>empty</b>: rename the sample departments and set their budgets and PayPal emails (Finance → Budgets and requests), check service prices (Billing office → Settings), then add your patients.</li>
+      <li><b>Optional:</b> in your PayPal app add a webhook to <span class="mono">https://&lt;your-copy&gt;/api/paypal/webhook</span> for “Invoicing invoice paid, updated, cancelled” and “Payouts”, and save its ID as <span class="mono">PAYPAL_WEBHOOK_ID</span>. Payments then show up at once instead of within the hour.</li>
+    </ol></div></section>
+
+    <section class="panel"><div class="panel-h"><h2>Your copy is safe by default</h2></div><div class="panel-b"><ul>
+      <li>It needs the passcode before anyone sees patients or money.</li>
+      <li>Invoices go to your patients and payouts to your departments and suppliers. Nothing is redirected to a demo account.</li>
+      <li>Demo data can’t be loaded into it, and updates never erase your data.</li>
+      <li>Your keys are stored as Cloudflare secrets and never reach the browser.</li>
+    </ul></div></section>
+
+    <section class="panel"><div class="panel-h"><h2>Before real money</h2></div><div class="panel-b"><ul>
+      <li>Try everything with <b>Sandbox</b> keys first. For real payments, create a <b>Live</b> app in PayPal, use its keys, and set <span class="mono">PAYPAL_MODE</span> to <span class="mono">live</span>.</li>
+      <li>Have the setup checked for your country: a data processing agreement with Cloudflare (and Anthropic if you use the AI), your privacy notice, and a code review. TJS Pay stores billing data only, never diagnoses or session notes.</li>
+    </ul></div></section>
+    <p class="muted fs-85">TJS Pay is part of TJS, made by Meenakshi Ramesh, a speech-language therapist. Open source under the AGPL.</p>
+  </main>
+</body>
+</html>

@@ -293,3 +293,14 @@ details.done summary { padding: 10px 16px; cursor: pointer; color: var(--muted);
 .chk { display: flex !important; flex-direction: row !important; align-items: center; gap: 6px; font-size: .88rem !important; color: var(--text) !important; }
 .asst-ex .asst-note { align-self: center; margin-right: 2px; }
 .plan-parts > li { padding: 6px 0; } .ins-hint { color: var(--wait); }
+[data-dep] .cd { max-width: 100px; text-transform: uppercase; font-family: ui-monospace, Menlo, monospace; } .demo-note a, footer a { color: var(--primary); font-weight: 600; }
+
+/* Use it in your clinic */
+.own { max-width: 760px; }
+.own h1 { margin: 8px 0 10px; }
+.own .lead { margin-bottom: 16px; }
+.own ul, .own ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.own .panel { margin-top: 14px; }
+.own .deploy { display: inline-block; margin: 8px 0 4px; text-decoration: none; }
+.own a:not(.btn) { color: var(--primary); }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; background: var(--wait-soft); padding: 0 4px; border-radius: 4px; }

@@ -116,13 +116,30 @@ Therapist screen (public/)          Family page (public/paid.html, signed link)
 
 The billing logic (`src/practice.js`) is one module with PayPal and AI passed in. The Worker uses it with the real PayPal sandbox and Claude. The single-file review copy uses the same code with a simulated PayPal.
 
-## Run it
+## Use it in your clinic
+
+**Each clinic runs its own copy, connected to its own PayPal account.** Payments go to whichever PayPal account a copy is connected to, so a clinic must never use someone else's keys (including the demo's). Its data then stays in its own database.
+
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/meena-uma-ram/Speech-therapy/tree/main/pay)
+
+1. **PayPal:** at developer.paypal.com → Apps & Credentials → Sandbox → Create app (Merchant), tick **Invoicing** and **Payouts**, copy the Client ID and Secret. (Start with Sandbox; use a Live app and `PAYPAL_MODE=live` for real money.)
+2. **Deploy** with the button above (Cloudflare and GitHub accounts, both free). Cloudflare creates the database itself.
+3. **Secrets** (see `.dev.vars.example`): `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `ADMIN_PASSCODE` (required), `LINK_SECRET`, optional `ANTHROPIC_API_KEY` and `PAYPAL_WEBHOOK_ID`. Set `PRACTICE_NAME`.
+4. **Open your copy**, enter the passcode, and set it up: rename the sample departments, set budgets and PayPal emails, check prices, add patients.
+
+A clinic's copy (`CLINIC_MODE=clinic`, the default) is safe by default: it needs the passcode, starts empty, can't load demo data, keeps its data across updates, and never redirects invoices or payouts to a demo account. The same steps are in the app at **/own**.
+
+Before real money: try everything in Sandbox, then have the setup checked for your country (data processing agreements with Cloudflare and, if used, Anthropic; your privacy notice; a code review).
+
+## Run the public demo
+
+The public demo (`CLINIC_MODE=demo`) has a made-up hospital, is open to everyone, and sends every sandbox invoice and payout to one demo account.
 
 ### 1. PayPal sandbox
 
-1. At [developer.paypal.com](https://developer.paypal.com), go to **Testing tools → Sandbox accounts**. Create a **Business** account with country **United Kingdom** (the practice) and a **Personal** account (the families). Note the personal account's email and password.
+1. At [developer.paypal.com](https://developer.paypal.com), go to **Testing tools → Sandbox accounts**. Create a **Business** account with country **United Kingdom** (the hospital) and a **Personal** account (the families). Note the personal account's email and password.
 2. Go to **Apps & Credentials → Sandbox → Create app**, linked to the UK business account. Copy the client ID and secret.
-3. In the app's settings, make sure **Payouts** is ticked under features (needed to pay money requests).
+3. In the app's settings, make sure **Invoicing** and **Payouts** are ticked.
 
 ### 2. Deploy
 
@@ -130,29 +147,26 @@ The billing logic (`src/practice.js`) is one module with PayPal and AI passed in
 cd pay
 npm install
 npx wrangler login
-npx wrangler d1 create tjs-pay        # put the database_id in wrangler.jsonc
-npm run db:remote
 npx wrangler secret put PAYPAL_CLIENT_ID
 npx wrangler secret put PAYPAL_CLIENT_SECRET
-npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put ANTHROPIC_API_KEY      # optional
 npx wrangler secret put LINK_SECRET            # any long random string
 npx wrangler secret put DEMO_RECIPIENT_EMAIL   # the sandbox personal account email
-npx wrangler secret put DEMO_PAYOUT_EMAIL      # optional: where payouts go in the sandbox (defaults to the one above)
-npm run deploy
+npm run deploy:demo
 ```
 
-The first visit loads the demo practice and creates its unpaid invoices in the sandbox.
+The database is created on the first deploy. The first visit loads the demo hospital and creates its unpaid invoices in the sandbox.
 
 ### 3. Webhook (optional: the hourly check works without it)
 
-In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypal/webhook` for *Invoicing invoice paid / updated / cancelled*. Then run `npx wrangler secret put PAYPAL_WEBHOOK_ID`.
+In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypal/webhook` for *Invoicing invoice paid / updated / cancelled* and *Payouts*. Then run `npx wrangler secret put PAYPAL_WEBHOOK_ID`.
 
 ### Local testing
 
 ```bash
 npm run db:local
-npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 32 tests: billing logic, the assistants' checks and team separation, Checkout, check-in deposits and sliding scale, department budgets and requests
+npm run dev:mock     # demo mode, PayPal simulated: "Simulate PayPal payment" buttons appear
+npm test             # 34 tests: billing logic, the assistants' checks and team separation, Checkout, check-in deposits, insurance, partners, plans, budgets, a clinic's own copy
 ```
 
 ## Try the demo

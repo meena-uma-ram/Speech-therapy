@@ -10,6 +10,9 @@ export function paypal(env, D) {
   if (mode === 'mock') return mockPaypal(D);
   if (!env.PAYPAL_CLIENT_ID || !env.PAYPAL_CLIENT_SECRET) throw new Error('PayPal keys are missing. Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET as Worker secrets.');
   const base = BASE[mode] || BASE.sandbox, currency = env.CURRENCY || 'GBP';
+  // Only the public demo sends every invoice and payout to the demo sandbox account. A clinic's own copy never does.
+  const demo = env.CLINIC_MODE === 'demo';
+  const demoTo = demo ? env.DEMO_RECIPIENT_EMAIL : null, demoPayee = demo ? env.DEMO_PAYOUT_EMAIL || env.DEMO_RECIPIENT_EMAIL : null;
   let token = null;
   async function auth() {
     if (token && token.exp > Date.now()) return token.value;
@@ -38,8 +41,8 @@ export function paypal(env, D) {
     mode,
     async createAndSend({ invoice, to, practice, note, subject, dueDate }) {
       const recipient = to.org
-        ? { billing_info: { business_name: to.name, email_address: env.DEMO_RECIPIENT_EMAIL || to.email } }
-        : { billing_info: { name: { given_name: to.name.split(' ')[0], surname: to.name.split(' ').slice(1).join(' ') || to.name.split(' ')[0] }, email_address: env.DEMO_RECIPIENT_EMAIL || to.email } };
+        ? { billing_info: { business_name: to.name, email_address: demoTo || to.email } }
+        : { billing_info: { name: { given_name: to.name.split(' ')[0], surname: to.name.split(' ').slice(1).join(' ') || to.name.split(' ')[0] }, email_address: demoTo || to.email } };
       const created = await call('POST', '/v2/invoicing/invoices', {
         detail: { currency_code: currency, reference: [invoice.id, ...new Set(invoice.items.map((it) => it.code).filter(Boolean))].join(' ').slice(0, 120), note: note.slice(0, 4000), payment_term: { due_date: dueDate } },
         invoicer: { business_name: practice.slice(0, 100) },
@@ -96,11 +99,11 @@ export function paypal(env, D) {
     },
     async voidHold(authId) { await call('POST', `/v2/payments/authorizations/${encodeURIComponent(authId)}/void`, null, { 'PayPal-Request-Id': 'void-' + authId }); },
     // PayPal Payouts: the hospital pays each department its share for a month, in one batch.
-    // In the sandbox every department's payout goes to DEMO_PAYOUT_EMAIL (or the demo family account), so it can be seen.
+    // In the public demo every payout goes to DEMO_PAYOUT_EMAIL (or the demo family account), so it can be seen.
     async createPayout({ batchId, subject, items }) {
       const r = await call('POST', '/v1/payments/payouts', {
         sender_batch_header: { sender_batch_id: batchId, email_subject: subject.slice(0, 255), email_message: 'Your department’s share for the month, from the hospital billing office.' },
-        items: items.map((x) => ({ recipient_type: 'EMAIL', receiver: env.DEMO_PAYOUT_EMAIL || env.DEMO_RECIPIENT_EMAIL || x.email, amount: { currency, value: pounds(x.pence) }, note: x.note.slice(0, 4000), sender_item_id: x.itemId })),
+        items: items.map((x) => ({ recipient_type: 'EMAIL', receiver: demoPayee || x.email, amount: { currency, value: pounds(x.pence) }, note: x.note.slice(0, 4000), sender_item_id: x.itemId })),
       });
       return { batch_id: r.batch_header?.payout_batch_id, status: r.batch_header?.batch_status || 'PENDING' };
     },

@@ -5,7 +5,7 @@
 // and in the browser review copy (simulated PayPal, standard wording).
 // Rules: the AI writes and reads words only; every amount, split and date is worked out here in plain code.
 
-export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, today: todayFn }) {
+export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, clinic = false, today: todayFn }) {
   // ---------- small helpers ----------
   const gbp = (p) => (p < 0 ? '−' : '') + '£' + (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function toPence(v) {
@@ -246,7 +246,12 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
   }
 
   // ---------- demo data: six made-up patients over two months ----------
-  async function seed(D) {
+  /** A clinic's own copy keeps its data across updates: missing lists are added, nothing is replaced. */
+  function migrate(D) {
+    for (const k of ['patients', 'sessions', 'invoices', 'payments', 'claims', 'expenses', 'events', 'spend', 'requests', 'appointments', 'insurers', 'partners', 'insurance_claims', 'partner_payouts', 'payment_plans', 'departments', 'services']) if (!Array.isArray(D[k])) D[k] = [];
+    D.settings.deposit_pence = D.settings.deposit_pence || 0; D.settings.deposit_services = D.settings.deposit_services || [];
+  }
+  async function seed(D, { empty = false, name } = {}) {
     const d = (k) => addDays(today(), -k);
     Object.assign(D, {
       settings: {
@@ -294,6 +299,15 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
       insurance_claims: [], partner_payouts: [], payment_plans: [],
       patients: [], sessions: [], invoices: [], payments: [], claims: [], expenses: [], events: [], spend: [], requests: [], appointments: [],
     });
+    if (empty) {
+      // A clinic's own copy: sample departments and services to edit, no made-up patients or history.
+      Object.assign(D.settings, { practice: String(name || 'Our clinic').slice(0, 80), therapist: 'the billing office' });
+      D.departments.forEach((x) => { x.budget_pence = 0; x.payout_email = ''; });
+      Object.assign(D, { insurers: [], partners: [] });
+      D.services = D.services.filter((v) => !v.partner_id);
+      log(D, 'info', 'TJS Pay is ready. Add your patients, set department budgets and PayPal emails, and check service prices in Settings.');
+      return;
+    }
     const P = (o) => D.patients.push({ credit_pence: 0, ...o });
     P({ id: 'p_arjun', name: 'Arjun Patel', known_as: 'Arjun', caregivers: [{ name: 'Priya Patel', relation: 'Mum', email: 'priya@example.com', invoices: true }], payer: { type: 'family' }, plan: 'session', service_id: 'svc_45' });
     P({ id: 'p_amara', insurance: { insurer_id: 'ins_carewell', policy: 'CW-4471902', excess_pence: 5000 }, name: 'Amara Okafor', known_as: 'Amara', caregivers: [{ name: 'Chidi Okafor', relation: 'Dad', email: 'chidi@example.com', invoices: true }, { name: 'Ngozi Okafor', relation: 'Mum', email: 'ngozi@example.com', invoices: false }], payer: { type: 'family' }, plan: 'monthly', service_id: 'svc_30' });
@@ -373,13 +387,13 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
   }
 
   // ---------- what the screen sends ----------
-  const state = (D, mode) => ({ mode, today: today(), ...D, mock_paypal: undefined, plans: undefined, ai_usage: undefined, ai: !!ai, ai_today: { calls: D.ai_usage && D.ai_usage.day === new Date().toISOString().slice(0, 10) ? D.ai_usage.requests : 0, limit: aiLimit || null }, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
+  const state = (D, mode) => ({ mode, today: today(), ...D, mock_paypal: undefined, plans: undefined, ai_usage: undefined, ai: !!ai, clinic, ai_today: { calls: D.ai_usage && D.ai_usage.day === new Date().toISOString().slice(0, 10) ? D.ai_usage.requests : 0, limit: aiLimit || null }, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
 
   async function handle(D, path, b = {}, mode) {
     const p = path.split('/');
     switch (p[0]) {
       case 'state': return state(D, mode);
-      case 'seed': await seed(D); return state(D, mode);
+      case 'seed': if (clinic) throw new Error('This is a clinic’s own copy: demo data can’t be loaded here.'); await seed(D); return state(D, mode);
       case 'money': return finances(D, /^\d{4}-\d{2}$/.test(b.month || '') ? b.month : today().slice(0, 7));
       case 'settings': {
         const s = D.settings;
@@ -469,7 +483,7 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
       }
       case 'departments': {
         if (p[1] === 'settings') {
-          (Array.isArray(b.departments) ? b.departments : []).forEach((x) => { const d = dept(D, x.id); if (!d) return; const bp = x.budget === '' || x.budget == null ? null : toPence(x.budget); if (bp != null) d.budget_pence = bp; if (x.payout_email !== undefined) d.payout_email = String(x.payout_email).trim().slice(0, 120); });
+          (Array.isArray(b.departments) ? b.departments : []).forEach((x) => { const d = dept(D, x.id); if (!d) return; if (x.name && String(x.name).trim()) d.name = String(x.name).trim().slice(0, 60); if (x.code && /^[A-Za-z0-9-]{2,12}$/.test(String(x.code).trim()) && !D.departments.some((o) => o !== d && o.code === String(x.code).trim().toUpperCase())) d.code = String(x.code).trim().toUpperCase(); const bp = x.budget === '' || x.budget == null ? null : toPence(x.budget); if (bp != null) d.budget_pence = bp; if (x.payout_email !== undefined) d.payout_email = String(x.payout_email).trim().slice(0, 120); });
           log(D, 'info', 'Department budgets and PayPal emails saved.');
         }
         return budgets(D);
@@ -1083,5 +1097,5 @@ Then reply in plain UK English: what you found and what you proposed, referring 
     return changed;
   }
 
-  return { handle, family, familyClaim, checkoutStart, checkoutFinish, sendDueInstalments, checkinView, checkinStart, checkinHold, cancelAppt, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf, partnerSummary } };
+  return { handle, migrate, family, familyClaim, checkoutStart, checkoutFinish, sendDueInstalments, checkinView, checkinStart, checkinHold, cancelAppt, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf, partnerSummary } };
 }

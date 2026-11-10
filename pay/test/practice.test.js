@@ -441,3 +441,45 @@ test('surgery plan: deposit sent now, instalments sent when due, amounts add up,
   assert.equal(await P.sendDueInstalments(D), 1);
   assert.equal(calls.filter((c) => c[0] === 'send').length, 3 + 3);
 });
+
+// ---------- a clinic's own copy ----------
+import { paypal as realPaypal } from '../src/paypal.js';
+
+test('own copy: starts empty with editable departments, can’t load demo data, and keeps its data across updates', async () => {
+  const D = {}; const P = makePractice({ paypal: mockPaypal(D), ai: null, clinic: true });
+  await P.seed(D, { empty: true, name: 'Sunrise Children’s Clinic' });
+  assert.equal(D.settings.practice, 'Sunrise Children’s Clinic');
+  assert.equal(D.patients.length, 0); assert.equal(D.invoices.length, 0); assert.equal(D.appointments.length, 0);
+  assert.equal(D.departments.length, 10); assert.ok(D.departments.every((x) => x.budget_pence === 0 && x.payout_email === ''));
+  assert.equal(D.partners.length, 0); assert.ok(!D.services.some((v) => v.partner_id));
+  await assert.rejects(P.handle(D, 'seed', {}), /demo data can’t be loaded/);
+  await P.handle(D, 'departments/settings', { departments: [{ id: 'dep_slt', name: 'Speech Therapy', code: 'st-1', budget: '5000' }, { id: 'dep_ent', code: 'ST-1' }] });
+  assert.equal(D.departments.find((x) => x.id === 'dep_slt').code, 'ST-1');
+  assert.equal(D.departments.find((x) => x.id === 'dep_ent').code, 'ENT-01'); // codes stay unique
+  await P.handle(D, 'patients', { name: 'Real Patient', caregiver_name: 'Real Parent', email: 'parent@example.com' });
+  delete D.appointments; delete D.payment_plans;
+  P.migrate(D);
+  assert.equal(D.patients.length, 1); assert.deepEqual(D.appointments, []); assert.deepEqual(D.payment_plans, []);
+});
+
+test('own copy: invoices and payouts go to the real people, never to the demo account', async () => {
+  const sent = [];
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url: String(url), body: init && init.body && String(init.body).startsWith('{') ? JSON.parse(init.body) : null });
+    const body = String(url).endsWith('/oauth2/token') ? { access_token: 't', expires_in: 3600 } : String(url).includes('/payouts') ? { batch_header: { payout_batch_id: 'B1', batch_status: 'PENDING' } } : { id: 'INV2-1', detail: { metadata: {} } };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  try {
+    for (const mode of ['clinic', 'demo']) {
+      sent.length = 0;
+      const pp = realPaypal({ PAYPAL_MODE: 'sandbox', CLINIC_MODE: mode, PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', DEMO_RECIPIENT_EMAIL: 'demo@personal.example.com' }, {});
+      await pp.createAndSend({ invoice: { id: 'inv_1', items: [{ name: 'Session', pence: 6000 }], kind: 'session' }, to: { name: 'Priya Patel', email: 'priya@example.com' }, practice: 'X', note: 'n', subject: 's', dueDate: '2026-12-01' });
+      await pp.createPayout({ batchId: 'b', subject: 's', items: [{ email: 'supplier@example.com', pence: 100, itemId: 'i', note: 'n' }] });
+      const to = sent.find((x) => x.url.endsWith('/v2/invoicing/invoices')).body.primary_recipients[0].billing_info.email_address;
+      const payee = sent.find((x) => x.url.endsWith('/v1/payments/payouts')).body.items[0].receiver;
+      if (mode === 'clinic') { assert.equal(to, 'priya@example.com'); assert.equal(payee, 'supplier@example.com'); }
+      else { assert.equal(to, 'demo@personal.example.com'); assert.equal(payee, 'demo@personal.example.com'); }
+    }
+  } finally { globalThis.fetch = fetchBefore; }
+});

@@ -11,7 +11,19 @@ const json = (data, status = 200) => new Response(JSON.stringify(data), { status
 const fail = (message, status = 400) => json({ error: message }, status);
 
 // ---------- loading and saving the practice ----------
+// The table is created on first use, so a fresh copy deployed with the Deploy to Cloudflare button just works.
+let tableReady = false;
+async function ensureTable(env) {
+  if (tableReady) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS practice (id TEXT PRIMARY KEY, version INTEGER NOT NULL, doc TEXT NOT NULL, updated_at TEXT NOT NULL)').run();
+  tableReady = true;
+}
+// "demo": the public demo (made-up hospital, open to all, sandbox emails redirected to the demo account).
+// Anything else (the default): a clinic's own copy (starts empty, needs ADMIN_PASSCODE, never loads demo data).
+const isClinic = (env) => env.CLINIC_MODE !== 'demo';
+
 async function load(env) {
+  await ensureTable(env);
   const row = await env.DB.prepare('SELECT version, doc FROM practice WHERE id = ?').bind(PRACTICE_ID).first();
   return row ? { D: JSON.parse(row.doc), version: row.version } : { D: { patients: [] }, version: 0 };
 }
@@ -60,6 +72,7 @@ function practiceFor(env, D) {
     paypal: paypal(env, D),
     ai: claude(env, aiGuard(env, D)),
     aiLimit: parseInt(env.AI_DAILY_LIMIT || '150', 10),
+    clinic: isClinic(env),
     linkFor: async (id) => `${origin}/paid#i=${id}&t=${await sign(env, id)}`,
     checkinLinkFor: async (id) => `${origin}/checkin#a=${id}&t=${await sign(env, id)}`,
   });
@@ -72,8 +85,10 @@ async function withPractice(env, fn, origin) {
   if (origin && D.origin !== origin) D.origin = origin;
   const before = version ? JSON.stringify(D) : '';
   const P = practiceFor(env, D);
-  // First visit, or data saved before departments existed: load the demo hospital.
-  if (!D.settings || !D.departments || !D.requests || !D.appointments || !D.partners) await P.seed(D);
+  if (!D.settings) await P.seed(D, { empty: isClinic(env), name: env.PRACTICE_NAME });
+  // The demo reloads its made-up hospital when it was saved by an older version; a clinic's data is only extended.
+  else if (isClinic(env)) P.migrate(D);
+  else if (!D.departments || !D.requests || !D.appointments || !D.partners) await P.seed(D);
   const out = await fn(P, D);
   if (JSON.stringify(D) !== before) await save(env, D, version);
   return out;
@@ -144,6 +159,7 @@ async function handleApi(req, env, url) {
 
   // Everything else is the therapist's screen.
   if (!path.startsWith('/api/pay/')) return fail('Not found', 404);
+  if (isClinic(env) && !env.ADMIN_PASSCODE) return fail('Set an ADMIN_PASSCODE secret before using TJS Pay with real patients (see “Use it in your clinic”).', 403);
   if (env.ADMIN_PASSCODE && req.headers.get('x-passcode') !== env.ADMIN_PASSCODE) return fail('Passcode needed', 401);
   const route = path.slice('/api/pay/'.length);
   if (method === 'GET' && route !== 'state') return fail('Not found', 404);
