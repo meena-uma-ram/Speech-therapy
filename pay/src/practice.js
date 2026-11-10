@@ -5,7 +5,7 @@
 // and in the browser review copy (simulated PayPal, standard wording).
 // Rules: the AI writes and reads words only; every amount, split and date is worked out here in plain code.
 
-export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: todayFn }) {
+export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, today: todayFn }) {
   // ---------- small helpers ----------
   const gbp = (p) => (p < 0 ? '−' : '') + '£' + (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function toPence(v) {
@@ -52,16 +52,16 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
       .replace(/\{amount\}/g, gbp(outstanding(i))).replace(/\{period\}/g, i.period).replace(/\{practice\}/g, D.settings.practice);
   }
 
-  // ---------- words: AI first, standard wording if the AI is unavailable ----------
+  // ---------- words: standard wording by default; the AI writes a message only when someone asks ----------
   function standardNote(D, p, period, total, kind) {
     const to = p.payer.type === 'family' ? firstWord(billTo(p).name) : 'there';
     if (p.payer.type !== 'family') return { subject: `${D.settings.practice}: ${p.known_as}, ${period}`, note: `Hello, please find the invoice for ${p.known_as}'s speech and language therapy, ${period}, ${gbp(total)}. It can be paid by PayPal or card using the button, or by bank transfer quoting the invoice number. Thank you.` };
     if (kind === 'block') return { subject: `${p.known_as}'s next block of sessions`, note: `Hi ${to}, ${p.known_as}'s current block is nearly used up, so here is the invoice for the next one (${gbp(total)}). Paying before it runs out keeps sessions going without a gap. You can pay by PayPal, card or bank transfer.` };
     return { subject: `${p.known_as}'s sessions: ${period}`, note: `Hi ${to}, thank you for bringing ${p.known_as}. This covers ${period} and comes to ${gbp(total)}. You can pay by PayPal or card using the button, or by bank transfer.` };
   }
-  async function invoiceWords(D, p, period, total, kind, items) {
+  async function invoiceWords(D, p, period, total, kind, items, useAi = false) {
     const fallback = standardNote(D, p, period, total, kind);
-    if (!ai) return { ...fallback, by_ai: false };
+    if (!ai || !useAi) return { ...fallback, by_ai: false };
     try {
       const r = await ai.invoiceNote({
         practice: D.settings.practice, therapist: D.settings.therapist, child_known_as: p.known_as, billed_to: p.payer.type === 'family' ? firstWord(billTo(p).name) : p.payer.name,
@@ -83,14 +83,15 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
     return { patient_id: p ? p.id : null, amount: am ? parseFloat(am[1].replace(/,/g, '')) : null, method, reference: ref };
   }
   async function parsePayment(D, text) {
-    let r = null;
-    if (ai) {
+    // The built-in reader first; the AI only when it can't tell who paid (e.g. "Liam's grandad dropped off cash").
+    let r = parseByRules(D, text);
+    if (!r.patient_id && ai) {
       try {
         r = await ai.parsePayment({ text, today: today(), patients: D.patients.map((p) => ({ id: p.id, name: p.name, known_as: p.known_as, caregivers: p.caregivers.map((c) => c.name + (c.relation ? ` (${c.relation})` : '')), paid_by: p.payer.type === 'family' ? 'family' : p.payer.name })) });
         if (r && r.patient_id && !pat(D, r.patient_id)) r.patient_id = null; // the AI may only pick a real patient
       } catch { r = null; }
+      if (!r || !r.patient_id) r = parseByRules(D, text);
     }
-    if (!r) r = parseByRules(D, text);
     const p = pat(D, r.patient_id);
     let pence = r.amount != null ? toPence(r.amount) : null, assumed = false;
     if (p && !pence) { const owed = D.invoices.filter((i) => i.patient_id === p.id && isOpen(i)).reduce((t, i) => t + outstanding(i), 0); if (owed) { pence = owed; assumed = true; } }
@@ -350,7 +351,7 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
   }
 
   // ---------- what the screen sends ----------
-  const state = (D, mode) => ({ mode, today: today(), ...D, mock_paypal: undefined, plans: undefined, ai_usage: undefined, ai: !!ai, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
+  const state = (D, mode) => ({ mode, today: today(), ...D, mock_paypal: undefined, plans: undefined, ai_usage: undefined, ai: !!ai, ai_today: { calls: D.ai_usage && D.ai_usage.day === new Date().toISOString().slice(0, 10) ? D.ai_usage.requests : 0, limit: aiLimit || null }, blockPrices: Object.fromEntries(D.patients.map((p) => [p.id, blockPrice(D, p)])) });
 
   async function handle(D, path, b = {}, mode) {
     const p = path.split('/');
@@ -395,6 +396,14 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
         else if (p[2] === 'reminder-text') return { text: i.next_reminder || D.settings.reminder_texts[Math.min(i.reminder_count + 1, D.settings.reminder_texts.length) - 1], filled: nextReminderText(D, i), custom: !!i.next_reminder, number: i.reminder_count + 1 };
         else if (p[2] === 'reminder-save') { i.next_reminder = String(b.text || '').trim().slice(0, 1200) || null; log(D, 'info', `Next reminder edited: ${pat(D, i.patient_id).known_as}, ${i.period}.`, i.patient_id); }
         else if (p[2] === 'reminder-now') { if (!isOpen(i)) throw new Error('This invoice is already paid.'); if (await refresh(D, i)) return state(D, mode); if (b.text) i.next_reminder = String(b.text).trim().slice(0, 1200); await sendReminder(D, i); }
+        else if (p[2] === 'ai-note') {
+          if (i.status !== 'DRAFT') throw new Error('Only drafts can be reworded.');
+          if (!ai) throw new Error('AI writing is not available here.');
+          const pt = pat(D, i.patient_id), w = await invoiceWords(D, pt, i.period, i.total_pence, i.kind, i.items, true);
+          if (!w.by_ai) throw new Error('The AI couldn’t write a message just now. The standard wording is still there.');
+          Object.assign(i, { subject: w.subject, note: w.note, note_by_ai: true });
+          return { subject: i.subject, note: i.note };
+        }
         else if (p[2] === 'reminder-rewrite') {
           if (!ai) throw new Error('AI rewriting is not available here.');
           return { text: await ai.rewriteReminder({ text: String(b.text || '').slice(0, 1200), style: ['warmer', 'shorter', 'firmer'].includes(b.style) ? b.style : 'warmer' }) };
@@ -408,7 +417,7 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
       }
       case 'assistant': {
         if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
-        return { plan: await assistant(D, b.request, b.team) };
+        return { plan: await assistant(D, b.request, b.team, !!b.instant) };
       }
       case 'appointments': {
         if (!p[1]) { const a = book(D, b); const st = state(D, mode); st.booked = a.id; return st; }
@@ -803,39 +812,44 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: today
     return lines.join(' ');
   }
 
-  async function assistant(D, request, teamName) {
+  async function assistant(D, request, teamName, instant) {
     const team = teamOf(teamName);
     request = String(request || '').trim().slice(0, 600);
     if (!request) throw new Error('Ask the assistant something first.');
     const plan = { id: uid('plan'), team, request, created_at: now(), steps: [], actions: [], text: '', by_ai: false, status: 'open' };
-    if (ai && ai.assistant) {
+    if (ai && ai.assistant && !instant) {
       const s = D.settings;
       const who = team === 'finance'
         ? `You are the finance assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the finance department, which allocates each department a budget for the financial year (April to March) and approves departments' money requests; approved requests are paid with PayPal Payouts, to the department's PayPal account or a supplier's. You do not invoice patients or chase payments: that is the billing office's job.`
         : `You are the billing assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the billing office, which invoices patients and funders through PayPal, applies incoming payments to the right invoices, and follows up what is owed. Budgets and department spending belong to the finance department, not you.`;
       const how = team === 'finance'
-        ? `- Run department_budgets first. Propose pay_request only for requests that fit the department's budget; name any that would go over and leave them to the finance team to decide on screen.
+        ? `- Propose pay_request only for requests that fit the department's budget; name any that would go over and leave them to the finance team to decide on screen.
 - You may look at unpaid invoices and monthly income to answer questions, but you cannot act on them.`
-        : `- Before proposing a reminder, run check_paypal so nobody who has already paid is chased.
+        : `- Only propose reminders for invoices that are still unpaid after the PayPal check.
 - If someone says they paid another way, don't propose a reminder for that invoice; mention it instead.
 - Reminders follow the hospital's own wording and schedule (days ${s.reminder_days.join(', ')} after sending). The "reason" is for staff, not the family.`;
       const system = `${who} Today is ${today()}.
 Departments, each with a code: ${(D.departments || []).map((d) => `${d.code} ${d.name}`).join('; ')}. One hospital PayPal account receives every patient payment; each invoice line carries its department's code.
 You never see or discuss clinical information.
 How you work:
-- Look things up with the tools.
+- The current figures are in the request${team === 'billing' ? ', and PayPal was checked for payments just now' : ''}. Use the look-up tools only if you need something that isn't there.
 - You cannot send, pay, charge or record anything yourself. Use propose_action for each thing that should happen; a person approves each one on screen.
 ${how}
 - Propose only what the request asks for. Quote amounts exactly as the tools give them. Never invent amounts, dates or people.
 Then reply in plain UK English: what you found and what you proposed, referring to proposals by number. At most 120 words, no tables, no headings, no emojis.`;
       try {
-        const r = await ai.assistant({ system, request, tools: toolsFor(team), run: (name, input) => runTool(D, plan, name, input) });
+        // Give Claude the figures up front (and check PayPal first for billing), so it can usually answer in one or two calls.
+        const snap = team === 'finance'
+          ? { department_budgets: await runTool(D, plan, 'department_budgets', {}) }
+          : { paypal_check: await runTool(D, plan, 'check_paypal', { invoice_ids: [] }), unpaid_invoices: await runTool(D, plan, 'list_unpaid_invoices', {}), patients: await runTool(D, plan, 'list_patients', {}), reported_payments: await runTool(D, plan, 'list_reported_payments', {}) };
+        const r = await ai.assistant({ system, request: `${request}\n\nCurrent figures (JSON):\n${JSON.stringify(snap)}`, tools: toolsFor(team), run: (name, input) => runTool(D, plan, name, input) });
+        plan.ai_calls = r.calls;
         plan.text = r.text || 'Done.'; plan.by_ai = true;
       } catch (e) {
         plan.steps.push(`AI unavailable (${String(e.message || e).slice(0, 80)}), so the built-in rules were used`);
         plan.text = await assistantByRules(D, plan, request);
       }
-    } else plan.text = await assistantByRules(D, plan, request);
+    } else { if (instant && ai) plan.steps.push('Instant answer from the built-in rules (no AI call)'); plan.text = await assistantByRules(D, plan, request); }
     D.plans = [plan, ...(D.plans || [])].slice(0, 5);
     log(D, 'info', `${team === 'finance' ? 'Finance' : 'Billing'} assistant: “${request.slice(0, 80)}”. ${plan.actions.length ? `${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} proposed.` : 'Nothing to approve.'}`);
     return plan;

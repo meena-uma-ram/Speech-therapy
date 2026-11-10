@@ -58,16 +58,18 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
     },
   };
 
-  async function agentLoop({ system, request, tools, run, maxTurns = 8 }) {
+  async function agentLoop({ system, request, tools, run, maxTurns = 6 }) {
       const messages = [{ role: 'user', content: request }];
+      let calls = 0;
       for (let turn = 0; turn < maxTurns; turn++) {
-        guard();
+        guard(); calls++;
         const msg = await client.beta.messages.create({
           model: AGENT,
           max_tokens: 16000,
           betas: ['server-side-fallback-2026-07-01'],
           fallbacks: 'default', // if the model declines, the API retries on a fallback model in the same call
           output_config: { effort: 'medium' },
+          cache_control: { type: 'ephemeral' }, // later steps reuse the instructions, tools and figures at a fraction of the cost
           system,
           tools,
           messages,
@@ -75,7 +77,7 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
         if (msg.stop_reason === 'refusal') throw new Error('The assistant declined this request.');
         messages.push({ role: 'assistant', content: msg.content }); // full content, thinking blocks included
         const uses = msg.content.filter((b) => b.type === 'tool_use');
-        if (msg.stop_reason !== 'tool_use' || !uses.length) return { text: textOf(msg) };
+        if (msg.stop_reason !== 'tool_use' || !uses.length) return { text: textOf(msg), calls };
         const results = [];
         for (const u of uses) {
           try { results.push({ type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(await run(u.name, u.input || {})) }); }
@@ -83,6 +85,6 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
         }
         messages.push({ role: 'user', content: results }); // every result in one message
       }
-      return { text: 'I stopped after several steps. The actions I proposed so far are below.' };
+      return { text: 'I stopped after several steps. The actions I proposed so far are below.', calls };
   }
 }

@@ -41,9 +41,25 @@ test('plain words without AI: name only, bare numbers, references', async () => 
 
 test('AI parse can only pick a real patient; code still does the sums', async () => {
   const { D, P } = await fresh({ parsePayment: async () => ({ patient_id: 'p_nobody', amount: 50, method: 'cash' }), invoiceNote: async () => { throw new Error('x'); } });
-  const r = await P.handle(D, 'claims/parse', { text: 'Liam paid 50 cash' });
+  const r = await P.handle(D, 'claims/parse', { text: 'the boy with the red coat paid 50 cash' });
   assert.equal(r.patient_id, null);
   assert.ok(r.unclear);
+});
+
+test('fewer AI calls: the built-in reader goes first, and invoices use standard wording unless asked', async () => {
+  let parseCalls = 0, noteCalls = 0;
+  const { D, P } = await fresh({ parsePayment: async () => { parseCalls++; return { patient_id: 'p_freya', amount: 60, method: 'bank' }; }, invoiceNote: async () => { noteCalls++; return { subject: 'AI subject', note: 'AI note' }; } });
+  const r1 = await P.handle(D, 'claims/parse', { text: 'Liam paid 135 cash' });
+  assert.equal(r1.who, 'Liam'); assert.equal(parseCalls, 0);
+  const r2 = await P.handle(D, 'claims/parse', { text: 'Emma’s husband sent the money for the assessment, 60 by bank' });
+  assert.equal(r2.who, 'Freya'); assert.equal(parseCalls, 1);
+  const id = (await P.handle(D, 'invoices/draft', { patient_id: 'p_arjun' })).draft;
+  const i = D.invoices.find((x) => x.id === id);
+  assert.equal(noteCalls, 0); assert.equal(i.note_by_ai, false);
+  const w = await P.handle(D, `invoices/${id}/ai-note`, {});
+  assert.equal(noteCalls, 1); assert.equal(w.note, 'AI note'); assert.equal(i.note_by_ai, true);
+  const plan = (await P.handle(D, 'assistant', { request: 'Who owes us money?', instant: true })).plan;
+  assert.equal(plan.by_ai, false);
 });
 
 test('recording a payment writes it to the PayPal invoice and splits correctly', async () => {

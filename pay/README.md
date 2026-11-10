@@ -55,10 +55,18 @@ Staff ask in plain words. The **billing office** gets billing tools and actions 
 
 The agent is told to check PayPal before proposing a reminder, so nobody who has just paid is chased. The screen shows what it checked, its answer, and the proposals with tick boxes. **Approve selected** runs each one through the same tested code as the buttons, after checking it again (an invoice paid in the meantime is skipped). Tools use strict schemas; the request uses Anthropic's server-side refusal fallback. Without an AI key, past the daily limit, or on any AI error, the same tools are driven by built-in rules.
 
+### Keeping AI calls down
+
+- The example questions under the assistant are answered **instantly by the built-in rules** (no AI call). Typed questions go to Claude.
+- Claude gets the current figures up front (and, for billing, a fresh PayPal check), so most questions take one or two calls; repeated instructions are cached.
+- Invoice messages use **standard wording**; **Write with AI** in the draft asks Claude only when wanted.
+- Payments typed in plain words are read by the built-in reader first; Claude is asked only when it can't tell who paid.
+- *AI calls today: X of 150* shows at the top of the assistant.
+
 ### Three small jobs (`AI_MODEL`, Claude Haiku 5.5)
 
-1. **Writes the message on each invoice:** a short, friendly note for families, and businesslike wording for councils and schools.
-2. **Reads payments typed in plain words.** It extracts who, how much, how and the reference. It may only choose a patient that exists.
+1. **Writes the message on an invoice when asked** (*Write with AI*): a short, friendly note for families, and businesslike wording for councils and schools.
+2. **Reads payments typed in plain words** when the built-in reader can't tell who paid. It extracts who, how much, how and the reference. It may only choose a patient that exists.
 3. **Rewrites a reminder** as warmer, shorter or firmer, while the therapist edits it.
 
 **Design rules:**
@@ -140,7 +148,7 @@ In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypa
 ```bash
 npm run db:local
 npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 28 tests: billing logic, the assistants' checks and team separation, Checkout, check-in deposits and sliding scale, department budgets and requests
+npm test             # 29 tests: billing logic, the assistants' checks and team separation, Checkout, check-in deposits and sliding scale, department budgets and requests
 ```
 
 ## Try the demo

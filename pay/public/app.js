@@ -223,18 +223,18 @@
       </div>`;
     }
     const ex = EXAMPLES[team()] || EXAMPLES.billing;
-    return `<section class="panel asst" aria-labelledby="h-asst"><div class="panel-h"><h2 id="h-asst">${team() === 'finance' ? 'Finance assistant' : 'Billing assistant'}</h2><span class="muted asst-note">${S.ai ? 'AI plans, you approve' : 'Built-in rules'}</span></div><div class="panel-b">
+    return `<section class="panel asst" aria-labelledby="h-asst"><div class="panel-h"><h2 id="h-asst">${team() === 'finance' ? 'Finance assistant' : 'Billing assistant'}</h2><span class="muted asst-note">${S.ai ? `Typed questions: AI plans, you approve${S.ai_today && S.ai_today.limit ? ` · AI calls today ${S.ai_today.calls} of ${S.ai_today.limit}` : ''}` : 'Built-in rules'}</span></div><div class="panel-b">
       <form id="asst-f" class="asst-row"><label class="sr" for="asst-q">Ask the billing assistant</label>
         <input id="asst-q" maxlength="600" autocomplete="off" placeholder="${esc(ex[0])}" value="${esc(V.ask)}">
         <button class="btn" type="submit"${V.busy ? ' disabled' : ''}>Ask</button></form>
-      <div class="asst-ex">${ex.map((e) => `<button class="filter" type="button" data-act="ask-ex" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+      <div class="asst-ex"><span class="muted asst-note">Instant, no AI:</span>${ex.map((e) => `<button class="filter" type="button" data-act="ask-ex" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
       ${out}</div></section>`;
   }
-  async function ask(q) {
+  async function ask(q, instant) {
     q = String(q || '').trim();
     if (!q) return toast('Type a question first.', true);
     V.ask = q; V.busy = true; V.plan = null; V.results = null; render();
-    try { const d = await window.TJSPayAPI('assistant', { request: q, team: team() }); V.plan = d.plan; S = await window.TJSPayAPI('state'); }
+    try { const d = await window.TJSPayAPI('assistant', { request: q, team: team(), instant: !!instant }); V.plan = d.plan; S = await window.TJSPayAPI('state'); }
     catch (e) { toast(e.message, true); }
     finally { V.busy = false; render(); }
   }
@@ -543,11 +543,16 @@
       <ul class="items">${i.items.map((it) => `<li><span>${it.code ? `<span class="code">${esc(it.code)}</span> ` : ''}${esc(it.name)}</span><span>${m(it.pence)}</span></li>`).join('')}<li class="sum"><span>Total</span><span>${m(i.total_pence)}</span></li></ul>
       <label>Email subject<input id="d-subject" maxlength="100" value="${esc(i.subject)}"></label>
       <label>Message<textarea id="d-note" rows="4" maxlength="1500">${esc(i.note)}</textarea></label>
-      <p class="hint">Written from billing details only. Edit as needed.</p>
+      <p class="hint">${i.note_by_ai ? 'Written by AI from billing details only.' : 'Standard wording.'} Edit as needed.${S.ai && S.mode !== 'review' ? ' <button class="btn text" id="d-ai" type="button">Write with AI</button>' : ''}</p>
       <div class="actions"><button class="btn" id="d-send" type="button">Send through PayPal</button><button class="btn line" id="d-discard" type="button">Delete draft</button></div></form>`;
     dlg().showModal();
     $('d-send').onclick = (e) => act(e.currentTarget, `invoices/${id}/send`, { subject: $('d-subject').value, note: $('d-note').value }, () => { dlg().close(); toast(`Sent to ${toName(i.to)}.`); });
     $('d-discard').onclick = (e) => act(e.currentTarget, `invoices/${id}/discard`, {}, () => { dlg().close(); toast('Draft deleted.'); });
+    if ($('d-ai')) $('d-ai').onclick = async (e) => {
+      e.currentTarget.disabled = true;
+      try { const w = await window.TJSPayAPI(`invoices/${id}/ai-note`, {}); $('d-subject').value = w.subject; $('d-note').value = w.note; i.subject = w.subject; i.note = w.note; i.note_by_ai = true; toast('Written by AI. Check it before sending.'); }
+      catch (err) { toast(err.message, true); } finally { if ($('d-ai')) $('d-ai').disabled = false; }
+    };
   }
   async function openNudge(id) {
     const i = S.invoices.find((x) => x.id === id), p = pat(i.patient_id);
@@ -659,7 +664,7 @@
       case 'rq-ask': act(b, 'requests', { dept_id: role, amount: $('rq-amt').value, purpose: $('rq-purpose').value.trim(), pay_to: $('rq-to').value, payee_name: $('rq-sname').value.trim(), payee_email: $('rq-semail').value.trim() }, () => toast('Sent to the finance department.')); break;
       case 'sp-log': act(b, 'spend', { dept_id: role, date: $('sp-date').value, what: $('sp-what').value.trim(), category: $('sp-cat').value, amount: $('sp-amt').value }, () => toast('Logged against your budget.')); break;
       case 'dept-log': act(b, 'sessions', { patient_id: $('ds-pat').value, service_id: $('ds-svc').value, date: $('ds-date').value, where: $('ds-where').value }, () => toast('Logged. The billing office will invoice it.')); break;
-      case 'ask-ex': ask(b.dataset.q); break;
+      case 'ask-ex': ask(b.dataset.q, true); break;
       case 'approve': approve(b); break;
       case 'dismiss': V.plan = null; V.results = null; render(); break;
       case 'log': act(b, 'sessions', { patient_id: id, date: $('ls-date').value, service_id: $('ls-svc').value, where: $('ls-where').value }, () => toast('Logged.')); break;

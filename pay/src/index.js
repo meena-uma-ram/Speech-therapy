@@ -59,6 +59,7 @@ function practiceFor(env, D) {
   return makePractice({
     paypal: paypal(env, D),
     ai: claude(env, aiGuard(env, D)),
+    aiLimit: parseInt(env.AI_DAILY_LIMIT || '150', 10),
     linkFor: async (id) => `${origin}/paid#i=${id}&t=${await sign(env, id)}`,
     checkinLinkFor: async (id) => `${origin}/checkin#a=${id}&t=${await sign(env, id)}`,
   });
