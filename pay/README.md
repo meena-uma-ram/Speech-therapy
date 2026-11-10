@@ -10,15 +10,19 @@ Small practices lose hours a month to billing: invoices, checking who has paid, 
 
 ## What it does
 
-TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED-01, NEU-01, CARD-01, PT-01, OT-01, AVT-01, SLT-01, AUD-01, DX-01). The **administration (billing office)** handles billing and the departments' budgets. One hospital PayPal account receives every payment; each invoice line carries its department code, so income per department can be reported. The hospital **allocates each department a budget** for the financial year. **Department staff** log what they spend and **ask for money** when they need it; administration checks it against the budget and pays it with **PayPal Payouts**, to the department's PayPal account or straight to a supplier.
+TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED-01, NEU-01, CARD-01, PT-01, OT-01, AVT-01, SLT-01, AUD-01, DX-01). Three kinds of user, as in a real hospital:
+
+- **Billing office:** invoices patients and funders through PayPal, applies incoming payments to the right invoices (cash application), and tracks who has paid and who is overdue. One hospital PayPal account receives every payment; each invoice line carries its department code.
+- **Finance department:** allocates each department a budget for the financial year (within the overall budget set by the hospital's leadership) and approves departments' money requests, paid with **PayPal Payouts** to the department's PayPal account or straight to a supplier.
+- **Department staff:** log sessions, log what they spend, and ask Finance for money.
 
 | | |
 |---|---|
 | **Billing assistant** | Ask in plain words: *"Who owes me money? Chase anyone more than two weeks late."* An AI agent looks up the invoices, **checks each one with PayPal live**, and proposes numbered actions (reminders, invoices, drafts to send, payments to confirm). The therapist ticks and approves; the billing code checks each action again and does it. |
 | **Departments and codes** | Every service belongs to a department, and every invoice line carries the department code (on the PayPal invoice too: `SLT-01 · Therapy session`). A family's invoice can mix departments, e.g. an ENT consultation and a hearing test. |
-| **Budgets** | *Departments* (administration): each department's budget for the financial year (April to March), what is used (spending logged + requests paid), what is left, requests waiting, and income from patients by department code (for reporting only). |
-| **Money requests, paid with PayPal Payouts** | A department asks for an amount, says what it's for, and whether it goes to its own PayPal account or to a supplier's. Administration sees the budget left after it, then approves (PayPal Payouts sends the money) or rejects with a reason. Going over budget needs an explicit decision. Payout status comes back from PayPal (webhook and hourly check); a failed payout stops counting against the budget and can be approved again. Departments need only a PayPal account that can receive money, no PayPal app or keys. |
-| **Roles** | *Signed in as* switches between the billing office and each department (a demo switch; in real use each person signs in). Department staff get *My department*: their budget, used and left; ask for money; log spending; follow their requests; log a session with their department's services. |
+| **Budgets** | *Budgets and requests* (finance department): each department's budget for the financial year (April to March), what is used (spending logged + requests paid), what is left, requests waiting, and income from patients by department code (for reporting only). |
+| **Money requests, paid with PayPal Payouts** | A department asks for an amount, says what it's for, and whether it goes to its own PayPal account or to a supplier's. Finance sees the budget left after it, then approves (PayPal Payouts sends the money) or rejects with a reason. Going over budget needs an explicit decision. Payout status comes back from PayPal (webhook and hourly check); a failed payout stops counting against the budget and can be approved again. Departments need only a PayPal account that can receive money, no PayPal app or keys. |
+| **Roles** | *Signed in as* switches between the billing office, the finance department and each department (a demo switch; in real use each person signs in). The billing office sees Overview, Patients and Settings; Finance sees Budgets and requests, and Finances. Department staff get *My department*: their budget, used and left; ask for money; log spending; follow their requests; log a session with their department's services. |
 | **Overview** | One list of what needs the therapist: drafts to send, sessions to invoice, and payments families say they've made. Plus every unpaid invoice with its next reminder. |
 | **Patients** | Filter by *to invoice, waiting, overdue, paid up*. Each patient has sessions, invoices and payments. Flexible names ("known as"), several caregivers, and who pays (family, school, local authority, charity). |
 | **Billing types** | Per session, monthly statement, or prepaid blocks. When a block reaches the session the clinic chooses (e.g. 8 of 10), the next block's invoice goes out automatically. |
@@ -34,9 +38,9 @@ TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED
 
 `src/ai.js` uses the official Anthropic SDK (`@anthropic-ai/sdk`). The AI has one agent and three small jobs, each with a safe fallback.
 
-### The billing assistant (an agent with tools)
+### The billing and finance assistants (an agent with tools)
 
-The therapist asks in plain words. Claude (`AGENT_MODEL`, Claude Opus 5.5 by default) runs a tool-use loop over tools that the billing code defines and runs (`src/practice.js`, *the billing assistant*):
+Staff ask in plain words. The **billing office** gets billing tools and actions (reminders, invoices, confirming payments); the **finance department** gets budget tools and one action (pay a money request). Neither can use the other's tools: this is enforced in the code, not just the prompt. Claude (`AGENT_MODEL`, Claude Opus 5.5 by default) runs a tool-use loop over tools that the billing code defines and runs (`src/practice.js`, *the billing assistant*):
 
 | Tool | What it does |
 |---|---|
@@ -46,7 +50,7 @@ The therapist asks in plain words. Claude (`AGENT_MODEL`, Claude Opus 5.5 by def
 | `list_reported_payments` | Bank transfers and cash that families reported, waiting to be confirmed |
 | `month_summary` | Paid in, PayPal fees, expenses, profit for a month |
 | `department_budgets` | Budgets by department code (budget, used, left) and every money request with the budget left after it |
-| `propose_action` | Adds a numbered proposal to the plan: `reminder`, `invoice`, `send_draft`, `confirm_payment` or `pay_request`. A request that would go over budget is refused here and left to administration. It does **not** do it. |
+| `propose_action` | Adds a numbered proposal to the plan: `reminder`, `invoice`, `send_draft`, `confirm_payment` or `pay_request`. A request that would go over budget is refused here and left to the finance department. It does **not** do it. |
 
 The agent is told to check PayPal before proposing a reminder, so nobody who has just paid is chased. The screen shows what it checked, its answer, and the proposals with tick boxes. **Approve selected** runs each one through the same tested code as the buttons, after checking it again (an invoice paid in the meantime is skipped). Tools use strict schemas; the request uses Anthropic's server-side refusal fallback. Without an AI key, past the daily limit, or on any AI error, the same tools are driven by built-in rules.
 
@@ -132,12 +136,12 @@ In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypa
 ```bash
 npm run db:local
 npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 24 tests: billing logic, the assistant's checks, Checkout, department budgets and requests
+npm test             # 25 tests: billing logic, the assistants' checks and team separation, Checkout, department budgets and requests
 ```
 
 ## Try the demo
 
-**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office and a department, open **Departments** to approve a money request (one fits the budget, one goes over), and start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
+**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office, the finance department and a department. As **Finance**, approve a money request (two fit the budget, one goes over). As the **billing office**, start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
 
 Six made-up patients cover every case:
 

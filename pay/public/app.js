@@ -3,8 +3,14 @@
 (function () {
   'use strict';
   let S = null, M = null, DEP = null;
-  let role = 'admin';
-  try { role = localStorage.getItem('tjs-pay-role') || 'admin'; } catch { /* private window */ }
+  // Who is using the screen (a demo switch; in real use each person signs in):
+  // the billing office (invoices, applying payments, what is owed), the finance department (budgets and
+  // money requests), or a department's staff.
+  let role = 'billing';
+  try { role = localStorage.getItem('tjs-pay-role') || 'billing'; } catch { /* private window */ }
+  if (role === 'admin') role = 'billing';
+  const TABS = { billing: ['week', 'patients', 'settings'], finance: ['depts', 'money'], dept: ['dept'] };
+  const team = () => (role === 'billing' || role === 'finance' ? role : 'dept');
   const prevMonth = () => { const d = new Date(); d.setUTCDate(1); d.setUTCDate(0); return d.toISOString().slice(0, 7); };
   const V = { dmonth: null, tab: 'week', filter: 'all', patient: null, month: null, ask: '', plan: null, busy: false, results: null };
   const $ = (id) => document.getElementById(id);
@@ -110,16 +116,17 @@
   // ---------- rendering ----------
   function render() {
     if (!S) return;
-    const admin = role === 'admin' || !dep(role);
-    if (!admin && !['dept'].includes(V.tab)) V.tab = 'dept';
-    if (admin && V.tab === 'dept') V.tab = 'week';
-    $('role').innerHTML = `<option value="admin">Administration (billing office)</option><optgroup label="Department staff">${S.departments.map((d) => `<option value="${esc(d.id)}"${d.id === role ? ' selected' : ''}>${esc(d.code)} ${esc(d.name)}</option>`).join('')}</optgroup>`;
-    if (admin) $('role').value = 'admin';
-    const needs = needsYou().length;
+    if (team() === 'dept' && !dep(role)) role = 'billing';
+    const tabs = TABS[team()];
+    if (!tabs.includes(V.tab)) V.tab = tabs[0];
+    $('role').innerHTML = `<option value="billing">Billing office</option><option value="finance">Finance department</option><optgroup label="Department staff">${S.departments.map((d) => `<option value="${esc(d.id)}">${esc(d.code)} ${esc(d.name)}</option>`).join('')}</optgroup>`;
+    $('role').value = role;
+    const needs = needsYou().length, asks = (S.requests || []).filter((r) => r.status === 'pending').length;
     document.querySelectorAll('.tab').forEach((t) => {
-      t.hidden = admin ? t.dataset.tab === 'dept' : t.dataset.tab !== 'dept';
+      t.hidden = !tabs.includes(t.dataset.tab);
       t.setAttribute('aria-selected', String(t.dataset.tab === V.tab));
       if (t.dataset.tab === 'week') t.innerHTML = 'Overview' + (needs ? `<span class="count">${needs}</span>` : '');
+      if (t.dataset.tab === 'depts') t.innerHTML = 'Budgets and requests' + (asks ? `<span class="count">${asks}</span>` : '');
     });
     $('demo-note').textContent = S.mode === 'review' ? 'Review copy: made-up patients, PayPal simulated in your browser. The real app uses the PayPal sandbox.' : S.mode === 'mock' ? 'Test mode: PayPal is simulated. Made-up patients only.' : 'PayPal sandbox demo: made-up patients, no real money.';
     const view = $('view');
@@ -140,10 +147,6 @@
       const p = pat(c.patient_id), i = S.invoices.find((x) => x.id === c.invoice_id);
       out.push({ html: `<p><b>${esc(p.known_as)}</b>: ${esc(toName(billTo(p)) )} says ${m(c.amount_pence)} was paid ${esc(how(c.method))}${i ? ` for ${esc(i.period)}` : ''}.</p><p class="muted">Check it has arrived${c.reference ? `, ref ${esc(c.reference)}` : ''}.</p>`,
         actions: `<button class="btn small" data-act="confirm" data-id="${esc(c.id)}">Received</button><button class="btn small line" data-act="reject" data-id="${esc(c.id)}">Not received</button>` });
-    });
-    (S.requests || []).filter((r) => r.status === 'pending').forEach((r) => {
-      const d = dep(r.dept_id);
-      out.push({ html: `<p><span class="code">${esc(d.code)}</span> asks for ${m(r.pence)}: ${esc(r.purpose)}.</p><p class="muted">To ${esc(r.payee_name)}. Check it against their budget.</p>`, actions: `<button class="btn small" data-act="tab" data-id="depts">Review</button>` });
     });
     S.invoices.filter((i) => i.status === 'DRAFT').forEach((i) => {
       const p = pat(i.patient_id);
@@ -197,7 +200,10 @@
   }
 
   // ----- the billing assistant -----
-  const EXAMPLES = ['Who owes us money? Chase anyone more than two weeks late.', 'Invoice everything that’s waiting.', 'Review the money requests from departments.', 'Which departments are close to their budget?'];
+  const EXAMPLES = {
+    billing: ['Who owes us money? Chase anyone more than two weeks late.', 'Invoice everything that’s waiting.', 'Has anyone paid since yesterday?'],
+    finance: ['Review the money requests from departments.', 'Which departments are close to their budget?', 'How much came in this month?'],
+  };
   function assistantView() {
     const P = V.plan;
     let out = '';
@@ -215,18 +221,19 @@
         ${!P.by_ai ? '<p class="muted asst-note">Answered with the built-in rules (AI not used).</p>' : ''}
       </div>`;
     }
-    return `<section class="panel asst" aria-labelledby="h-asst"><div class="panel-h"><h2 id="h-asst">Billing assistant</h2><span class="muted asst-note">${S.ai ? 'AI plans, you approve' : 'Built-in rules'}</span></div><div class="panel-b">
+    const ex = EXAMPLES[team()] || EXAMPLES.billing;
+    return `<section class="panel asst" aria-labelledby="h-asst"><div class="panel-h"><h2 id="h-asst">${team() === 'finance' ? 'Finance assistant' : 'Billing assistant'}</h2><span class="muted asst-note">${S.ai ? 'AI plans, you approve' : 'Built-in rules'}</span></div><div class="panel-b">
       <form id="asst-f" class="asst-row"><label class="sr" for="asst-q">Ask the billing assistant</label>
-        <input id="asst-q" maxlength="600" autocomplete="off" placeholder="${esc(EXAMPLES[0])}" value="${esc(V.ask)}">
+        <input id="asst-q" maxlength="600" autocomplete="off" placeholder="${esc(ex[0])}" value="${esc(V.ask)}">
         <button class="btn" type="submit"${V.busy ? ' disabled' : ''}>Ask</button></form>
-      <div class="asst-ex">${EXAMPLES.map((e) => `<button class="filter" type="button" data-act="ask-ex" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
+      <div class="asst-ex">${ex.map((e) => `<button class="filter" type="button" data-act="ask-ex" data-q="${esc(e)}">${esc(e)}</button>`).join('')}</div>
       ${out}</div></section>`;
   }
   async function ask(q) {
     q = String(q || '').trim();
     if (!q) return toast('Type a question first.', true);
     V.ask = q; V.busy = true; V.plan = null; V.results = null; render();
-    try { const d = await window.TJSPayAPI('assistant', { request: q }); V.plan = d.plan; S = await window.TJSPayAPI('state'); }
+    try { const d = await window.TJSPayAPI('assistant', { request: q, team: team() }); V.plan = d.plan; S = await window.TJSPayAPI('state'); }
     catch (e) { toast(e.message, true); }
     finally { V.busy = false; render(); }
   }
@@ -243,7 +250,7 @@
   // ----- departments: budgets and money requests -----
   const dep = (id) => (S.departments || []).find((d) => d.id === id);
   const depOfSvc = (sid) => dep((svc(sid) || {}).department_id);
-  const RQ = { pending: ['todo', 'Waiting for administration'], sending: ['', 'Sent with PayPal'], paid: ['paid', 'Paid with PayPal'], unclaimed: ['', 'Waiting to be claimed'], failed: ['late', 'Payout failed'], rejected: ['late', 'Not approved'] };
+  const RQ = { pending: ['todo', 'Waiting for Finance'], sending: ['', 'Sent with PayPal'], paid: ['paid', 'Paid with PayPal'], unclaimed: ['', 'Waiting to be claimed'], failed: ['late', 'Payout failed'], rejected: ['late', 'Not approved'] };
   const rqTag = (x) => { const [c, t] = RQ[x] || ['', x]; return `<span class="tag ${c}">${esc(t)}</span>`; };
   const leftM = (p) => `<span class="m${p < 0 ? ' neg' : ''}">${gbp(p)}</span>`;
   const bar = (used, budget) => { const pc = budget ? Math.min(100, Math.round(used / budget * 100)) : 0; return `<span class="budget-bar${pc >= 90 ? ' hi' : ''}" role="img" aria-label="${pc}% used"><i class="w${Math.round(pc / 5) * 5}"></i></span>`; };
@@ -256,8 +263,9 @@
   }
   function deptsView() {
     const B = DEP, T = B.totals, waiting = B.requests.filter((r) => ['pending', 'failed'].includes(r.status)), done = B.requests.filter((r) => !['pending', 'failed'].includes(r.status));
-    return `<div class="page-h"><h1>Departments</h1><span class="muted">Financial year ${esc(B.fy)}</span></div>
-    <p class="muted dep-intro">The hospital allocates each department a budget for the year. Departments log what they spend and ask for money when they need it. You see what is used and left, then approve (the money is sent with <b>PayPal Payouts</b>, to the department’s PayPal account or straight to a supplier) or reject.</p>
+    return `<div class="page-h"><h1>Budgets and requests</h1><span class="muted">Finance department · financial year ${esc(B.fy)}</span></div>
+    ${assistantView()}
+    <p class="muted dep-intro">Finance allocates each department a budget for the year, within the overall budget set by the hospital’s leadership. Departments log what they spend and ask for money when they need it. You see what is used and left, then approve (the money is sent with <b>PayPal Payouts</b>, to the department’s PayPal account or straight to a supplier) or reject.</p>
     <section class="panel"><div class="panel-h"><h2>Money requests</h2><div class="actions">${done.some((r) => ['sending', 'unclaimed'].includes(r.status)) ? '<button class="btn small line" data-act="payout-refresh">Check status with PayPal</button>' : ''}<span class="muted">${waiting.length} waiting</span></div></div>
       ${waiting.length ? `<ul class="rows">${waiting.map((r) => requestRow(r, true)).join('')}</ul>` : '<p class="empty">No requests waiting.</p>'}
       ${done.length ? `<details class="done"><summary>Decided (${done.length})</summary><ul class="rows">${done.map((r) => requestRow(r, true)).join('')}</ul></details>` : ''}</section>
@@ -280,13 +288,13 @@
     const spend = DEP.spend.filter((x) => x.dept_id === d.id);
     const svcs = S.services.filter((v) => v.department_id === d.id);
     return `<div class="page-h"><h1><span class="code big">${esc(d.code)}</span> ${esc(d.name)}</h1><span class="muted">Financial year ${esc(DEP.fy)}</span></div>
-    <div class="figs dep-figs"><div class="fig"><span>Budget</span><b class="m">${gbp(r.budget)}</b></div><div class="fig"><span>Used</span><b class="m">${gbp(r.used)}</b>${bar(r.used, r.budget)}</div><div class="fig${r.left < 0 ? ' late' : ''}"><span>Left</span><b class="m">${gbp(r.left)}</b></div><div class="fig"><span>Waiting for administration</span><b class="m">${gbp(r.waiting_pence)}</b></div></div>
+    <div class="figs dep-figs"><div class="fig"><span>Budget</span><b class="m">${gbp(r.budget)}</b></div><div class="fig"><span>Used</span><b class="m">${gbp(r.used)}</b>${bar(r.used, r.budget)}</div><div class="fig${r.left < 0 ? ' late' : ''}"><span>Left</span><b class="m">${gbp(r.left)}</b></div><div class="fig"><span>Waiting for Finance</span><b class="m">${gbp(r.waiting_pence)}</b></div></div>
     <div class="two-col"><div>
       <section class="panel"><div class="panel-h"><h2>Ask for money</h2></div><div class="form">
         <div class="two"><label>How much (£)<input id="rq-amt" inputmode="decimal"></label><label>Pay to<select id="rq-to"><option value="department">Our PayPal account${d.payout_email ? ` (${esc(d.payout_email)})` : ''}</option><option value="supplier">A supplier</option></select></label></div>
         <label>What it’s for<input id="rq-purpose" maxlength="200" placeholder="e.g. Hearing aid batteries and repair kits"></label>
         <div class="two" id="rq-sup" hidden><label>Supplier<input id="rq-sname" maxlength="80"></label><label>Supplier’s PayPal email<input id="rq-semail" type="email" maxlength="120"></label></div>
-        <div class="actions"><button class="btn" data-act="rq-ask">Send to administration</button><span class="muted fs-82">Administration checks it against your budget and pays it with PayPal.</span></div></div></section>
+        <div class="actions"><button class="btn" data-act="rq-ask">Send to Finance</button><span class="muted fs-82">The finance department checks it against your budget and pays it with PayPal.</span></div></div></section>
       <section class="panel"><div class="panel-h"><h2>Our requests</h2></div>${mine.length ? `<ul class="rows">${mine.map((x) => requestRow(x, false)).join('')}</ul>` : '<p class="empty">No requests yet.</p>'}</section>
       <section class="panel"><div class="panel-h"><h2>Log spending</h2></div><div class="logform">
         <label>Date<input type="date" id="sp-date" value="${esc(S.today)}" max="${esc(S.today)}"></label>
@@ -583,7 +591,7 @@
         if (!window.confirm(over ? `This takes ${r.code} ${gbp(-r.left_after)} over its budget. Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal anyway?` : `Pay ${gbp(r.pence)} to ${r.payee_name} with PayPal?`)) break;
         act(b, `requests/${id}/approve`, { over_budget: over }, () => toast('Sent with PayPal Payouts.')); break; }
       case 'rq-reject': { const why = window.prompt('Why isn’t it approved? The department will see this.'); if (why === null) break; act(b, `requests/${id}/reject`, { reason: why }, () => toast('Marked as not approved.')); break; }
-      case 'rq-ask': act(b, 'requests', { dept_id: role, amount: $('rq-amt').value, purpose: $('rq-purpose').value.trim(), pay_to: $('rq-to').value, payee_name: $('rq-sname').value.trim(), payee_email: $('rq-semail').value.trim() }, () => toast('Sent to administration.')); break;
+      case 'rq-ask': act(b, 'requests', { dept_id: role, amount: $('rq-amt').value, purpose: $('rq-purpose').value.trim(), pay_to: $('rq-to').value, payee_name: $('rq-sname').value.trim(), payee_email: $('rq-semail').value.trim() }, () => toast('Sent to the finance department.')); break;
       case 'sp-log': act(b, 'spend', { dept_id: role, date: $('sp-date').value, what: $('sp-what').value.trim(), category: $('sp-cat').value, amount: $('sp-amt').value }, () => toast('Logged against your budget.')); break;
       case 'dept-log': act(b, 'sessions', { patient_id: $('ds-pat').value, service_id: $('ds-svc').value, date: $('ds-date').value, where: $('ds-where').value }, () => toast('Logged. The billing office will invoice it.')); break;
       case 'ask-ex': ask(b.dataset.q); break;
@@ -608,7 +616,7 @@
     if (ev.target.id === 'rq-to') { $('rq-sup').hidden = ev.target.value !== 'supplier'; return; }
     if (ev.target.id !== 'role') return;
     role = ev.target.value; try { localStorage.setItem('tjs-pay-role', role); } catch { /* ignore */ }
-    V.tab = role === 'admin' ? 'week' : 'dept'; V.patient = null; DEP = null; render(); window.scrollTo(0, 0);
+    V.tab = TABS[team()][0]; V.patient = null; V.plan = null; V.results = null; V.ask = ''; DEP = null; render(); window.scrollTo(0, 0);
   });
   document.addEventListener('submit', (ev) => { if (ev.target.id === 'asst-f') { ev.preventDefault(); ask($('asst-q').value); } });
   document.addEventListener('input', (ev) => { if (ev.target.id === 'asst-q') V.ask = ev.target.value; });

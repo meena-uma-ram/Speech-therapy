@@ -320,7 +320,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     [49, 42, 35, 28, 21, 14, 7].forEach((k) => S('p_zara', d(k), 'svc_45', 'in person', zb.id));
     await old(pat(D, 'p_tomas'), 'monthly', fmonth(twoAgo), [S('p_tomas', `${twoAgo}-06`, 'svc_assess', 'at school'), S('p_tomas', `${twoAgo}-06`, 'svc_travel'), ...['13', '20', '27'].map((x) => S('p_tomas', `${twoAgo}-${x}`, 'svc_45', 'at school'))], 33, 20, 'bank', 'NFC-PO-88213');
     await old(pat(D, 'p_tomas'), 'monthly', fmonth(lastMonth), ['03', '10', '17', '24'].map((x) => S('p_tomas', `${lastMonth}-${x}`, 'svc_45', 'at school')), 5, null);
-    // Department spending this financial year, and money requests to administration.
+    // Department spending this financial year, and money requests to the finance department.
     const fyStart = fyOf(today()).start, dd = (k) => { const x = d(k); return x < fyStart ? fyStart : x; };
     [['ent', 120, 'Otoscope replacement heads', 'Equipment', 1240000], ['ent', 40, 'Disposable specula', 'Supplies', 38000], ['paed', 90, 'Growth charts and scales service', 'Equipment', 620000], ['neuro', 150, 'EEG cap replacements', 'Equipment', 1690000], ['neuro', 30, 'Conference: paediatric epilepsy', 'Training', 245000],
       ['cardio', 100, 'Holter monitor service contract', 'Equipment', 980000], ['pt', 60, 'Treatment couch', 'Equipment', 410000], ['ot', 75, 'Sensory room equipment', 'Equipment', 350000], ['avt', 50, 'Toys and listening materials', 'Supplies', 120000],
@@ -395,7 +395,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       }
       case 'assistant': {
         if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
-        return { plan: await assistant(D, b.request) };
+        return { plan: await assistant(D, b.request, b.team) };
       }
       case 'departments': {
         if (p[1] === 'settings') {
@@ -441,7 +441,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   // ---------- departments: budgets, spending, and money requests paid with PayPal Payouts ----------
   // The hospital allocates each department a budget for the financial year (1 April to 31 March).
   // Departments log what they spend, and ask for money when they need it (for their own PayPal account or
-  // straight to a supplier). Administration sees what is used and left, then approves (PayPal Payouts sends
+  // straight to a supplier). The finance department sees what is used and left, then approves (PayPal Payouts sends
   // the money) or rejects. Income is still tagged by department code, for reporting only.
   function split(pence, parts) {
     const total = parts.reduce((t, x) => t + x.w, 0);
@@ -501,7 +501,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     if (pence > 5000000) throw new Error('Requests over £50,000 go through the hospital’s purchasing process.');
     const supplier = b.pay_to === 'supplier';
     const email = String(supplier ? b.payee_email || '' : d.payout_email || '').trim().slice(0, 120);
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error(supplier ? 'Add the supplier’s PayPal email.' : 'Your department has no PayPal email yet. Ask administration to add it.');
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error(supplier ? 'Add the supplier’s PayPal email.' : 'Your department has no PayPal email yet. Ask the finance department to add it.');
     const r = { id: uid('rq'), dept_id: d.id, created_at: now(), pence, purpose: String(b.purpose).slice(0, 200), pay_to: supplier ? 'supplier' : 'department', payee_name: supplier ? String(b.payee_name || 'Supplier').slice(0, 80) : `${d.code} ${d.name}`, payee_email: email, status: 'pending', reason: null, decided_at: null, payout: null };
     D.requests.unshift(r);
     log(D, 'request', `${d.code} asks for ${gbp(pence)}: ${r.purpose} (to ${r.payee_name}).`);
@@ -512,7 +512,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     if (!['pending', 'failed'].includes(r.status)) return { error: 'This request has already been handled.' };
     const row = budgets(D).departments.find((x) => x.id === r.dept_id);
     const over = r.pence - row.left;
-    if (over > 0 && !allowOver) return { error: `${row.code} would go ${gbp(over)} over its budget (${gbp(row.left)} left). Administration must decide this one on screen.`, over };
+    if (over > 0 && !allowOver) return { error: `${row.code} would go ${gbp(over)} over its budget (${gbp(row.left)} left). The finance department must decide this one on screen.`, over };
     return { summary: `Pay ${gbp(r.pence)} to ${r.payee_name} for ${row.code}: ${r.purpose} (${gbp(row.left - r.pence)} of the budget left after)`, over: Math.max(0, over) };
   }
   async function payRequest(D, id, allowOver) {
@@ -549,7 +549,11 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   // The AI plans; this code checks and does. Read tools return billing facts only. propose_action only
   // adds a numbered proposal to the plan; each one is checked again and run only when the therapist approves it.
   const daysLate = (i) => i.due_date && i.due_date < today() ? daysBetween(i.due_date, today()) : 0;
-  const ACTIONS = ['reminder', 'invoice', 'send_draft', 'confirm_payment', 'pay_request'];
+  // Two teams use the assistant. The billing office invoices patients, applies payments to invoices and chases
+  // what is owed. The finance department allocates budgets and approves money requests. Each gets only its own tools.
+  const TEAM_ACTIONS = { billing: ['reminder', 'invoice', 'send_draft', 'confirm_payment'], finance: ['pay_request'] };
+  const TEAM_TOOLS = { billing: ['list_unpaid_invoices', 'check_paypal', 'list_patients', 'list_reported_payments', 'propose_action'], finance: ['department_budgets', 'month_summary', 'list_unpaid_invoices', 'propose_action'] };
+  const teamOf = (t) => (t === 'finance' ? 'finance' : 'billing');
   function checkAction(D, a) {
     if (a.type === 'reminder') {
       const i = inv(D, a.id);
@@ -597,11 +601,15 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     { name: 'list_reported_payments', description: 'Payments families or the therapist reported outside PayPal (bank transfer, cash, cheque) that are waiting for the therapist to confirm they arrived.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
     { name: 'month_summary', description: 'Money for one month: paid in, estimated PayPal fees, expenses, profit, sessions and hours, split by payer and payment method.', input_schema: { type: 'object', properties: { month: { type: 'string', description: 'YYYY-MM' } }, required: ['month'], additionalProperties: false }, strict: true },
     { name: 'department_budgets', description: 'This financial year (April to March) by department code: budget allocated, spending logged, money requests paid, used, left, and requests waiting. Also every money request with its id, purpose, payee, amount, status, and the budget left after it. Income per department is for reporting only.', input_schema: { type: 'object', properties: {}, additionalProperties: false }, strict: true },
-    { name: 'propose_action', description: 'Add one action to the plan for administration to approve. Nothing happens until they approve it. reminder: id is an invoice id; sends the next reminder through PayPal. invoice: id is a patient id; invoices their waiting sessions and sends it through PayPal. send_draft: id is a draft invoice id. confirm_payment: id is a reported payment id. pay_request: id is a money request id; approves it and sends the money with PayPal Payouts. Requests that would take a department over budget are refused here and must be decided by administration on screen. Each action is checked; an error explains why it was not added.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: ACTIONS }, id: { type: 'string' }, reason: { type: 'string', description: 'One short sentence the therapist will see.' } }, required: ['type', 'id', 'reason'], additionalProperties: false }, strict: true },
+    { name: 'propose_action', description: 'Add one action to the plan for the user to approve. Nothing happens until they approve it. reminder: id is an invoice id; sends the next reminder through PayPal. invoice: id is a patient id; invoices their waiting sessions and sends it through PayPal. send_draft: id is a draft invoice id. confirm_payment: id is a reported payment id. pay_request: id is a money request id; approves it and sends the money with PayPal Payouts. Requests that would take a department over budget are refused here and must be decided by the finance department on screen. Each action is checked; an error explains why it was not added.', input_schema: { type: 'object', properties: { type: { type: 'string', enum: [] }, id: { type: 'string' }, reason: { type: 'string', description: 'One short sentence the therapist will see.' } }, required: ['type', 'id', 'reason'], additionalProperties: false }, strict: true },
   ];
   const STEP = { department_budgets: 'Looked at department budgets and requests', list_unpaid_invoices: 'Looked at unpaid invoices', check_paypal: 'Checked payment status with PayPal', list_patients: 'Looked at patients and sessions to invoice', list_reported_payments: 'Looked at payments families reported', month_summary: 'Added up the month' };
 
+  function toolsFor(team) {
+    return TOOLS.filter((t) => TEAM_TOOLS[team].includes(t.name)).map((t) => t.name !== 'propose_action' ? t : { ...t, input_schema: { ...t.input_schema, properties: { ...t.input_schema.properties, type: { type: 'string', enum: TEAM_ACTIONS[team] } } } });
+  }
   async function runTool(D, plan, name, input) {
+    if (!TEAM_TOOLS[plan.team].includes(name)) throw new Error('That tool is not available to this team.');
     if (name !== 'propose_action' && STEP[name] && !plan.steps.includes(STEP[name])) plan.steps.push(STEP[name]);
     if (name === 'list_unpaid_invoices') return D.invoices.filter(isOpen).map((i) => { const p = pat(D, i.patient_id); return { invoice_id: i.id, patient: p.known_as, paid_by: i.to.org ? i.to.name : `${toName(i.to)} (family)`, period: i.period, owed: gbp(outstanding(i)), sent_on: i.sent_at, due_on: i.due_date, days_since_sent: daysBetween(i.sent_at, today()), days_late: daysLate(i), reminders_sent: i.reminder_count, last_reminder_on: i.last_reminder_at, family_says_paid_another_way: D.claims.some((c) => c.invoice_id === i.id && c.status === 'pending') }; });
     if (name === 'check_paypal') {
@@ -621,6 +629,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     if (name === 'department_budgets') { const B = budgets(D); return { financial_year: B.fy, departments: B.departments.map((r) => ({ code: r.code, name: r.name, budget: gbp(r.budget), used: gbp(r.used), left: gbp(r.left), requests_waiting: r.waiting, income_for_reporting: gbp(r.income) })), requests: B.requests.map((r) => ({ request_id: r.id, department: r.code, purpose: r.purpose, pay_to: `${r.payee_name} (${r.pay_to})`, amount: gbp(r.pence), status: r.status, asked_on: r.created_at.slice(0, 10), budget_left_after: gbp(r.left_after) })) }; }
     if (name === 'propose_action') {
       const a = { type: input.type, id: String(input.id || '') };
+      if (!TEAM_ACTIONS[plan.team].includes(a.type)) throw new Error(`That is not a ${plan.team === 'finance' ? 'finance' : 'billing office'} action.`);
       if (plan.actions.some((x) => x.type === a.type && x.id === a.id)) return { added: false, error: 'Already in the plan.' };
       if (plan.actions.length >= 12) return { added: false, error: 'The plan is full (12 actions).' };
       const c = checkAction(D, a);
@@ -635,13 +644,17 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
   async function assistantByRules(D, plan, request) {
     const t = request.toLowerCase();
     const propose = async (type, id, reason) => { try { await runTool(D, plan, 'propose_action', { type, id, reason }); } catch { /* not eligible: skip */ } };
-    const all = !/remind|chase|owe|late|overdue|unpaid|invoice|bill|paid|confirm|month|profit|payout|pay out|department|request|budget/.test(t);
-    if (/request|budget|department|payout|pay out|asking for money/.test(t)) {
+    const all = !/remind|chase|owe|late|overdue|unpaid|invoice|bill|paid|confirm/.test(t);
+    if (plan.team === 'finance') {
       const B = await runTool(D, plan, 'department_budgets', {});
       const waiting = B.requests.filter((r) => r.status === 'pending');
       for (const r of waiting) await propose('pay_request', r.request_id, `Fits ${r.department}’s budget.`);
       const over = waiting.length - plan.actions.length;
-      return `${B.financial_year}: ${waiting.length ? `${waiting.length} money request${waiting.length === 1 ? ' is' : 's are'} waiting.` : 'No money requests are waiting.'}${plan.actions.length ? ` I’ve proposed paying ${plan.actions.length} that fit${plan.actions.length === 1 ? 's' : ''} the budget.` : ''}${over > 0 ? ` ${over} would go over budget, so decide ${over === 1 ? 'it' : 'them'} on the Departments page.` : ''}${plan.actions.length ? ' Nothing is sent until you approve.' : ''}`;
+      let month = '';
+      if (/month|profit|income|money in/.test(t)) { const f = await runTool(D, plan, 'month_summary', { month: today().slice(0, 7) }); month = ` ${f.month}: ${f.paid_in} paid in, ${f.profit} profit after fees and expenses.`; }
+      const near = budgets(D).departments.filter((r) => r.left < 0.15 * r.budget).map((r) => `${r.code} (${gbp(r.left)} left of ${gbp(r.budget)})`);
+      if (/close|near|left|budget/.test(t) && !/request/.test(t)) return `${B.financial_year}: ${near.length ? `close to their budget: ${near.join(', ')}.` : 'no department is close to its budget.'}${month}`;
+      return `${B.financial_year}: ${waiting.length ? `${waiting.length} money request${waiting.length === 1 ? ' is' : 's are'} waiting.` : 'No money requests are waiting.'}${plan.actions.length ? ` I’ve proposed paying ${plan.actions.length} that fit${plan.actions.length === 1 ? 's' : ''} the budget.` : ''}${over > 0 ? ` ${over} would go over budget, so decide ${over === 1 ? 'it' : 'them'} yourself under Money requests.` : ''}${plan.actions.length ? ' Nothing is sent until you approve.' : ''}${month}`;
     }
     const lines = [];
     if (all || /remind|chase|owe|late|overdue|unpaid|paid/.test(t)) {
@@ -660,30 +673,37 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       const r = await runTool(D, plan, 'list_reported_payments', {});
       if (r.length) lines.push(`${r.length} payment${r.length === 1 ? '' : 's'} reported outside PayPal ${r.length === 1 ? 'is' : 'are'} waiting for you to check.`);
     }
-    if (/month|profit/.test(t)) { const f = await runTool(D, plan, 'month_summary', { month: today().slice(0, 7) }); lines.push(`${f.month}: ${f.paid_in} paid in, ${f.profit} profit after fees and expenses.`); }
     lines.push(plan.actions.length ? `I’ve proposed ${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} below. Nothing is sent until you approve.` : 'There’s nothing to do right now.');
     return lines.join(' ');
   }
 
-  async function assistant(D, request) {
+  async function assistant(D, request, teamName) {
+    const team = teamOf(teamName);
     request = String(request || '').trim().slice(0, 600);
     if (!request) throw new Error('Ask the assistant something first.');
-    const plan = { id: uid('plan'), request, created_at: now(), steps: [], actions: [], text: '', by_ai: false, status: 'open' };
+    const plan = { id: uid('plan'), team, request, created_at: now(), steps: [], actions: [], text: '', by_ai: false, status: 'open' };
     if (ai && ai.assistant) {
       const s = D.settings;
-      const system = `You are the billing assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the central administration (billing office); ${s.therapist} is using you. Today is ${today()}.
-Departments, each with a code: ${(D.departments || []).map((d) => `${d.code} ${d.name}`).join('; ')}. One hospital PayPal account receives every payment; each invoice line carries its department's code (income per department is for reporting). The hospital allocates each department a budget for the financial year (April to March). Departments log spending and ask for money; administration approves requests and the money is sent with PayPal Payouts.
-You help with money only: invoices, PayPal payments, reminders and payments made outside PayPal. You never see or discuss clinical information.
+      const who = team === 'finance'
+        ? `You are the finance assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the finance department, which allocates each department a budget for the financial year (April to March) and approves departments' money requests; approved requests are paid with PayPal Payouts, to the department's PayPal account or a supplier's. You do not invoice patients or chase payments: that is the billing office's job.`
+        : `You are the billing assistant inside TJS Pay for ${s.practice}, a UK children's hospital. You work for the billing office, which invoices patients and funders through PayPal, applies incoming payments to the right invoices, and follows up what is owed. Budgets and department spending belong to the finance department, not you.`;
+      const how = team === 'finance'
+        ? `- Run department_budgets first. Propose pay_request only for requests that fit the department's budget; name any that would go over and leave them to the finance team to decide on screen.
+- You may look at unpaid invoices and monthly income to answer questions, but you cannot act on them.`
+        : `- Before proposing a reminder, run check_paypal so nobody who has already paid is chased.
+- If someone says they paid another way, don't propose a reminder for that invoice; mention it instead.
+- Reminders follow the hospital's own wording and schedule (days ${s.reminder_days.join(', ')} after sending). The "reason" is for staff, not the family.`;
+      const system = `${who} Today is ${today()}.
+Departments, each with a code: ${(D.departments || []).map((d) => `${d.code} ${d.name}`).join('; ')}. One hospital PayPal account receives every patient payment; each invoice line carries its department's code.
+You never see or discuss clinical information.
 How you work:
-- Look things up with the tools. Before proposing a reminder, run check_paypal so nobody who has already paid is chased.
-- You cannot send, charge or record anything yourself. Use propose_action for each thing that should happen; the therapist approves each one on screen.
-- For money requests, run department_budgets first. Propose pay_request only for requests that fit the department's budget; name any that would go over and leave them to administration.
-- Propose only what the request asks for. If someone says they paid another way, don't propose a reminder for that invoice; mention it instead.
-- Reminders follow the practice's own wording and schedule (days ${s.reminder_days.join(', ')} after sending). The "reason" is for the therapist, not the family.
-- Quote amounts exactly as the tools give them. Never invent amounts, dates or people.
-Then reply to the therapist in plain UK English: what you found and what you proposed, referring to proposals by number. At most 120 words, no tables, no headings, no emojis.`;
+- Look things up with the tools.
+- You cannot send, pay, charge or record anything yourself. Use propose_action for each thing that should happen; a person approves each one on screen.
+${how}
+- Propose only what the request asks for. Quote amounts exactly as the tools give them. Never invent amounts, dates or people.
+Then reply in plain UK English: what you found and what you proposed, referring to proposals by number. At most 120 words, no tables, no headings, no emojis.`;
       try {
-        const r = await ai.assistant({ system, request, tools: TOOLS, run: (name, input) => runTool(D, plan, name, input) });
+        const r = await ai.assistant({ system, request, tools: toolsFor(team), run: (name, input) => runTool(D, plan, name, input) });
         plan.text = r.text || 'Done.'; plan.by_ai = true;
       } catch (e) {
         plan.steps.push(`AI unavailable (${String(e.message || e).slice(0, 80)}), so the built-in rules were used`);
@@ -691,7 +711,7 @@ Then reply to the therapist in plain UK English: what you found and what you pro
       }
     } else plan.text = await assistantByRules(D, plan, request);
     D.plans = [plan, ...(D.plans || [])].slice(0, 5);
-    log(D, 'info', `Assistant: “${request.slice(0, 80)}”. ${plan.actions.length ? `${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} proposed.` : 'Nothing to approve.'}`);
+    log(D, 'info', `${team === 'finance' ? 'Finance' : 'Billing'} assistant: “${request.slice(0, 80)}”. ${plan.actions.length ? `${plan.actions.length} action${plan.actions.length === 1 ? '' : 's'} proposed.` : 'Nothing to approve.'}`);
     return plan;
   }
 

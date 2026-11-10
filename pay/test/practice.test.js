@@ -271,11 +271,39 @@ test('requests: over budget needs an explicit decision; a failed payout stops co
 
 test('assistant without AI: money requests that fit the budget are proposed; the over-budget one is left to administration', async () => {
   const { D, P } = await fresh();
-  const { plan } = await P.handle(D, 'assistant', { request: 'Review the money requests from departments' });
+  const { plan } = await P.handle(D, 'assistant', { request: 'Review the money requests from departments', team: 'finance' });
   const depts = plan.actions.map((a) => D.requests.find((r) => r.id === a.id).dept_id).sort();
   assert.deepEqual(depts, ['dep_aud', 'dep_pt']);
   assert.match(plan.text, /over budget/);
   const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1, 2] });
   assert.ok(st.results.every((x) => x.ok));
   assert.equal(D.requests.filter((r) => r.status === 'sending').length, 2);
+});
+
+test('teams: the billing office cannot pay money requests, and finance cannot send reminders', async () => {
+  let billingTools = [], financeTools = [];
+  const ai = {
+    async assistant({ tools, run }) {
+      const names = tools.map((t) => t.name);
+      const enumOf = tools.find((t) => t.name === 'propose_action').input_schema.properties.type.enum;
+      if (names.includes('department_budgets')) {
+        financeTools = names;
+        assert.deepEqual(enumOf, ['pay_request']);
+        await assert.rejects(run('propose_action', { type: 'reminder', id: 'x', reason: 'x' }), /not a finance action/);
+        await assert.rejects(run('check_paypal', { invoice_ids: [] }), /not available/);
+      } else {
+        billingTools = names;
+        assert.ok(!enumOf.includes('pay_request'));
+        await assert.rejects(run('department_budgets', {}), /not available/);
+        await assert.rejects(run('propose_action', { type: 'pay_request', id: 'x', reason: 'x' }), /not a billing office action/);
+      }
+      return { text: 'ok' };
+    },
+  };
+  const { D, P } = await fresh(ai);
+  const b = (await P.handle(D, 'assistant', { request: 'pay the requests' })).plan;
+  const f = (await P.handle(D, 'assistant', { request: 'chase everyone', team: 'finance' })).plan;
+  assert.equal(b.team, 'billing'); assert.equal(f.team, 'finance');
+  assert.ok(billingTools.includes('check_paypal') && !billingTools.includes('department_budgets'));
+  assert.ok(financeTools.includes('department_budgets') && !financeTools.includes('check_paypal'));
 });
