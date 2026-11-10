@@ -59,7 +59,7 @@
       return;
     }
     const s = document.createElement('script');
-    s.src = 'https://www.paypal.com/sdk/js?' + new URLSearchParams({ 'client-id': d.checkout.client_id, currency: d.checkout.currency, intent: 'capture', components: 'buttons' });
+    s.src = 'https://www.paypal.com/sdk/js?' + new URLSearchParams({ 'client-id': d.checkout.client_id, currency: d.checkout.currency, intent: 'capture', components: 'buttons', 'enable-funding': 'paylater' });
     s.onerror = () => payErr('PayPal could not be loaded. You can still pay with the button in your invoice email.');
     s.onload = () => {
       window.paypal.Buttons({

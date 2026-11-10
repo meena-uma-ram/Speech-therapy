@@ -381,3 +381,63 @@ test('check-in: opens 3 days before; a deposit smaller than the scaled price is 
   assert.equal(a.hold.captured_pence, 1800); // £45 less 60% = £18, below the £20 deposit
   assert.equal(D.invoices.find((x) => x.id === a.invoice_id).status, 'PAID');
 });
+
+// ---------- insurance, outside providers, surgery payment plans ----------
+test('insurance: the excess stays with the family, the rest is claimed; a part payment sends the shortfall to the family', async () => {
+  const { D, P } = await fresh();
+  const id = (await P.handle(D, 'invoices/draft', { patient_id: 'p_amara' })).draft; // 4 × £45 = £180
+  const i = D.invoices.find((x) => x.id === id);
+  await assert.rejects(P.handle(D, 'insurance/split', { invoice_id: id, excess: '500' }), /covers the whole bill/);
+  await P.handle(D, 'insurance/split', { invoice_id: id });
+  const c = D.insurance_claims[0], ci = D.invoices.find((x) => x.id === c.invoice_id);
+  assert.equal(i.total_pence, 5000); assert.equal(i.items.reduce((t, x) => t + x.pence, 0), 5000);
+  assert.equal(c.claimed_pence, 13000); assert.equal(ci.to.name, 'Carewell Health Insurance'); assert.equal(ci.paypal_id, null);
+  assert.match(i.note, /comes to £50\.00/); assert.equal(i.claim_id, c.id);
+  await assert.rejects(P.handle(D, 'insurance/split', { invoice_id: id }), /covers the whole bill/);
+  assert.ok(ci.items.every((x) => x.code === 'SLT-01'));
+  await P.handle(D, `insurance/${c.id}/paid`, { amount: '100', reference: 'CW-PAY-1' });
+  assert.equal(c.status, 'part_paid'); assert.equal(c.paid_pence, 10000);
+  const short = D.invoices.find((x) => x.id === c.shortfall_invoice_id);
+  assert.equal(short.total_pence, 3000); assert.equal(short.status, 'DRAFT'); assert.equal(short.to.name, 'Chidi Okafor');
+  await assert.rejects(P.handle(D, `insurance/${c.id}/rejected`, {}), /already been settled/);
+  const seeded = D.insurance_claims.find((x) => x.status === 'submitted');
+  await P.handle(D, `insurance/${seeded.id}/rejected`, { reason: 'Not covered under this policy' });
+  assert.equal(D.invoices.find((x) => x.id === seeded.shortfall_invoice_id).total_pence, seeded.claimed_pence);
+});
+
+test('outside provider: Lakeside is owed its fee only from money collected, and is paid once with PayPal Payouts', async () => {
+  const { D, P } = await fresh();
+  const row = () => P._test.partnerSummary(D).find((x) => x.id === 'pt_lakeside');
+  assert.equal(row().earned, 80000); assert.equal(row().to_pay, 80000);
+  await P.handle(D, 'partners/pt_lakeside/pay', {});
+  assert.equal(row().to_pay, 0); assert.equal(D.partner_payouts[0].pence, 80000);
+  await assert.rejects(P.handle(D, 'partners/pt_lakeside/pay', {}), /Nothing is owed/);
+  await P.refreshPayouts(D);
+  assert.equal(D.partner_payouts[0].status, 'paid');
+  // A new scan, half paid so far: Lakeside has earned half its fee.
+  await P.handle(D, 'sessions', { patient_id: 'p_freya', service_id: 'svc_petct' });
+  const sid = (await P.handle(D, 'invoices/draft', { patient_id: 'p_freya' })).draft;
+  await P.handle(D, `invoices/${sid}/send`, {});
+  await P.handle(D, 'claims/record', { patient_id: 'p_freya', pence: 47500 + 6000, method: 'bank' }); // Freya's older £60 first, then half the scan
+  assert.equal(row().to_pay, 40000);
+});
+
+test('surgery plan: deposit sent now, instalments sent when due, amounts add up, department code on each', async () => {
+  const { D, P, calls } = await fresh();
+  await assert.rejects(P.handle(D, 'plans', { patient_id: 'p_zara', service_id: 'svc_tonsil', date: dayAhead(5) }), /at least 2 weeks/);
+  await P.handle(D, 'plans', { patient_id: 'p_zara', service_id: 'svc_tonsil', date: dayAhead(37), deposit_percent: 30, instalments: 3 });
+  const plan = D.payment_plans[0];
+  assert.equal(plan.parts.length, 4);
+  assert.equal(plan.parts.reduce((t, x) => t + x.pence, 0), 320000);
+  assert.equal(plan.parts[0].pence, 96000); assert.ok(plan.parts[0].invoice_id);
+  assert.ok(plan.parts.slice(1).every((x) => !x.invoice_id && x.due <= dayAhead(30)));
+  const dep = D.invoices.find((x) => x.id === plan.parts[0].invoice_id);
+  assert.equal(dep.status, 'SENT'); assert.equal(dep.items[0].code, 'ENT-01');
+  assert.equal(await P.sendDueInstalments(D), 0);
+  await P.handle(D, `plans/${plan.id}/send`, { part: 1 });
+  assert.ok(plan.parts[1].invoice_id);
+  await assert.rejects(P.handle(D, `plans/${plan.id}/send`, { part: 1 }), /already been sent/);
+  plan.parts[2].due = dayAhead(0);
+  assert.equal(await P.sendDueInstalments(D), 1);
+  assert.equal(calls.filter((c) => c[0] === 'send').length, 3 + 3);
+});

@@ -40,7 +40,8 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
   const lineDept = (D, it) => it.dept_id || (svc(D, it.service_id) || {}).department_id || ((D.departments || [])[0] || {}).id;
   function tagLine(D, it, service_id) {
     const sv = svc(D, service_id), d = sv && dept(D, sv.department_id);
-    return d ? { ...it, service_id, dept_id: d.id, code: d.code, dept_name: d.name } : { ...it, service_id };
+    const partner = sv && sv.partner_id ? { partner_id: sv.partner_id, partner_pence: sv.partner_pence } : {};
+    return d ? { ...it, service_id, dept_id: d.id, code: d.code, dept_name: d.name, ...partner } : { ...it, service_id, ...partner };
   }
   const inv = (D, id) => D.invoices.find((i) => i.id === id);
   const svc = (D, id) => D.services.find((s) => s.id === id);
@@ -279,12 +280,23 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
         { id: 'svc_avt', name: 'Auditory-verbal therapy session', minutes: 60, price_pence: 7000, department_id: 'dep_avt' },
         { id: 'svc_hear', name: 'Hearing test', minutes: 45, price_pence: 8500, department_id: 'dep_aud' },
         { id: 'svc_aid', name: 'Hearing aid fitting', minutes: 60, price_pence: 22000, department_id: 'dep_aud' },
+        // Done by an outside provider: the hospital bills and collects; the partner's fee is paid with PayPal Payouts.
+        { id: 'svc_petct', name: 'PET-CT scan (Lakeside Imaging)', minutes: 90, price_pence: 95000, department_id: 'dep_dx', partner_id: 'pt_lakeside', partner_pence: 80000 },
+        // Surgery: paid with a payment plan, not logged as a session.
+        { id: 'svc_tonsil', name: 'Tonsillectomy (day surgery)', minutes: 0, price_pence: 320000, department_id: 'dep_ent', plan_only: true },
+        { id: 'svc_grommets', name: 'Grommets (day surgery)', minutes: 0, price_pence: 240000, department_id: 'dep_ent', plan_only: true },
       ],
+      insurers: [
+        { id: 'ins_carewell', name: 'Carewell Health Insurance', email: 'claims@carewell.example', pay_days: 30 },
+        { id: 'ins_northshield', name: 'Northshield Medical', email: 'provider-claims@northshield.example', pay_days: 21 },
+      ],
+      partners: [{ id: 'pt_lakeside', name: 'Lakeside Imaging Centre', payout_email: 'accounts@lakeside-imaging.example', what: 'PET-CT scans' }],
+      insurance_claims: [], partner_payouts: [], payment_plans: [],
       patients: [], sessions: [], invoices: [], payments: [], claims: [], expenses: [], events: [], spend: [], requests: [], appointments: [],
     });
     const P = (o) => D.patients.push({ credit_pence: 0, ...o });
     P({ id: 'p_arjun', name: 'Arjun Patel', known_as: 'Arjun', caregivers: [{ name: 'Priya Patel', relation: 'Mum', email: 'priya@example.com', invoices: true }], payer: { type: 'family' }, plan: 'session', service_id: 'svc_45' });
-    P({ id: 'p_amara', name: 'Amara Okafor', known_as: 'Amara', caregivers: [{ name: 'Chidi Okafor', relation: 'Dad', email: 'chidi@example.com', invoices: true }, { name: 'Ngozi Okafor', relation: 'Mum', email: 'ngozi@example.com', invoices: false }], payer: { type: 'family' }, plan: 'monthly', service_id: 'svc_30' });
+    P({ id: 'p_amara', insurance: { insurer_id: 'ins_carewell', policy: 'CW-4471902', excess_pence: 5000 }, name: 'Amara Okafor', known_as: 'Amara', caregivers: [{ name: 'Chidi Okafor', relation: 'Dad', email: 'chidi@example.com', invoices: true }, { name: 'Ngozi Okafor', relation: 'Mum', email: 'ngozi@example.com', invoices: false }], payer: { type: 'family' }, plan: 'monthly', service_id: 'svc_30' });
     P({ id: 'p_freya', name: 'Freya Jensen', known_as: 'Freya', caregivers: [{ name: 'Emma Jensen', relation: 'Mum', email: 'emma@example.com', invoices: true }], payer: { type: 'family' }, plan: 'session', service_id: 'svc_45' });
     P({ id: 'p_liam', name: 'Liam Murphy', known_as: 'Liam', caregivers: [{ name: 'Siobhan Murphy', relation: 'Mum', email: 'siobhan@example.com', invoices: true }, { name: 'Declan Murphy', relation: 'Grandad, does pick-ups', email: '', invoices: false }], payer: { type: 'family' }, plan: 'monthly', service_id: 'svc_30' });
     P({ id: 'p_zara', name: 'Zara Khan', known_as: 'Zara', caregivers: [{ name: 'Aisha Khan', relation: 'Mum', email: 'aisha@example.com', invoices: true }], payer: { type: 'family' }, plan: 'block', service_id: 'svc_45' });
@@ -311,6 +323,8 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
     await visit('p_freya', [[36, 'svc_paed'], [33, 'svc_eeg']], 32, 29, 'bank', 'JENSEN-0921');
     await visit('p_freya', [[6, 'svc_paed']], 5, 2, 'paypal');
     await visit('p_liam', [[27, 'svc_echo']], 26, 24, 'paypal');
+    // Arjun's mum paid the hospital for a PET-CT scan done by Lakeside Imaging: the hospital owes Lakeside its fee.
+    await visit('p_arjun', [[15, 'svc_petct']], 14, 12, 'paypal');
     await visit('p_zara', [[22, 'svc_pt'], [15, 'svc_pt']], 14, 12, 'paypal');
     await visit('p_tomas', [[16, 'svc_ot', 'at school'], [9, 'svc_ot', 'at school']], 8, 4, 'bank', 'NFC-PO-88530');
     for (const [k, pk] of [[25, 24], [18, 17], [11, 3]]) await old(pat(D, 'p_arjun'), 'session', fdate(d(k)), [S('p_arjun', d(k), 'svc_45')], k, pk, 'paypal');
@@ -342,6 +356,14 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
     R('neuro', 1, 320000, 'EEG electrodes and conductive gel for the new clinic', ['NeuroSupply UK', 'accounts@neurosupply.example'], 'pending');
     [[twoAgo, '01', 'Room hire at the community centre', 'Rent', 40000], [twoAgo, '09', 'Assessment forms', 'Materials', 8500], [twoAgo, '30', 'Mileage, school visits', 'Travel', 4200], [lastMonth, '01', 'Room hire at the community centre', 'Rent', 40000], [lastMonth, '12', 'HCPC registration (monthly share)', 'Professional', 1800], [lastMonth, '20', 'Picture cards and toys', 'Materials', 3150], [lastMonth, '28', 'Mileage, school visits', 'Travel', 3800], [today().slice(0, 7), '01', 'Room hire at the community centre', 'Rent', 40000]]
       .forEach(([mo, dd, what, cat, pence]) => D.expenses.push({ id: uid('exp'), date: `${mo}-${dd}`, what, category: cat, pence }));
+    // An insured visit: Amara's excess was paid through PayPal; the rest is claimed from her insurer, not paid yet.
+    {
+      const am = pat(D, 'p_amara'), ses = S('p_amara', d(18), 'svc_hear');
+      const vi = await makeInvoice(D, am, { kind: 'session', period: fdate(d(18)), items: [tagLine(D, { name: `Hearing test, ${fdate(d(18))}`, pence: 8500 }, 'svc_hear')], sessionIds: [ses.id], words: quick(am, fdate(d(18)), 8500, 'session') });
+      await billInsurance(D, vi.id, { excess: '50' });
+      Object.assign(vi, { status: 'SENT', sent_at: d(17), due_date: d(3) }); recordLocal(D, vi, 5000, 'paypal', null, d(15));
+      const cl = D.insurance_claims[0]; cl.submitted_at = new Date(Date.parse(d(17) + 'T10:00:00Z')).toISOString(); Object.assign(inv(D, cl.invoice_id), { sent_at: d(17), due_date: d(-13) });
+    }
     // Upcoming appointments for the check-in & pay demo (none checked in yet, so every PayPal hold is real).
     const later = (k) => addDays(today(), k);
     [['p_freya', 'svc_eeg', later(0), '15:30'], ['p_arjun', 'svc_45', later(0), '16:15'], ['p_amara', 'svc_aid', later(1), '10:00'], ['p_liam', 'svc_intensive', later(2), '09:00'], ['p_tomas', 'svc_ot', later(1), '13:30']]
@@ -419,6 +441,23 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
         if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
         return { plan: await assistant(D, b.request, b.team, !!b.instant) };
       }
+      case 'insurance': {
+        if (p[1] === 'split') await billInsurance(D, String(b.invoice_id || ''), b);
+        else if (p[2] === 'paid') await settleClaim(D, p[1], b, false);
+        else if (p[2] === 'rejected') await settleClaim(D, p[1], b, true);
+        else throw new Error('Not found');
+        return state(D, mode);
+      }
+      case 'partners': {
+        if (p[2] === 'pay') await payPartner(D, p[1]);
+        return { ...state(D, mode), budgets: budgets(D) };
+      }
+      case 'plans': {
+        if (!p[1]) await createPlan(D, b);
+        else if (p[2] === 'send') { const pl = pplan(D, p[1]), part = pl && pl.parts[parseInt(b.part, 10)]; if (!part || part.invoice_id) throw new Error('That instalment has already been sent.'); await sendPart(D, pl, part); }
+        else throw new Error('Not found');
+        return state(D, mode);
+      }
       case 'appointments': {
         if (!p[1]) { const a = book(D, b); const st = state(D, mode); st.booked = a.id; return st; }
         if (p[2] === 'link') { if (!appt(D, p[1])) throw new Error('Not found'); return { checkin_url: checkinLinkFor ? await checkinLinkFor(p[1]) : null }; }
@@ -467,6 +506,120 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
       }
     }
     throw new Error('Not found');
+  }
+
+  // ---------- insurance claims: the insurer's share and the patient's excess ----------
+  // A draft invoice for an insured patient is split line by line: the patient's excess stays on the PayPal invoice,
+  // the rest becomes a claim invoice to the insurer (insurers pay by bank, so it is tracked here, not sent through
+  // PayPal). When the insurer pays, the payment is recorded; any shortfall becomes a draft invoice to the family.
+  const insurer = (D, id) => (D.insurers || []).find((x) => x.id === id);
+  const iclaim = (D, id) => (D.insurance_claims || []).find((x) => x.id === id);
+  /** Split invoice lines into two parts by amount, keeping department codes and partner fees in proportion. */
+  function splitLines(D, items, firstPence, firstTag, restTag) {
+    const shares = split(firstPence, items.map((it, k) => ({ key: k, w: it.pence })));
+    const a = [], b = [];
+    items.forEach((it, k) => {
+      const x = (shares.find((y) => y.key === k) || { pence: 0 }).pence, y = it.pence - x;
+      const part = (pence, tag) => ({ ...it, name: `${it.name} (${tag})`, pence, ...(it.partner_pence ? { partner_pence: Math.round(it.partner_pence * pence / it.pence) } : {}) });
+      if (x > 0) a.push(part(x, firstTag));
+      if (y > 0) b.push(part(y, restTag));
+    });
+    return [a, b];
+  }
+  async function billInsurance(D, invoiceId, b) {
+    const i = inv(D, invoiceId);
+    if (!i || i.status !== 'DRAFT' || i.paid_pence) throw new Error('Only an unpaid draft invoice can be split with insurance.');
+    const p = pat(D, i.patient_id), ins = p.insurance && insurer(D, p.insurance.insurer_id);
+    if (!ins) throw new Error(`${p.known_as} has no insurance on file.`);
+    const excess = Math.min(b.excess != null && toPence(b.excess) != null ? toPence(b.excess) : p.insurance.excess_pence, i.total_pence);
+    if (excess >= i.total_pence) throw new Error('The excess covers the whole bill, so there is nothing to claim.');
+    const [mine, theirs] = splitLines(D, i.items, excess, 'your excess', 'insurer’s share');
+    Object.assign(i, { items: mine, total_pence: excess, note: `${standardNote(D, p, i.period, excess, i.kind).note} This is your insurance excess: the rest (${gbp(theirs.reduce((t, x) => t + x.pence, 0))}) has been claimed from ${ins.name}, policy ${p.insurance.policy}.` });
+    const c = await makeInvoice(D, p, { kind: 'claim', period: i.period, items: theirs, words: { subject: `Claim: ${p.known_as}, ${i.period}`, note: `Claim under policy ${p.insurance.policy}.`, by_ai: false } });
+    Object.assign(c, { to: { name: ins.name, email: ins.email, org: true }, status: 'SENT', sent_at: today(), due_date: addDays(today(), ins.pay_days || 30) });
+    const claim = { id: uid('ic'), insurer_id: ins.id, patient_id: p.id, invoice_id: c.id, patient_invoice_id: i.id, policy: p.insurance.policy, claimed_pence: c.total_pence, paid_pence: 0, status: 'submitted', submitted_at: now(), decided_at: null, reference: null, reason: null };
+    D.insurance_claims.unshift(claim);
+    i.claim_id = claim.id;
+    log(D, 'info', `Claim to ${ins.name}: ${gbp(c.total_pence)} for ${p.known_as}, ${i.period}. ${p.known_as}’s excess (${gbp(excess)}) stays on the PayPal invoice.`, p.id);
+    return claim;
+  }
+  async function settleClaim(D, id, b, rejected) {
+    const c = iclaim(D, id);
+    if (!c || c.status !== 'submitted') throw new Error('This claim has already been settled.');
+    const ci = inv(D, c.invoice_id), p = pat(D, c.patient_id), ins = insurer(D, c.insurer_id);
+    const paid = rejected ? 0 : Math.min(toPence(b.amount) || 0, c.claimed_pence);
+    if (!rejected && !paid) throw new Error('How much did the insurer pay?');
+    if (paid) recordLocal(D, ci, paid, 'bank', b.reference ? String(b.reference).slice(0, 80) : `${ins.name} claim`);
+    const short = c.claimed_pence - paid;
+    Object.assign(ci, { status: paid ? (short ? 'MARKED_AS_PAID' : ci.status) : 'CANCELLED', written_off_pence: short });
+    Object.assign(c, { paid_pence: paid, status: rejected ? 'rejected' : short ? 'part_paid' : 'paid', decided_at: now(), reference: b.reference || null, reason: b.reason ? String(b.reason).slice(0, 200) : null });
+    if (short > 0) {
+      // What the insurer didn't cover is the family's to pay: a draft invoice for the billing office to check and send.
+      const [lines] = splitLines(D, ci.items, short, 'not covered by insurer', '');
+      const d = await makeInvoice(D, p, { kind: 'session', period: ci.period, items: lines.map((x) => ({ ...x, name: x.name.replace(' (insurer’s share)', '') })) });
+      c.shortfall_invoice_id = d.id;
+      log(D, 'draft', `${ins.name} ${rejected ? 'rejected the claim' : `paid ${gbp(paid)} of ${gbp(c.claimed_pence)}`} for ${p.known_as}, ${ci.period}${c.reason ? ` (${c.reason})` : ''}. Draft invoice to the family for ${gbp(short)}.`, p.id);
+    } else log(D, 'paid', `${ins.name} paid the claim in full: ${gbp(paid)} for ${p.known_as}, ${ci.period}.`, p.id);
+    return c;
+  }
+
+  // ---------- outside providers: the hospital collects, the partner is paid its fee with PayPal Payouts ----------
+  const partner = (D, id) => (D.partners || []).find((x) => x.id === id);
+  /** What each partner has earned from money actually collected, what has been paid out, and what is left to pay. */
+  function partnerSummary(D) {
+    const earned = {};
+    D.payments.forEach((x) => {
+      const i = inv(D, x.invoice_id); if (!i || !i.total_pence) return;
+      const total = i.items.reduce((t, it) => t + it.pence, 0) || i.total_pence;
+      i.items.filter((it) => it.partner_id).forEach((it) => { earned[it.partner_id] = (earned[it.partner_id] || 0) + Math.round(it.partner_pence * x.pence / total); });
+    });
+    return (D.partners || []).map((pt) => {
+      const out = (D.partner_payouts || []).filter((y) => y.partner_id === pt.id);
+      const paid = out.filter((y) => USED.includes(y.status)).reduce((t, y) => t + y.pence, 0);
+      return { ...pt, earned: earned[pt.id] || 0, paid, to_pay: Math.max(0, (earned[pt.id] || 0) - paid), payouts: out };
+    });
+  }
+  async function payPartner(D, id) {
+    const row = partnerSummary(D).find((x) => x.id === id);
+    if (!row) throw new Error('No outside provider with that id.');
+    if (!row.to_pay) throw new Error(`Nothing is owed to ${row.name} right now.`);
+    const k = (D.partner_payouts || []).length + 1, itemId = `PARTNER-${row.id.slice(-6)}-${k}`;
+    const out = await paypal.createPayout({ batchId: `${row.id}-${k}-${Date.now().toString(36)}`, subject: `${D.settings.practice}: payment for services`, items: [{ email: row.payout_email, pence: row.to_pay, itemId, note: `${row.name}: fees for services to our patients, collected by ${D.settings.practice}.` }] });
+    D.partner_payouts = [{ id: uid('pp'), partner_id: row.id, pence: row.to_pay, status: 'sending', created_at: now(), payout: { batch_id: out.batch_id, item_id: itemId, status: 'PENDING' } }, ...(D.partner_payouts || [])];
+    log(D, 'payout', `Paid ${row.name} ${gbp(row.to_pay)} with PayPal Payouts for services to our patients.`);
+  }
+
+  // ---------- surgery payment plans: a deposit now and instalments before the date ----------
+  const pplan = (D, id) => (D.payment_plans || []).find((x) => x.id === id);
+  async function sendPart(D, plan, part) {
+    const p = pat(D, plan.patient_id), sv = svc(D, plan.service_id);
+    const i = await makeInvoice(D, p, { kind: 'instalment', period: `${sv.name}, ${part.label.toLowerCase()}`, items: [tagLine(D, { name: `${sv.name} on ${fdate(plan.date)}: ${part.label.toLowerCase()}`, pence: part.pence }, sv.id)],
+      words: { subject: `${p.known_as}’s ${sv.name.toLowerCase()}: ${part.label.toLowerCase()}`, note: `Hi ${p.payer.type === 'family' ? firstWord(billTo(p).name) : 'there'}, this is ${part.label.toLowerCase()} for ${p.known_as}’s ${sv.name.toLowerCase()} on ${fdate(plan.date)} (${gbp(part.pence)} of ${gbp(plan.total_pence)}). You can pay by PayPal or card, and PayPal may offer to spread it with Pay Later.`, by_ai: false } });
+    await send(D, i, { quiet: true });
+    Object.assign(part, { invoice_id: i.id, sent_at: today() });
+    log(D, 'sent', `${sv.name} plan for ${p.known_as}: ${part.label.toLowerCase()} (${gbp(part.pence)}) sent through PayPal.`, p.id);
+  }
+  async function createPlan(D, b) {
+    const p = pat(D, b.patient_id), sv = svc(D, b.service_id);
+    if (!p || !sv || !sv.plan_only) throw new Error('Choose a patient and a surgery.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '') || daysBetween(today(), b.date) < 14) throw new Error('Choose a surgery date at least 2 weeks away.');
+    const pct = Math.min(90, Math.max(10, parseInt(b.deposit_percent, 10) || 30)), n = Math.min(6, Math.max(1, parseInt(b.instalments, 10) || 2));
+    const total = sv.price_pence, deposit = Math.round(total * pct / 100), days = daysBetween(today(), b.date) - 7;
+    const rest = split(total - deposit, Array.from({ length: n }, (_, k) => ({ key: k, w: 1 })));
+    const plan = { id: uid('plan'), patient_id: p.id, service_id: sv.id, date: b.date, total_pence: total, created_at: now(),
+      parts: [{ label: `Deposit (${pct}%)`, pence: deposit, due: today(), invoice_id: null }, ...rest.map((x, k) => ({ label: `Instalment ${k + 1} of ${n}`, pence: x.pence, due: addDays(today(), Math.round(days * (k + 1) / n)), invoice_id: null }))] };
+    D.payment_plans.unshift(plan);
+    log(D, 'info', `Payment plan for ${p.known_as}’s ${sv.name.toLowerCase()} on ${fdate(b.date)}: ${gbp(deposit)} deposit, then ${n} instalment${n === 1 ? '' : 's'} before the date.`, p.id);
+    await sendPart(D, plan, plan.parts[0]);
+    return plan;
+  }
+  /** Daily: send every instalment that has come due. */
+  async function sendDueInstalments(D) {
+    let sent = 0;
+    for (const plan of D.payment_plans || []) for (const part of plan.parts.filter((x) => !x.invoice_id && x.due <= today())) {
+      try { await sendPart(D, plan, part); sent++; } catch (e) { log(D, 'error', `Instalment not sent: ${e.message}`, plan.patient_id); }
+    }
+    return sent;
   }
 
   // ---------- appointments: check-in & pay ----------
@@ -619,6 +772,7 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
     return {
       fy: fy.label, departments: rows, totals: { budget: sum('budget'), used: sum('used'), left: sum('left'), waiting: sum('waiting'), waiting_pence: sum('waiting_pence'), income: sum('income') },
       requests: D.requests.slice().sort((a, b) => (a.status === 'pending' ? 0 : 1) - (b.status === 'pending' ? 0 : 1) || b.created_at.localeCompare(a.created_at)).slice(0, 60).map(view),
+      partners: partnerSummary(D),
       spend: D.spend.filter((x) => inFy(fy, x.date)).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 80).map((x) => ({ ...x, code: dept(D, x.dept_id).code })),
     };
   }
@@ -668,13 +822,13 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
   }
   async function refreshPayouts(D) {
     let changed = 0;
-    for (const r of (D.requests || []).filter((x) => x.payout && ['sending', 'unclaimed'].includes(x.status) && !x.payout.seeded)) {
+    for (const r of [...(D.requests || []), ...(D.partner_payouts || [])].filter((x) => x.payout && ['sending', 'unclaimed'].includes(x.status) && !x.payout.seeded)) {
       try {
         const g = await paypal.getPayout(r.payout.batch_id);
         const it = g.items.find((y) => y.item_id === r.payout.item_id);
         if (!it || it.status === r.payout.status) continue;
         r.payout.status = it.status; r.status = PAYOUT_STATUS[it.status] || 'sending'; changed++;
-        if (r.status === 'failed') log(D, 'error', `PayPal payout to ${r.payee_name} for ${dept(D, r.dept_id).code} ${it.status.toLowerCase()}. It no longer counts against the budget and can be approved again.`);
+        if (r.status === 'failed') log(D, 'error', r.partner_id ? `PayPal payout to ${partner(D, r.partner_id).name} ${it.status.toLowerCase()}. It can be paid again.` : `PayPal payout to ${r.payee_name} for ${dept(D, r.dept_id).code} ${it.status.toLowerCase()}. It no longer counts against the budget and can be approved again.`);
       } catch (e) { log(D, 'error', `Could not check payout ${r.payout.batch_id}: ${e.message}`); }
     }
     return changed;
@@ -746,7 +900,7 @@ export function makePractice({ paypal, ai, linkFor, checkinLinkFor, aiLimit, tod
   async function runTool(D, plan, name, input) {
     if (!TEAM_TOOLS[plan.team].includes(name)) throw new Error('That tool is not available to this team.');
     if (name !== 'propose_action' && STEP[name] && !plan.steps.includes(STEP[name])) plan.steps.push(STEP[name]);
-    if (name === 'list_unpaid_invoices') return D.invoices.filter(isOpen).map((i) => { const p = pat(D, i.patient_id); return { invoice_id: i.id, patient: p.known_as, paid_by: i.to.org ? i.to.name : `${toName(i.to)} (family)`, period: i.period, owed: gbp(outstanding(i)), sent_on: i.sent_at, due_on: i.due_date, days_since_sent: daysBetween(i.sent_at, today()), days_late: daysLate(i), reminders_sent: i.reminder_count, last_reminder_on: i.last_reminder_at, family_says_paid_another_way: D.claims.some((c) => c.invoice_id === i.id && c.status === 'pending') }; });
+    if (name === 'list_unpaid_invoices') return D.invoices.filter((i) => isOpen(i) && i.kind !== 'claim').map((i) => { const p = pat(D, i.patient_id); return { invoice_id: i.id, patient: p.known_as, paid_by: i.to.org ? i.to.name : `${toName(i.to)} (family)`, period: i.period, owed: gbp(outstanding(i)), sent_on: i.sent_at, due_on: i.due_date, days_since_sent: daysBetween(i.sent_at, today()), days_late: daysLate(i), reminders_sent: i.reminder_count, last_reminder_on: i.last_reminder_at, family_says_paid_another_way: D.claims.some((c) => c.invoice_id === i.id && c.status === 'pending') }; });
     if (name === 'check_paypal') {
       const ids = Array.isArray(input.invoice_ids) && input.invoice_ids.length ? input.invoice_ids : D.invoices.filter((i) => isOpen(i) && i.paypal_id).map((i) => i.id);
       const out = [];
@@ -929,5 +1083,5 @@ Then reply in plain UK English: what you found and what you proposed, referring 
     return changed;
   }
 
-  return { handle, family, familyClaim, checkoutStart, checkoutFinish, checkinView, checkinStart, checkinHold, cancelAppt, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf } };
+  return { handle, family, familyClaim, checkoutStart, checkoutFinish, sendDueInstalments, checkinView, checkinStart, checkinHold, cancelAppt, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf, partnerSummary } };
 }

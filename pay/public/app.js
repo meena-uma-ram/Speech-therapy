@@ -9,7 +9,7 @@
   let role = 'billing';
   try { role = localStorage.getItem('tjs-pay-role') || 'billing'; } catch { /* private window */ }
   if (role === 'admin') role = 'billing';
-  const TABS = { billing: ['week', 'appts', 'patients', 'settings'], finance: ['depts', 'money'], dept: ['dept'] };
+  const TABS = { billing: ['week', 'appts', 'patients', 'ins', 'settings'], finance: ['depts', 'money'], dept: ['dept'] };
   const team = () => (role === 'billing' || role === 'finance' ? role : 'dept');
   const prevMonth = () => { const d = new Date(); d.setUTCDate(1); d.setUTCDate(0); return d.toISOString().slice(0, 7); };
   const V = { dmonth: null, tab: 'week', filter: 'all', patient: null, month: null, ask: '', plan: null, busy: false, results: null };
@@ -75,7 +75,7 @@
     const invs = S.invoices.filter((i) => i.patient_id === p.id);
     const toInvoice = ses.filter((s) => !s.invoice_id);
     const drafts = invs.filter((i) => i.status === 'DRAFT');
-    const open = invs.filter(isOpen);
+    const open = invs.filter((i) => isOpen(i) && i.kind !== 'claim');
     const late = open.filter(isLate);
     const owed = open.reduce((t, i) => t + outstanding(i), 0);
     const reported = S.claims.filter((c) => c.patient_id === p.id && c.status === 'pending');
@@ -135,6 +135,7 @@
     if (V.tab === 'money') { view.innerHTML = M ? moneyView() : '<p class="muted">Adding it up…</p>'; if (!M) loadMoney(); }
     if (V.tab === 'settings') view.innerHTML = settingsView();
     if (V.tab === 'appts') view.innerHTML = apptsView();
+    if (V.tab === 'ins') view.innerHTML = insView();
     if (V.tab === 'depts' || V.tab === 'dept') {
       if (DEP && DEP.fy) view.innerHTML = V.tab === 'dept' ? myDeptView(dep(role)) : deptsView();
       else { view.innerHTML = '<p class="muted">Adding up department budgets…</p>'; loadDep(); }
@@ -168,7 +169,7 @@
   }
   function weekView() {
     const needs = needsYou();
-    const open = S.invoices.filter(isOpen).sort((a, b) => a.due_date.localeCompare(b.due_date));
+    const open = S.invoices.filter((i) => isOpen(i) && i.kind !== 'claim').sort((a, b) => a.due_date.localeCompare(b.due_date));
     const ym = S.today.slice(0, 7);
     const monthIn = S.payments.filter((p) => p.date.slice(0, 7) === ym).reduce((t, p) => t + p.pence, 0);
     const owed = open.reduce((t, i) => t + outstanding(i), 0), late = open.filter(isLate).reduce((t, i) => t + outstanding(i), 0);
@@ -275,6 +276,11 @@
       ${B.departments.map((r) => `<tr><td><span class="code">${esc(r.code)}</span></td><td>${esc(r.name)}</td><td class="num">${m(r.budget)}</td><td class="num">${m(r.used)}</td><td>${bar(r.used, r.budget)}</td><td class="num">${leftM(r.left)}</td><td class="num">${r.waiting ? `${m(r.waiting_pence)} <span class="muted">(${r.waiting})</span>` : '<span class="muted">–</span>'}</td><td class="num">${m(r.income)}</td></tr>`).join('')}
       <tr class="total"><td></td><td>All departments</td><td class="num">${m(T.budget)}</td><td class="num">${m(T.used)}</td><td>${bar(T.used, T.budget)}</td><td class="num">${leftM(T.left)}</td><td class="num">${m(T.waiting_pence)}</td><td class="num">${m(T.income)}</td></tr></tbody></table></div>
       <p class="note">Used = spending the department logged + requests paid with PayPal. Income is what patients paid for each department’s services (from the codes on invoice lines); it is shown for reporting and doesn’t change budgets.</p></section>
+    <section class="panel"><div class="panel-h"><h2>Outside providers</h2><span class="muted">Paid with PayPal Payouts</span></div>
+      ${(B.partners || []).length ? `<ul class="rows">${B.partners.map((x) => `<li class="rq"><div><p><b>${esc(x.name)}</b> <span class="muted">${esc(x.what || '')}</span></p>
+        <p class="muted">Earned from payments collected: ${m(x.earned)} · paid: ${m(x.paid)} · <b>to pay: ${m(x.to_pay)}</b>${x.payouts.length ? ` · last payout ${rqTag(x.payouts[0].status)}` : ''}</p></div>
+        <div class="actions">${x.to_pay ? `<button class="btn small" data-act="pt-pay" data-id="${esc(x.id)}">Pay ${esc(gbp(x.to_pay))} with PayPal</button>` : ''}</div></li>`).join('')}</ul>
+        <p class="note">The patient pays the hospital; the partner who did the work (for example the PET-CT scan) is paid its agreed fee from money actually collected.</p>` : '<p class="empty">No outside providers.</p>'}</section>
     <section class="panel"><div class="panel-h"><h2>Spending logged by departments</h2></div>${B.spend.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Code</th><th>What</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>${B.spend.slice(0, 20).map((x) => `<tr><td>${esc(day(x.date))}</td><td><span class="code">${esc(x.code)}</span></td><td>${esc(x.what)}</td><td>${esc(x.category)}</td><td class="num">${m(x.pence)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">Nothing logged yet.</p>'}</section>
     <section class="panel"><div class="panel-h"><h2>Budgets and PayPal accounts</h2><button class="btn small" data-act="save-depts">Save</button></div>
       <div class="tbl"><table><thead><tr><th>Code</th><th>Department</th><th>Budget ${esc(B.fy)} (£)</th><th>Department’s PayPal email</th></tr></thead><tbody>
@@ -287,7 +293,7 @@
     const r = DEP.departments.find((x) => x.id === d.id) || {};
     const mine = DEP.requests.filter((x) => x.dept_id === d.id);
     const spend = DEP.spend.filter((x) => x.dept_id === d.id);
-    const svcs = S.services.filter((v) => v.department_id === d.id);
+    const svcs = S.services.filter((v) => v.department_id === d.id && !v.plan_only);
     return `<div class="page-h"><h1><span class="code big">${esc(d.code)}</span> ${esc(d.name)}</h1><span class="muted">Financial year ${esc(DEP.fy)}</span></div>
     <div class="figs dep-figs"><div class="fig"><span>Budget</span><b class="m">${gbp(r.budget)}</b></div><div class="fig"><span>Used</span><b class="m">${gbp(r.used)}</b>${bar(r.used, r.budget)}</div><div class="fig${r.left < 0 ? ' late' : ''}"><span>Left</span><b class="m">${gbp(r.left)}</b></div><div class="fig"><span>Waiting for Finance</span><b class="m">${gbp(r.waiting_pence)}</b></div></div>
     <div class="two-col"><div>
@@ -371,6 +377,34 @@
     } catch (e) { toast(e.message, true); }
   }
 
+  // ----- insurance claims (billing office) -----
+  const CLAIM = { submitted: ['todo', 'Waiting for insurer'], paid: ['paid', 'Paid in full'], part_paid: ['', 'Part paid'], rejected: ['late', 'Rejected'] };
+  function insView() {
+    const list = (S.insurance_claims || []), ins = (id) => (S.insurers.find((x) => x.id === id) || {}).name, open = list.filter((c) => c.status === 'submitted');
+    const row = (c) => { const p = pat(c.patient_id), i = S.invoices.find((x) => x.id === c.invoice_id), [cl, t] = CLAIM[c.status];
+      return `<li class="rq"><div><p><b>${esc(ins(c.insurer_id))}</b> · ${esc(p.known_as)}, ${esc(i ? i.period : '')} · ${m(c.claimed_pence)} <span class="tag ${cl}">${t}</span></p>
+        <p class="muted">Policy ${esc(c.policy)} · claimed ${esc(day(c.submitted_at))}${c.status === 'submitted' && i ? ` · insurer usually pays by ${esc(day(i.due_date))}` : ''}${c.paid_pence ? ` · paid ${m(c.paid_pence)}${c.reference ? `, ref ${esc(c.reference)}` : ''}` : ''}${c.reason ? ` · ${esc(c.reason)}` : ''}${c.shortfall_invoice_id ? ' · the rest is billed to the family' : ''}</p></div>
+        <div class="actions">${c.status === 'submitted' ? `<button class="btn small" data-act="ic-paid" data-id="${esc(c.id)}">Insurer paid</button><button class="btn small line" data-act="ic-rej" data-id="${esc(c.id)}">Rejected</button>` : ''}</div></li>`; };
+    return `<div class="page-h"><h1>Insurance claims</h1><span class="muted">${m(open.reduce((t, c) => t + c.claimed_pence, 0))} waiting</span></div>
+    <p class="muted dep-intro">For an insured patient, open their draft invoice and choose <b>Split with insurance</b>: the family pays their excess through PayPal, and the rest is claimed from the insurer. When the insurer pays (usually by bank), record it here. Anything the insurer doesn’t cover becomes a draft invoice to the family.</p>
+    <section class="panel"><div class="panel-h"><h2>Claims</h2><span class="muted">${list.length}</span></div>${list.length ? `<ul class="rows">${list.map(row).join('')}</ul>` : '<p class="empty">No claims yet.</p>'}</section>`;
+  }
+  // ----- surgery payment plans (patient page) -----
+  function planPanel(p) {
+    const plans = (S.payment_plans || []).filter((x) => x.patient_id === p.id), surg = S.services.filter((v) => v.plan_only);
+    if (!surg.length) return '';
+    const st = (part) => { const i = part.invoice_id && S.invoices.find((x) => x.id === part.invoice_id); if (!i) return `<span class="tag">Sends ${esc(day(part.due))}</span>`; return PAID.includes(i.status) ? '<span class="tag paid">Paid</span>' : isLate(i) ? '<span class="tag late">Overdue</span>' : '<span class="tag">Sent, waiting</span>'; };
+    return `<section class="panel"><div class="panel-h"><h2>Surgery payment plan</h2></div>
+      ${plans.map((pl) => `<div class="panel-b"><p><b>${esc(svc(pl.service_id).name)}</b> on ${esc(day(pl.date))} · ${m(pl.total_pence)}</p><ul class="rows plan-parts">${pl.parts.map((x, k) => `<li class="rq"><div><p>${esc(x.label)} · ${m(x.pence)} ${st(x)}</p></div><div class="actions">${x.invoice_id ? '' : `<button class="btn small line" data-act="pl-send" data-id="${esc(pl.id)}" data-part="${k}">Send now</button>`}</div></li>`).join('')}</ul></div>`).join('')}
+      <div class="logform">
+        <label>Surgery<select id="pl-svc">${surg.map((v) => `<option value="${esc(v.id)}">${depOfSvc(v.id) ? esc(depOfSvc(v.id).code) + ' · ' : ''}${esc(v.name)} (${esc(gbp(v.price_pence))})</option>`).join('')}</select></label>
+        <label>Date<input type="date" id="pl-date" min="${esc(S.today)}"></label>
+        <label>Deposit (%)<input id="pl-dep" value="30" inputmode="numeric" size="3"></label>
+        <label>Instalments<select id="pl-n">${[1, 2, 3, 4, 5, 6].map((n) => `<option${n === 2 ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+        <button class="btn" data-act="pl-make" data-id="${esc(p.id)}">Create plan</button></div>
+      <p class="note">The deposit is sent through PayPal now; each instalment is sent on its date, the last a week before the surgery. PayPal may offer families Pay Later (Pay in 3) when they pay.</p></section>`;
+  }
+
   // ----- patients -----
   function patientsView() {
     const all = S.patients.map((p) => ({ p, L: look(p) }));
@@ -396,19 +430,20 @@
     const p = pat(i.patient_id);
     let tag = '<span class="tag">Waiting</span>';
     if (i.status === 'DRAFT') tag = '<span class="tag todo">Draft</span>';
+    else if (i.kind === 'claim') tag = `<span class="tag">Claim to ${esc(i.to.name)}</span>`;
     else if (i.kind === 'block' && PAID.includes(i.status)) { const u = S.sessions.filter((s) => s.invoice_id === i.id).length; tag = `<span class="tag paid">Paid, ${u} of ${i.block_size} used</span>`; }
     else if (i.status === 'PAID') tag = '<span class="tag paid">Paid through PayPal</span>';
     else if (i.status === 'MARKED_AS_PAID') tag = '<span class="tag paid">Paid, recorded in PayPal</span>';
     else if (i.status === 'PARTIALLY_PAID') tag = `<span class="tag">${m(i.paid_pence)} of ${m(i.total_pence)} paid</span>`;
     else if (isLate(i)) tag = '<span class="tag late">Overdue</span>';
     const sub = i.status === 'DRAFT' ? 'Not sent yet' : `Sent to ${toName(i.to)} ${day(i.sent_at)}${isOpen(i) && i.reminder_count ? `, ${count(i.reminder_count, 'reminder', 'reminders')} since` : ''}${i.paid_at ? `, paid ${day(i.paid_at)}` : ''}`;
-    const a = [];
+    const a = [], live = isOpen(i) && i.kind !== 'claim';
     if (i.status === 'DRAFT') a.push(`<button class="btn small" data-act="review" data-id="${esc(i.id)}">Review and send</button>`);
-    if (isOpen(i)) a.push(`<button class="btn small line" data-act="family" data-id="${esc(i.id)}">What ${esc(i.to.org ? 'they' : toName(i.to))} see${i.to.org ? '' : 's'}</button>`);
-    if (isOpen(i)) a.push(`<button class="btn small line" data-act="nudge" data-id="${esc(i.id)}">Reminder</button>`);
-    if (isOpen(i) && i.view_url) a.push(`<a class="btn small line" href="${esc(i.view_url)}" target="_blank" rel="noopener">Open in PayPal</a>`);
-    if (isOpen(i) && (S.mode === 'sandbox' || S.mode === 'live')) a.push(`<button class="btn small line" data-act="refresh" data-id="${esc(i.id)}">Check PayPal</button>`);
-    if (isOpen(i) && S.mode !== 'sandbox' && S.mode !== 'live') a.push(`<button class="btn small line" data-act="mock-pay" data-id="${esc(i.id)}">Simulate PayPal payment</button>`);
+    if (live) a.push(`<button class="btn small line" data-act="family" data-id="${esc(i.id)}">What ${esc(i.to.org ? 'they' : toName(i.to))} see${i.to.org ? '' : 's'}</button>`);
+    if (live) a.push(`<button class="btn small line" data-act="nudge" data-id="${esc(i.id)}">Reminder</button>`);
+    if (live && i.view_url) a.push(`<a class="btn small line" href="${esc(i.view_url)}" target="_blank" rel="noopener">Open in PayPal</a>`);
+    if (live && (S.mode === 'sandbox' || S.mode === 'live')) a.push(`<button class="btn small line" data-act="refresh" data-id="${esc(i.id)}">Check PayPal</button>`);
+    if (live && S.mode !== 'sandbox' && S.mode !== 'live') a.push(`<button class="btn small line" data-act="mock-pay" data-id="${esc(i.id)}">Simulate PayPal payment</button>`);
     return `<div class="invrow"><div><p class="line1"><b>${esc(i.kind === 'block' ? i.period + ' (' + i.block_size + ' sessions)' : i.period)}</b><span class="m">${gbp(i.total_pence)}</span>${tag}</p><p class="muted">${esc(sub)}</p></div><div class="actions">${a.join('')}</div></div>`;
   }
 
@@ -427,15 +462,17 @@
       <section class="panel"><div class="panel-h"><h2>Details</h2></div><dl class="facts">
         <dt>Caregivers</dt><dd>${p.caregivers.map((c) => `<div class="person">${esc(c.name)}${c.invoices && p.payer.type === 'family' ? '<span class="gets">receives invoices</span>' : ''}<div class="muted">${esc([c.relation, c.email].filter(Boolean).join(', '))}</div></div>`).join('')}</dd>
         <dt>Paid by</dt><dd>${p.payer.type === 'family' ? 'Family' : `${esc(p.payer.name)}<div class="muted">${esc(p.payer.email || '')}</div>`}</dd>
+        ${p.insurance ? `<dt>Insurance</dt><dd>${esc((S.insurers.find((x) => x.id === p.insurance.insurer_id) || {}).name || '')}<div class="muted">Policy ${esc(p.insurance.policy)} · excess ${esc(gbp(p.insurance.excess_pence))} a visit</div></dd>` : ''}
         <dt>Billing</dt><dd>${planText(p)}${p.plan === 'block' ? blockInfo(p) : ''}</dd></dl></section>
       <div>
         <section class="panel"><div class="panel-h"><h2>Log a session</h2>${L.toInvoice.length && !L.drafts.length && p.plan !== 'block' ? `<button class="btn small" data-act="draft" data-id="${esc(p.id)}">Invoice ${count(L.toInvoice.length, 'session', 'sessions')}</button>` : ''}</div>
           <div class="logform">
             <label>Date<input type="date" id="ls-date" value="${esc(S.today)}" max="${esc(S.today)}"></label>
-            <label>Service<select id="ls-svc">${S.services.map((s) => `<option value="${esc(s.id)}"${s.id === p.service_id ? ' selected' : ''}>${depOfSvc(s.id) ? esc(depOfSvc(s.id).code) + ' · ' : ''}${esc(s.name)}${s.minutes ? `, ${s.minutes} min` : ''} (${esc(gbp(s.price_pence))})</option>`).join('')}</select></label>
+            <label>Service<select id="ls-svc">${S.services.filter((s) => !s.plan_only).map((s) => `<option value="${esc(s.id)}"${s.id === p.service_id ? ' selected' : ''}>${depOfSvc(s.id) ? esc(depOfSvc(s.id).code) + ' · ' : ''}${esc(s.name)}${s.minutes ? `, ${s.minutes} min` : ''} (${esc(gbp(s.price_pence))})</option>`).join('')}</select></label>
             <label>Where<select id="ls-where"><option>in person</option><option>online</option><option>at school</option><option>at home</option></select></label>
             <button class="btn" data-act="log" data-id="${esc(p.id)}">Log</button>
           </div></section>
+        ${planPanel(p)}
         <section class="panel"><div class="panel-h"><h2>Invoices</h2></div>${invs.length ? `<ul class="rows">${invs.map((i) => `<li>${invoiceLine(i)}</li>`).join('')}</ul>` : '<p class="empty">No invoices yet.</p>'}</section>
         <section class="panel"><div class="panel-h"><h2>Payments</h2></div>${pays.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Method</th><th>For</th><th class="num">Amount</th></tr></thead><tbody>${pays.map((x) => `<tr><td>${esc(day(x.date))}</td><td>${esc(howShort(x.method))}${x.reference ? `<div class="muted">Ref ${esc(x.reference)}</div>` : ''}</td><td>${esc(invById[x.invoice_id] ? invById[x.invoice_id].period : '')}</td><td class="num">${m(x.pence)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No payments yet.</p>'}</section>
         <section class="panel"><div class="panel-h"><h2>Sessions</h2><span class="muted">${sessions.length}</span></div>${sessions.length ? `<div class="tbl"><table><thead><tr><th>Date</th><th>Service</th><th>Where</th><th class="num">Price</th><th>Status</th></tr></thead><tbody>${sessions.map((s) => `<tr><td>${esc(day(s.date))}</td><td>${depOfSvc(s.service_id) ? `<span class="code">${esc(depOfSvc(s.service_id).code)}</span> ` : ''}${esc(svc(s.service_id).name)}</td><td>${esc(s.minutes ? s.where : '')}</td><td class="num">${m(s.price_pence)}</td><td>${sesStatus(s)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="empty">No sessions yet.</p>'}</section>
@@ -543,11 +580,13 @@
       <ul class="items">${i.items.map((it) => `<li><span>${it.code ? `<span class="code">${esc(it.code)}</span> ` : ''}${esc(it.name)}</span><span>${m(it.pence)}</span></li>`).join('')}<li class="sum"><span>Total</span><span>${m(i.total_pence)}</span></li></ul>
       <label>Email subject<input id="d-subject" maxlength="100" value="${esc(i.subject)}"></label>
       <label>Message<textarea id="d-note" rows="4" maxlength="1500">${esc(i.note)}</textarea></label>
+      ${p.insurance && !i.paid_pence && i.kind !== 'claim' && !i.claim_id ? `<p class="hint ins-hint">Insured with ${esc((S.insurers.find((x) => x.id === p.insurance.insurer_id) || {}).name || '')} (excess ${esc(gbp(p.insurance.excess_pence))}). <button class="btn text" id="d-ins" type="button">Split with insurance</button></p>` : ''}
       <p class="hint">${i.note_by_ai ? 'Written by AI from billing details only.' : 'Standard wording.'} Edit as needed.${S.ai && S.mode !== 'review' ? ' <button class="btn text" id="d-ai" type="button">Write with AI</button>' : ''}</p>
       <div class="actions"><button class="btn" id="d-send" type="button">Send through PayPal</button><button class="btn line" id="d-discard" type="button">Delete draft</button></div></form>`;
     dlg().showModal();
     $('d-send').onclick = (e) => act(e.currentTarget, `invoices/${id}/send`, { subject: $('d-subject').value, note: $('d-note').value }, () => { dlg().close(); toast(`Sent to ${toName(i.to)}.`); });
     $('d-discard').onclick = (e) => act(e.currentTarget, `invoices/${id}/discard`, {}, () => { dlg().close(); toast('Draft deleted.'); });
+    if ($('d-ins')) $('d-ins').onclick = (e) => act(e.currentTarget, 'insurance/split', { invoice_id: id }, () => { openDraft(id); toast('Split: the excess stays on this invoice, the rest is claimed from the insurer.'); });
     if ($('d-ai')) $('d-ai').onclick = async (e) => {
       e.currentTarget.disabled = true;
       try { const w = await window.TJSPayAPI(`invoices/${id}/ai-note`, {}); $('d-subject').value = w.subject; $('d-note').value = w.note; i.subject = w.subject; i.note = w.note; i.note_by_ai = true; toast('Written by AI. Check it before sending.'); }
@@ -650,6 +689,11 @@
       case 'reject': act(b, `claims/${id}/reject`, {}, () => toast('Marked as not received.')); break;
       case 'reminders': act(b, 'reminders', {}, (d) => toast(d.sent ? `${count(d.sent, 'reminder', 'reminders')} sent.` : 'No reminders due.')); break;
       case 'parse': parse(b); break;
+      case 'ic-paid': { const amt = window.prompt('How much did the insurer pay (£)?'); if (amt === null) break; const ref = window.prompt('Payment reference (optional)') || ''; act(b, `insurance/${id}/paid`, { amount: amt, reference: ref }, () => toast('Recorded.')); break; }
+      case 'ic-rej': { const why = window.prompt('Why was it rejected?'); if (why === null) break; act(b, `insurance/${id}/rejected`, { reason: why }, () => toast('The full amount is now a draft invoice to the family.')); break; }
+      case 'pt-pay': if (window.confirm('Pay this provider with PayPal Payouts?')) act(b, `partners/${id}/pay`, {}, () => toast('Sent with PayPal Payouts.')); break;
+      case 'pl-make': act(b, 'plans', { patient_id: id, service_id: $('pl-svc').value, date: $('pl-date').value, deposit_percent: $('pl-dep').value, instalments: $('pl-n').value }, () => toast('Plan created. The deposit invoice was sent through PayPal.')); break;
+      case 'pl-send': act(b, `plans/${id}/send`, { part: b.dataset.part }, () => toast('Sent through PayPal.')); break;
       case 'ap-book': act(b, 'appointments', { patient_id: $('ap-pat').value, service_id: $('ap-svc').value, date: $('ap-date').value, time: $('ap-time').value }, () => toast('Booked.')); break;
       case 'ap-link': openLink(id); break;
       case 'ap-arrived': act(b, `appointments/${id}/arrived`, {}, () => toast('Arrived. The visit invoice is ready.')); break;

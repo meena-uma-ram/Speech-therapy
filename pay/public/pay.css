@@ -292,3 +292,4 @@ details.done summary { padding: 10px 16px; cursor: pointer; color: var(--muted);
 .dep-svcs legend { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
 .chk { display: flex !important; flex-direction: row !important; align-items: center; gap: 6px; font-size: .88rem !important; color: var(--text) !important; }
 .asst-ex .asst-note { align-self: center; margin-right: 2px; }
+.plan-parts > li { padding: 6px 0; } .ins-hint { color: var(--wait); }
