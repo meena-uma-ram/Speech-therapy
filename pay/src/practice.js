@@ -5,7 +5,7 @@
 // and in the browser review copy (simulated PayPal, standard wording).
 // Rules: the AI writes and reads words only; every amount, split and date is worked out here in plain code.
 
-export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
+export function makePractice({ paypal, ai, linkFor, checkinLinkFor, today: todayFn }) {
   // ---------- small helpers ----------
   const gbp = (p) => (p < 0 ? '−' : '') + '£' + (Math.abs(p) / 100).toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   function toPence(v) {
@@ -106,6 +106,12 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     const link = linkFor ? await linkFor(i.id) : null;
     const r = await paypal.createAndSend({ invoice: i, to: i.to, practice: D.settings.practice, note: i.note + (link ? `\n\nPaid another way (bank transfer or cash)? Tell us here: ${link}` : ''), subject: i.subject, dueDate: addDays(today(), 14) });
     Object.assign(i, { paypal_id: r.id, view_url: r.view_url || null, status: 'SENT', sent_at: sentOn || today(), due_date: addDays(sentOn || today(), 14) });
+    // A deposit already put toward this invoice (taken at check-in) is recorded on the PayPal invoice too.
+    for (const x of D.payments.filter((y) => y.invoice_id === i.id)) {
+      try { await paypal.recordPayment(r.id, { method: x.method, pence: x.pence, date: x.date, note: x.reference || 'Deposit' }); }
+      catch (e) { log(D, 'error', `Deposit could not be shown on the PayPal invoice: ${e.message}`, i.patient_id); }
+    }
+    if (i.paid_pence >= i.total_pence) i.status = 'PAID'; else if (i.paid_pence > 0) i.status = 'PARTIALLY_PAID';
     if (!quiet) log(D, 'sent', `Invoice sent through PayPal to ${toName(i.to)}: ${p.known_as}, ${i.period}, ${gbp(i.total_pence)}.`, p.id);
   }
   function recordLocal(D, i, pence, method, ref, date = today()) {
@@ -243,6 +249,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     Object.assign(D, {
       settings: {
         practice: 'Northern Voices Children’s Hospital', therapist: 'the billing office', reminder_days: [3, 7, 14], block_size: 10, block_discount: 10, renew_at: 8, renew_action: 'send', fee_percent: 2.9, fee_fixed_pence: 30,
+        deposit_pence: 2000, deposit_services: ['svc_eeg', 'svc_echo', 'svc_aid', 'svc_intensive'],
         reminder_texts: [
           'Hi {name}, a quick reminder that the invoice for {child}, {period} ({amount}) is still open. If you have already paid by bank transfer or cash, you can tell us with the link below.',
           'Hi {name}, {amount} for {child}, {period} is still unpaid. If something is wrong with the invoice, or the timing is difficult, please reply and we can sort it out.',
@@ -272,7 +279,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
         { id: 'svc_hear', name: 'Hearing test', minutes: 45, price_pence: 8500, department_id: 'dep_aud' },
         { id: 'svc_aid', name: 'Hearing aid fitting', minutes: 60, price_pence: 22000, department_id: 'dep_aud' },
       ],
-      patients: [], sessions: [], invoices: [], payments: [], claims: [], expenses: [], events: [], spend: [], requests: [],
+      patients: [], sessions: [], invoices: [], payments: [], claims: [], expenses: [], events: [], spend: [], requests: [], appointments: [],
     });
     const P = (o) => D.patients.push({ credit_pence: 0, ...o });
     P({ id: 'p_arjun', name: 'Arjun Patel', known_as: 'Arjun', caregivers: [{ name: 'Priya Patel', relation: 'Mum', email: 'priya@example.com', invoices: true }], payer: { type: 'family' }, plan: 'session', service_id: 'svc_45' });
@@ -334,6 +341,10 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
     R('neuro', 1, 320000, 'EEG electrodes and conductive gel for the new clinic', ['NeuroSupply UK', 'accounts@neurosupply.example'], 'pending');
     [[twoAgo, '01', 'Room hire at the community centre', 'Rent', 40000], [twoAgo, '09', 'Assessment forms', 'Materials', 8500], [twoAgo, '30', 'Mileage, school visits', 'Travel', 4200], [lastMonth, '01', 'Room hire at the community centre', 'Rent', 40000], [lastMonth, '12', 'HCPC registration (monthly share)', 'Professional', 1800], [lastMonth, '20', 'Picture cards and toys', 'Materials', 3150], [lastMonth, '28', 'Mileage, school visits', 'Travel', 3800], [today().slice(0, 7), '01', 'Room hire at the community centre', 'Rent', 40000]]
       .forEach(([mo, dd, what, cat, pence]) => D.expenses.push({ id: uid('exp'), date: `${mo}-${dd}`, what, category: cat, pence }));
+    // Upcoming appointments for the check-in & pay demo (none checked in yet, so every PayPal hold is real).
+    const later = (k) => addDays(today(), k);
+    [['p_freya', 'svc_eeg', later(0), '15:30'], ['p_arjun', 'svc_45', later(0), '16:15'], ['p_amara', 'svc_aid', later(1), '10:00'], ['p_liam', 'svc_intensive', later(2), '09:00'], ['p_tomas', 'svc_ot', later(1), '13:30']]
+      .forEach(([pid, sid, date, time]) => book(D, { patient_id: pid, service_id: sid, date, time }));
     D.events = [];
     log(D, 'info', paypal.mode === 'mock' ? 'Demo data loaded (PayPal simulated).' : 'Demo data loaded. Unpaid invoices were created in the PayPal sandbox.');
   }
@@ -357,6 +368,8 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
         if (num(b.renew_at, 1, 40) != null) s.renew_at = Math.min(Math.round(b.renew_at), s.block_size);
         if (num(b.block_discount, 0, 50) != null) s.block_discount = Math.round(b.block_discount);
         if (['send', 'draft'].includes(b.renew_action)) s.renew_action = b.renew_action;
+        if (b.deposit != null && toPence(b.deposit) != null && toPence(b.deposit) <= 50000) s.deposit_pence = toPence(b.deposit);
+        if (Array.isArray(b.deposit_services)) s.deposit_services = b.deposit_services.filter((id) => svc(D, id));
         if (num(b.fee_percent, 0, 10) != null) s.fee_percent = parseFloat(b.fee_percent);
         if (b.fee_fixed != null && toPence(b.fee_fixed) != null) s.fee_fixed_pence = toPence(b.fee_fixed);
         if (Array.isArray(b.reminder_texts) && b.reminder_texts.length && b.reminder_texts.every((t) => String(t).trim())) s.reminder_texts = b.reminder_texts.map((t) => String(t).trim().slice(0, 1200));
@@ -377,7 +390,7 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
         if (p[1] === 'draft') { const id = await draftFor(D, b.patient_id); const st = state(D, mode); st.draft = id; return st; }
         const i = inv(D, p[1]); if (!i) throw new Error('That invoice was not found.');
         if (p[2] === 'send') { if (i.status !== 'DRAFT') throw new Error('Already sent.'); if (b.note) i.note = String(b.note).slice(0, 1500); if (b.subject) i.subject = String(b.subject).slice(0, 100); await send(D, i); }
-        else if (p[2] === 'discard') { if (i.status !== 'DRAFT') throw new Error('Only drafts can be deleted.'); D.sessions.forEach((s) => { if (s.invoice_id === i.id) s.invoice_id = null; }); D.invoices = D.invoices.filter((x) => x !== i); }
+        else if (p[2] === 'discard') { if (i.status !== 'DRAFT') throw new Error('Only drafts can be deleted.'); if (i.paid_pence > 0) throw new Error('A deposit has already been put toward this invoice, so it can’t be deleted. Send it instead.'); D.sessions.forEach((s) => { if (s.invoice_id === i.id) s.invoice_id = null; }); D.invoices = D.invoices.filter((x) => x !== i); }
         else if (p[2] === 'refresh') { if (!(await refresh(D, i))) log(D, 'info', `Checked PayPal: ${pat(D, i.patient_id).known_as}, ${i.period} not paid yet.`, i.patient_id); }
         else if (p[2] === 'reminder-text') return { text: i.next_reminder || D.settings.reminder_texts[Math.min(i.reminder_count + 1, D.settings.reminder_texts.length) - 1], filled: nextReminderText(D, i), custom: !!i.next_reminder, number: i.reminder_count + 1 };
         else if (p[2] === 'reminder-save') { i.next_reminder = String(b.text || '').trim().slice(0, 1200) || null; log(D, 'info', `Next reminder edited: ${pat(D, i.patient_id).known_as}, ${i.period}.`, i.patient_id); }
@@ -396,6 +409,15 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       case 'assistant': {
         if (p[1] === 'approve') { const results = await approve(D, String(b.plan_id || ''), b.numbers); const st = state(D, mode); st.results = results; return st; }
         return { plan: await assistant(D, b.request, b.team) };
+      }
+      case 'appointments': {
+        if (!p[1]) { const a = book(D, b); const st = state(D, mode); st.booked = a.id; return st; }
+        if (p[2] === 'link') { if (!appt(D, p[1])) throw new Error('Not found'); return { checkin_url: checkinLinkFor ? await checkinLinkFor(p[1]) : null }; }
+        if (p[2] === 'arrived') await arrived(D, p[1]);
+        else if (p[2] === 'no-show') await noShow(D, p[1]);
+        else if (p[2] === 'cancel') await cancelAppt(D, p[1], false);
+        else throw new Error('Not found');
+        return state(D, mode);
       }
       case 'departments': {
         if (p[1] === 'settings') {
@@ -436,6 +458,110 @@ export function makePractice({ paypal, ai, linkFor, today: todayFn }) {
       }
     }
     throw new Error('Not found');
+  }
+
+  // ---------- appointments: check-in & pay ----------
+  // The front desk books a visit. High-demand services need a deposit. Before the visit the family opens a signed
+  // check-in link: self-pay families can choose a sliding-scale price (self-reported, no questions), and the deposit
+  // is held on their PayPal (authorised, not taken). On arrival the hold is captured toward the visit's invoice and
+  // the rest released; on a no-show it is kept as a fee; on a cancellation it is voided.
+  const appt = (D, id) => (D.appointments || []).find((a) => a.id === id);
+  const SCALE = [{ id: 'full', label: 'Full price', percent: 0 }, { id: 's20', label: 'Household income under £40,000 a year', percent: 20 }, { id: 's40', label: 'Under £25,000 a year', percent: 40 }, { id: 's60', label: 'Under £15,000 a year, or on benefits', percent: 60 }];
+  const priceOf = (D, a) => { const base = svc(D, a.service_id).price_pence, band = SCALE.find((b) => b.id === a.scale) || SCALE[0]; return Math.round(base * (100 - band.percent) / 100); };
+  const HOLD_DAYS = 3; // PayPal honours an authorisation in full for 3 days, so check-in opens 3 days before
+  function book(D, b) {
+    const p = pat(D, b.patient_id), sv = svc(D, b.service_id);
+    if (!p || !sv || !sv.minutes) throw new Error('Choose a patient and a service.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(b.date || '') || !/^\d{2}:\d{2}$/.test(b.time || '')) throw new Error('Choose a date and a time.');
+    if (b.date < today()) throw new Error('Choose today or a later date.');
+    const a = { id: uid('ap'), patient_id: p.id, service_id: sv.id, at: `${b.date}T${b.time}`, status: 'booked', deposit_pence: (D.settings.deposit_services || []).includes(sv.id) ? D.settings.deposit_pence : 0, scale: 'full', hold: null, checked_in_at: null, invoice_id: null, created_at: now() };
+    D.appointments.unshift(a);
+    log(D, 'info', `Booked: ${p.known_as}, ${sv.name}, ${a.at.replace('T', ' ')}${a.deposit_pence ? ` (deposit ${gbp(a.deposit_pence)})` : ''}.`, p.id);
+    return a;
+  }
+  function checkinView(D, id) {
+    const a = appt(D, id); if (!a) return null;
+    const p = pat(D, a.patient_id), sv = svc(D, a.service_id), d = dept(D, sv.department_id);
+    const daysTo = daysBetween(today(), a.at.slice(0, 10));
+    return { practice: D.settings.practice, child: p.known_as, service: sv.name, code: d ? d.code : null, dept: d ? d.name : null, at: a.at, status: a.status, deposit: a.deposit_pence ? gbp(a.deposit_pence) : null, held: !!(a.hold && a.hold.status === 'held'),
+      self_pay: p.payer.type === 'family', scale: a.scale, bands: p.payer.type === 'family' ? SCALE.map((b) => ({ id: b.id, label: b.label, percent: b.percent, price: gbp(Math.round(sv.price_pence * (100 - b.percent) / 100)) })) : null,
+      price: gbp(priceOf(D, a)), opens_in_days: Math.max(0, daysTo - HOLD_DAYS), can_cancel: a.status === 'booked' || a.status === 'checked_in' ? daysBetween(today(), a.at.slice(0, 10)) >= 1 : false };
+  }
+  function setScale(D, a, scale) { const p = pat(D, a.patient_id); a.scale = p.payer.type === 'family' && SCALE.some((b) => b.id === scale) ? scale : 'full'; }
+  async function checkinStart(D, id, b) {
+    const a = appt(D, id);
+    if (!a || !['booked', 'checked_in'].includes(a.status)) throw new Error('This appointment can’t be checked in.');
+    if (daysBetween(today(), a.at.slice(0, 10)) > HOLD_DAYS) throw new Error(`Check-in opens ${HOLD_DAYS} days before the appointment.`);
+    setScale(D, a, b.scale);
+    const p = pat(D, a.patient_id);
+    if (!a.deposit_pence || (a.hold && a.hold.status === 'held')) {
+      if (a.status === 'booked') { a.status = 'checked_in'; a.checked_in_at = now(); log(D, 'info', `${p.known_as} checked in online for ${a.at.replace('T', ' ')}${a.scale !== 'full' ? ` (sliding scale: ${SCALE.find((x) => x.id === a.scale).percent}% off)` : ''}.`, p.id); }
+      return { checked_in: true };
+    }
+    const o = await paypal.createHoldOrder({ ref: a.id, pence: a.deposit_pence, description: `${D.settings.practice}: deposit for ${p.known_as}, ${a.at.replace('T', ' ')}`, brand: D.settings.practice });
+    a.hold = { order_id: o.id, status: 'pending' };
+    return { order_id: o.id };
+  }
+  async function checkinHold(D, id, orderId) {
+    const a = appt(D, id);
+    if (!a || !a.hold || a.hold.order_id !== orderId) throw new Error('This deposit could not be matched to the appointment.');
+    const r = await paypal.authorizeOrder(orderId);
+    if (r.status !== 'CREATED' || r.custom_id !== a.id || r.pence !== a.deposit_pence) throw new Error('PayPal did not hold the deposit.');
+    Object.assign(a.hold, { auth_id: r.auth_id, status: 'held', at: now(), expires: r.expires });
+    a.status = 'checked_in'; a.checked_in_at = now();
+    const p = pat(D, a.patient_id);
+    log(D, 'info', `${p.known_as} checked in online: ${gbp(a.deposit_pence)} deposit held with PayPal${a.scale !== 'full' ? `, sliding scale ${SCALE.find((x) => x.id === a.scale).percent}% off` : ''}.`, p.id);
+    return { checked_in: true };
+  }
+  /** One invoice for this visit (or a missed-appointment fee), with a deposit taken from the hold applied to it. */
+  async function visitInvoice(D, a, items, period, depositPence, captureId) {
+    const p = pat(D, a.patient_id);
+    const i = await makeInvoice(D, p, { kind: 'session', period, items, sessionIds: items.map((x) => x.session_id).filter(Boolean) });
+    if (depositPence > 0) recordLocal(D, i, depositPence, 'paypal', `Deposit ${captureId}`);
+    if (i.paid_pence >= i.total_pence) Object.assign(i, { status: 'PAID', sent_at: today(), due_date: today() });
+    else i.status = 'DRAFT';
+    a.invoice_id = i.id;
+    return i;
+  }
+  async function arrived(D, id) {
+    const a = appt(D, id);
+    if (!a || !['booked', 'checked_in'].includes(a.status)) throw new Error('This appointment is already closed.');
+    const p = pat(D, a.patient_id), sv = svc(D, a.service_id), price = priceOf(D, a), date = a.at.slice(0, 10) <= today() ? a.at.slice(0, 10) : today();
+    const s = { id: uid('ses'), patient_id: p.id, date, service_id: sv.id, minutes: sv.minutes, where: 'in person', price_pence: price, invoice_id: null, appointment_id: a.id };
+    D.sessions.unshift(s);
+    let taken = 0, cap = null;
+    if (a.hold && a.hold.status === 'held') {
+      taken = Math.min(a.deposit_pence, price);
+      cap = await paypal.captureHold(a.hold.auth_id, taken);
+      Object.assign(a.hold, { status: 'captured', captured_pence: taken, capture_id: cap.capture_id });
+    }
+    const band = SCALE.find((x) => x.id === a.scale);
+    const i = await visitInvoice(D, a, [tagLine(D, { name: `${sv.name}, ${fdate(date)}${band.percent ? ` (sliding scale, ${band.percent}% off)` : ''}`, pence: price, session_id: s.id }, sv.id)], fdate(date), taken, cap && cap.capture_id);
+    a.status = 'arrived';
+    log(D, 'info', `${p.known_as} arrived.${taken ? ` ${gbp(taken)} of the deposit taken and put toward the bill${a.deposit_pence > taken ? `; ${gbp(a.deposit_pence - taken)} released` : ''}.` : ''} ${i.status === 'PAID' ? 'Visit fully paid.' : `Invoice for the remaining ${gbp(outstanding(i))} is ready to send.`}`, p.id);
+    return i;
+  }
+  async function noShow(D, id) {
+    const a = appt(D, id);
+    if (!a || !['booked', 'checked_in'].includes(a.status)) throw new Error('This appointment is already closed.');
+    if (a.at.slice(0, 10) > today()) throw new Error('The appointment hasn’t happened yet.');
+    const p = pat(D, a.patient_id), sv = svc(D, a.service_id);
+    a.status = 'no_show';
+    if (a.hold && a.hold.status === 'held') {
+      const cap = await paypal.captureHold(a.hold.auth_id, a.deposit_pence);
+      Object.assign(a.hold, { status: 'captured', captured_pence: a.deposit_pence, capture_id: cap.capture_id });
+      await visitInvoice(D, a, [tagLine(D, { name: `Missed appointment fee: ${sv.name}, ${fdate(a.at)}`, pence: a.deposit_pence }, sv.id)], `Missed ${fdate(a.at)}`, a.deposit_pence, cap.capture_id);
+      log(D, 'info', `${p.known_as} didn’t come: the ${gbp(a.deposit_pence)} deposit was kept as a no-show fee.`, p.id);
+    } else log(D, 'info', `${p.known_as} didn’t come to ${sv.name}, ${a.at.replace('T', ' ')} (no deposit held).`, p.id);
+  }
+  async function cancelAppt(D, id, byFamily) {
+    const a = appt(D, id);
+    if (!a || !['booked', 'checked_in'].includes(a.status)) throw new Error('This appointment is already closed.');
+    if (byFamily && daysBetween(today(), a.at.slice(0, 10)) < 1) throw new Error('It’s less than a day before the appointment. Please call the hospital to cancel.');
+    if (a.hold && a.hold.status === 'held') { await paypal.voidHold(a.hold.auth_id); a.hold.status = 'released'; }
+    else if (a.hold) a.hold.status = 'released';
+    a.status = 'cancelled';
+    log(D, 'info', `${pat(D, a.patient_id).known_as}’s appointment on ${a.at.replace('T', ' ')} cancelled${byFamily ? ' by the family' : ''}.${a.hold && a.hold.auth_id ? ` ${gbp(a.deposit_pence)} hold released.` : ''}`, a.patient_id);
   }
 
   // ---------- departments: budgets, spending, and money requests paid with PayPal Payouts ----------
@@ -789,5 +915,5 @@ Then reply in plain UK English: what you found and what you proposed, referring 
     return changed;
   }
 
-  return { handle, family, familyClaim, checkoutStart, checkoutFinish, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf } };
+  return { handle, family, familyClaim, checkoutStart, checkoutFinish, checkinView, checkinStart, checkinHold, cancelAppt, syncAll, refreshPayouts, reminders, seed, state, _test: { allocate, toPence, parseByRules, split, deptSplit, budgets, fyOf } };
 }

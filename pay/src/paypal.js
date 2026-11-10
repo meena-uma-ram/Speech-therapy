@@ -76,6 +76,25 @@ export function paypal(env, D) {
       const u = o.purchase_units?.[0] || {}, cap = u.payments?.captures?.[0] || {};
       return { status: o.status === 'COMPLETED' && cap.status === 'COMPLETED' ? 'COMPLETED' : (cap.status || o.status), custom_id: cap.custom_id || u.custom_id || u.reference_id, capture_id: cap.id || null, pence: cap.amount && cap.amount.currency_code === currency ? Math.round(parseFloat(cap.amount.value) * 100) : 0 };
     },
+    // No-show deposit: authorise now (a hold on the family's PayPal), capture later on arrival or no-show, or void to release it.
+    async createHoldOrder({ ref, pence, description, brand }) {
+      const o = await call('POST', '/v2/checkout/orders', {
+        intent: 'AUTHORIZE',
+        purchase_units: [{ reference_id: ref, custom_id: ref, description: description.slice(0, 127), amount: { currency_code: currency, value: pounds(pence) } }],
+        application_context: { brand_name: (brand || '').slice(0, 127) || undefined, shipping_preference: 'NO_SHIPPING', user_action: 'CONTINUE' },
+      }, { Prefer: 'return=minimal' });
+      return { id: o.id };
+    },
+    async authorizeOrder(orderId) {
+      const o = await call('POST', `/v2/checkout/orders/${encodeURIComponent(orderId)}/authorize`, {}, { 'PayPal-Request-Id': 'authorize-' + orderId, Prefer: 'return=representation' });
+      const u = o.purchase_units?.[0] || {}, a = u.payments?.authorizations?.[0] || {};
+      return { status: a.status, auth_id: a.id, custom_id: a.custom_id || u.custom_id || u.reference_id, pence: a.amount && a.amount.currency_code === currency ? Math.round(parseFloat(a.amount.value) * 100) : 0, expires: a.expiration_time || null };
+    },
+    async captureHold(authId, pence) {
+      const c = await call('POST', `/v2/payments/authorizations/${encodeURIComponent(authId)}/capture`, { amount: { currency_code: currency, value: pounds(pence) }, final_capture: true }, { 'PayPal-Request-Id': 'capture-' + authId, Prefer: 'return=representation' });
+      return { status: c.status, capture_id: c.id };
+    },
+    async voidHold(authId) { await call('POST', `/v2/payments/authorizations/${encodeURIComponent(authId)}/void`, null, { 'PayPal-Request-Id': 'void-' + authId }); },
     // PayPal Payouts: the hospital pays each department its share for a month, in one batch.
     // In the sandbox every department's payout goes to DEMO_PAYOUT_EMAIL (or the demo family account), so it can be seen.
     async createPayout({ batchId, subject, items }) {
@@ -113,6 +132,10 @@ export function mockPaypal(D) {
     async verifyWebhook() { return true; },
     async createOrder({ invoiceId, pence }) { const id = 'MOCK-ORDER-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { order: true, invoiceId, pence }; return { id }; },
     async captureOrder(id) { const o = store[id]; if (!o || !o.order) throw new Error('Order not found'); if (o.captured) return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; o.captured = 'MOCK-CAP-' + id.slice(-8); return { status: 'COMPLETED', custom_id: o.invoiceId, capture_id: o.captured, pence: o.pence }; },
+    async createHoldOrder({ ref, pence }) { const id = 'MOCK-HOLD-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { hold: true, ref, pence }; return { id }; },
+    async authorizeOrder(id) { const o = store[id]; if (!o || !o.hold) throw new Error('Order not found'); o.auth = o.auth || 'MOCK-AUTH-' + id.slice(-8); store[o.auth] = { auth: true, pence: o.pence, status: 'CREATED' }; return { status: 'CREATED', auth_id: o.auth, custom_id: o.ref, pence: o.pence, expires: null }; },
+    async captureHold(authId, pence) { const a = store[authId]; if (!a || a.status !== 'CREATED') throw new Error('Authorization is not open'); if (pence > a.pence) throw new Error('More than the hold'); a.status = 'CAPTURED'; return { status: 'COMPLETED', capture_id: 'MOCK-CAP-' + authId.slice(-8) }; },
+    async voidHold(authId) { const a = store[authId]; if (!a || a.status !== 'CREATED') throw new Error('Authorization is not open'); a.status = 'VOIDED'; },
     async createPayout({ items }) { const id = 'MOCK-BATCH-' + crypto.randomUUID().slice(0, 8).toUpperCase(); store[id] = { payout: true, status: 'PENDING', items: items.map((x) => ({ item_id: x.itemId, status: 'PENDING' })) }; return { batch_id: id, status: 'PENDING' }; },
     async getPayout(id) { const b = store[id]; if (!b) throw new Error('Batch not found'); b.status = 'SUCCESS'; b.items.forEach((x) => { if (x.status === 'PENDING') x.status = 'SUCCESS'; }); return { status: b.status, items: b.items.map((x) => ({ ...x })) }; },
     failPayoutItem(id, itemId) { const x = store[id].items.find((y) => y.item_id === itemId); x.status = 'FAILED'; },

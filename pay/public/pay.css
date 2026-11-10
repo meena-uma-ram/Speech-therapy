@@ -277,3 +277,17 @@ details.done summary { padding: 10px 16px; cursor: pointer; color: var(--muted);
 .form .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 600px) { .rq { grid-template-columns: 1fr; } .form .two { grid-template-columns: 1fr; } }
 [hidden] { display: none !important; }
+
+/* Check-in & pay */
+.ci-note { font-size: .9rem; margin: 10px 0; }
+.ci-price { margin-left: auto; }
+.choice span { flex: 1; }
+.ci-cancel { margin-top: 16px; text-align: center; }
+.appt-time { font-variant-numeric: tabular-nums; font-weight: 600; }
+.qr { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+.qr svg { width: 168px; height: 168px; border-radius: 8px; border: 1px solid var(--line); background: #fff; }
+.qr textarea { width: 100%; min-height: 96px; }
+.qr .grow { flex: 1 1 260px; display: grid; gap: 8px; }
+.dep-svcs { border: 0; padding: 0; margin: 0; display: grid; gap: 4px; }
+.dep-svcs legend { font-size: .8rem; color: var(--muted); margin-bottom: 4px; }
+.chk { display: flex !important; flex-direction: row !important; align-items: center; gap: 6px; font-size: .88rem !important; color: var(--text) !important; }

@@ -20,6 +20,7 @@ TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED
 |---|---|
 | **Billing assistant** | Ask in plain words: *"Who owes me money? Chase anyone more than two weeks late."* An AI agent looks up the invoices, **checks each one with PayPal live**, and proposes numbered actions (reminders, invoices, drafts to send, payments to confirm). The therapist ticks and approves; the billing code checks each action again and does it. |
 | **Departments and codes** | Every service belongs to a department, and every invoice line carries the department code (on the PayPal invoice too: `SLT-01 · Therapy session`). A family's invoice can mix departments, e.g. an ENT consultation and a hearing test. |
+| **Check-in & pay** | *Appointments* (billing office front desk): book a visit; send the family a **signed check-in link** (copy-ready text message and a **QR code** for the desk). Before the visit the family checks in on their phone. Families who pay for themselves choose a **sliding-scale price** (self-reported, no proof, so the desk never has to ask). For high-demand services (EEG, echo, hearing aid fitting, intensive day) a **deposit is held on their PayPal**, not taken. On **Arrived**, the hold is captured toward the visit's invoice (any unused part released) and the rest is invoiced through PayPal with the deposit already shown as paid. On **No-show**, the deposit is kept as a fee. On **Cancel**, the hold is released. |
 | **Budgets** | *Budgets and requests* (finance department): each department's budget for the financial year (April to March), what is used (spending logged + requests paid), what is left, requests waiting, and income from patients by department code (for reporting only). |
 | **Money requests, paid with PayPal Payouts** | A department asks for an amount, says what it's for, and whether it goes to its own PayPal account or to a supplier's. Finance sees the budget left after it, then approves (PayPal Payouts sends the money) or rejects with a reason. Going over budget needs an explicit decision. Payout status comes back from PayPal (webhook and hourly check); a failed payout stops counting against the budget and can be approved again. Departments need only a PayPal account that can receive money, no PayPal app or keys. |
 | **Roles** | *Signed in as* switches between the billing office, the finance department and each department (a demo switch; in real use each person signs in). The billing office sees Overview, Patients and Settings; Finance sees Budgets and requests, and Finances. Department staff get *My department*: their budget, used and left; ask for money; log spending; follow their requests; log a session with their department's services. |
@@ -80,6 +81,9 @@ All calls are made server-side in the Worker (`src/paypal.js`). The secret never
 | Record bank transfer, cash or cheque | `POST /v2/invoicing/invoices/{id}/payments` |
 | Check status and amount paid | `GET /v2/invoicing/invoices/{id}` |
 | Family pays now (PayPal Checkout) | `POST /v2/checkout/orders`, `POST /v2/checkout/orders/{id}/capture`, PayPal JS SDK buttons |
+| Hold a no-show deposit at check-in | `POST /v2/checkout/orders` with `intent: AUTHORIZE`, `POST /v2/checkout/orders/{id}/authorize`, PayPal JS SDK buttons (`intent=authorize`) |
+| Take the deposit on arrival or a no-show | `POST /v2/payments/authorizations/{id}/capture` (partial capture, `final_capture`, the rest released) |
+| Release the deposit on a cancellation | `POST /v2/payments/authorizations/{id}/void` |
 | Pay an approved money request (to a department or a supplier) | `POST /v1/payments/payouts` |
 | Payout status | `GET /v1/payments/payouts/{batch_id}` |
 | Verify webhooks | `POST /v1/notifications/verify-webhook-signature` |
@@ -136,12 +140,12 @@ In the PayPal app, add a webhook to `https://<your-worker>.workers.dev/api/paypa
 ```bash
 npm run db:local
 npm run dev:mock     # PayPal simulated: "Simulate PayPal payment" buttons appear
-npm test             # 25 tests: billing logic, the assistants' checks and team separation, Checkout, department budgets and requests
+npm test             # 28 tests: billing logic, the assistants' checks and team separation, Checkout, check-in deposits and sliding scale, department budgets and requests
 ```
 
 ## Try the demo
 
-**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office, the finance department and a department. As **Finance**, approve a money request (two fit the budget, one goes over). As the **billing office**, start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
+**Judges and reviewers:** the demo is *Northern Voices Children’s Hospital*. Use **Signed in as** (top right) to switch between the billing office, the finance department and a department. As **Finance**, approve a money request (two fit the budget, one goes over). As the **billing office**, open **Appointments**, send yourself Freya's check-in link, check in as the family (choose a sliding-scale price, hold the deposit with the sandbox personal account), then press **Arrived**. Also start with the **Billing assistant** at the top of the Overview, for example *"Who owes me money? Chase anyone more than two weeks late."* Settings → **Reset demo data** puts everything back. AI use is capped per day; past it the app keeps working with built-in rules.
 
 Six made-up patients cover every case:
 
@@ -156,10 +160,22 @@ Six made-up patients cover every case:
 
 To pay a sandbox invoice, open it with **Open in PayPal** and sign in as the sandbox personal account. Sandbox emails appear under **Sandbox accounts → Notifications**.
 
+## Roadmap
+
+Built: AI billing and finance assistants; PayPal Invoicing, Checkout, deposit holds (authorise and capture) and Payouts; department codes, budgets and money requests; check-in & pay with a sliding scale.
+
+Next:
+- **Card on file and family wallet** (PayPal Vault): save a parent's PayPal once, and send them an approval request when a child or an older relative is at the clinic.
+- **Text-to-pay by SMS**: send the check-in and payment links straight from TJS (an SMS provider; links and messages are ready today).
+- **Wallet pass and tap to check in**: an Apple Wallet / Google Wallet pass that checks in and takes the deposit at the door.
+- **Shop and pharmacy cart**: hearing aid batteries, communication aids and supplies paid with Checkout, picked up at the desk.
+- **Independent providers in one bill**: PayPal multiparty payments, once the hospital is onboarded as a PayPal partner.
+- **Hospital-scale ERP**: a proper ledger and tables instead of one document per hospital, real sign-in and approval limits, queues for PayPal calls, procurement, several hospitals.
+
 ## Privacy
 
 - Billing data only: TJS Pay stores no diagnoses, goals or session notes, and never sends them to PayPal or the AI.
-- Family links are signed (HMAC) and show only the period and amount.
+- Family links are signed (HMAC) and show only the period and amount. Check-in links show only the visit, its price choices and the deposit. The sliding-scale choice is self-reported and stored only as the price band.
 - The demo uses made-up patients only. Before any real use: legal review, data processing agreements, and a code review.
 
 ## Licence

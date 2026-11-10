@@ -9,7 +9,7 @@
   let role = 'billing';
   try { role = localStorage.getItem('tjs-pay-role') || 'billing'; } catch { /* private window */ }
   if (role === 'admin') role = 'billing';
-  const TABS = { billing: ['week', 'patients', 'settings'], finance: ['depts', 'money'], dept: ['dept'] };
+  const TABS = { billing: ['week', 'appts', 'patients', 'settings'], finance: ['depts', 'money'], dept: ['dept'] };
   const team = () => (role === 'billing' || role === 'finance' ? role : 'dept');
   const prevMonth = () => { const d = new Date(); d.setUTCDate(1); d.setUTCDate(0); return d.toISOString().slice(0, 7); };
   const V = { dmonth: null, tab: 'week', filter: 'all', patient: null, month: null, ask: '', plan: null, busy: false, results: null };
@@ -134,6 +134,7 @@
     if (V.tab === 'patients') view.innerHTML = V.patient ? patientView(pat(V.patient)) : patientsView();
     if (V.tab === 'money') { view.innerHTML = M ? moneyView() : '<p class="muted">Adding it up…</p>'; if (!M) loadMoney(); }
     if (V.tab === 'settings') view.innerHTML = settingsView();
+    if (V.tab === 'appts') view.innerHTML = apptsView();
     if (V.tab === 'depts' || V.tab === 'dept') {
       if (DEP && DEP.fy) view.innerHTML = V.tab === 'dept' ? myDeptView(dep(role)) : deptsView();
       else { view.innerHTML = '<p class="muted">Adding up department budgets…</p>'; loadDep(); }
@@ -315,6 +316,61 @@
     </aside></div>`;
   }
 
+  // ----- appointments: check-in & pay (front desk, billing office) -----
+  const SCALE_PC = { full: 0, s20: 20, s40: 40, s60: 60 };
+  const apptPrice = (a) => Math.round(svc(a.service_id).price_pence * (100 - (SCALE_PC[a.scale] || 0)) / 100);
+  function apptTags(a) {
+    const t = [];
+    if (a.status === 'booked') t.push('<span class="tag">Booked</span>');
+    if (a.status === 'checked_in') t.push('<span class="tag paid">Checked in online</span>');
+    if (a.status === 'arrived') t.push('<span class="tag paid">Arrived</span>');
+    if (a.status === 'no_show') t.push('<span class="tag late">No-show</span>');
+    if (a.status === 'cancelled') t.push('<span class="tag">Cancelled</span>');
+    if (a.deposit_pence && !a.hold && ['booked'].includes(a.status)) t.push(`<span class="tag todo">${gbp(a.deposit_pence)} deposit not held yet</span>`);
+    if (a.hold && a.hold.status === 'held') t.push(`<span class="tag paid">${gbp(a.deposit_pence)} held with PayPal</span>`);
+    if (a.hold && a.hold.status === 'captured') t.push(`<span class="tag">${gbp(a.hold.captured_pence)} taken${a.status === 'no_show' ? ' as no-show fee' : ', put toward the bill'}</span>`);
+    if (a.hold && a.hold.status === 'released') t.push('<span class="tag">Hold released</span>');
+    if (a.scale && a.scale !== 'full') t.push(`<span class="tag">Sliding scale ${SCALE_PC[a.scale]}% off</span>`);
+    return t.join(' ');
+  }
+  function apptRow(a) {
+    const p = pat(a.patient_id), v = svc(a.service_id), d = depOfSvc(a.service_id), open = ['booked', 'checked_in'].includes(a.status), past = a.at.slice(0, 10) <= S.today;
+    const acts = open ? `<button class="btn small line" data-act="ap-link" data-id="${esc(a.id)}">Check-in link</button>${past ? `<button class="btn small" data-act="ap-arrived" data-id="${esc(a.id)}">Arrived</button><button class="btn small line" data-act="ap-noshow" data-id="${esc(a.id)}">No-show</button>` : ''}<button class="btn small line" data-act="ap-cancel" data-id="${esc(a.id)}">Cancel</button>`
+      : a.invoice_id ? `<button class="btn small line" data-act="open-patient" data-id="${esc(p.id)}">Invoice</button>` : '';
+    return `<li class="rq"><div><p><span class="appt-time">${esc(a.at.slice(11, 16))}</span> <b>${esc(p.known_as)}</b> ${d ? `<span class="code">${esc(d.code)}</span> ` : ''}${esc(v.name)} · ${m(apptPrice(a))}</p><div class="tags">${apptTags(a)}</div></div><div class="actions">${acts}</div></li>`;
+  }
+  function apptsView() {
+    const all = (S.appointments || []).slice().sort((x, y) => x.at.localeCompare(y.at));
+    const today = all.filter((a) => a.at.slice(0, 10) === S.today), next = all.filter((a) => a.at.slice(0, 10) > S.today), earlier = all.filter((a) => a.at.slice(0, 10) < S.today).reverse();
+    const group = (list, title) => list.length ? `<section class="panel"><div class="panel-h"><h2>${title}</h2><span class="muted">${list.length}</span></div><ul class="rows">${list.map(apptRow).join('')}</ul></section>` : '';
+    const byDay = {}; next.forEach((a) => { (byDay[a.at.slice(0, 10)] = byDay[a.at.slice(0, 10)] || []).push(a); });
+    return `<div class="page-h"><h1>Appointments</h1><span class="muted">Check-in & pay</span></div>
+    <p class="muted dep-intro">Send families a check-in link before the visit. Families who pay for themselves choose a sliding-scale price (no proof asked). For high-demand services, a ${esc(gbp(S.settings.deposit_pence))} deposit is <b>held on their PayPal</b>, not taken: on arrival it goes toward the bill, on a no-show it is kept as a fee, and on a cancellation it is released.</p>
+    <section class="panel"><div class="panel-h"><h2>Book an appointment</h2></div><div class="logform">
+      <label>Patient<select id="ap-pat">${S.patients.map((p) => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
+      <label>Service<select id="ap-svc">${S.services.filter((v) => v.minutes).map((v) => `<option value="${esc(v.id)}">${depOfSvc(v.id) ? esc(depOfSvc(v.id).code) + ' · ' : ''}${esc(v.name)} (${esc(gbp(v.price_pence))})${(S.settings.deposit_services || []).includes(v.id) ? ' · deposit' : ''}</option>`).join('')}</select></label>
+      <label>Date<input type="date" id="ap-date" value="${esc(S.today)}" min="${esc(S.today)}"></label>
+      <label>Time<input type="time" id="ap-time" value="14:00" step="900"></label>
+      <button class="btn" data-act="ap-book">Book</button></div></section>
+    ${group(today, 'Today')}${Object.entries(byDay).map(([dd, list]) => group(list, esc(day(dd)))).join('')}${group(earlier, 'Earlier')}
+    ${all.length ? '' : '<p class="empty">No appointments yet.</p>'}`;
+  }
+  async function openLink(id) {
+    const a = S.appointments.find((x) => x.id === id), p = pat(a.patient_id), v = svc(a.service_id);
+    try {
+      const r = await window.TJSPayAPI(`appointments/${id}/link`, {});
+      const who = p.payer.type === 'family' ? first(billTo(p).name) : 'there';
+      const text = `Hi ${who}, ${p.known_as}’s appointment (${v.name}) at ${S.settings.practice} is on ${day(a.at)} at ${a.at.slice(11, 16)}. Please check in here before you come${a.deposit_pence ? ` (a ${gbp(a.deposit_pence)} deposit is held, not taken)` : ''}: ${r.checkin_url}`;
+      dlg().innerHTML = `<div class="dlg"><div class="head"><h2>Check-in link: ${esc(p.known_as)}</h2><button class="btn text" id="l-close" type="button">Close</button></div>
+        <div class="qr">${r.qr_svg || ''}<div class="grow"><p class="muted">Show this QR code at the desk, or send the message by text or email.</p>
+        <label>Message<textarea id="l-text" readonly>${esc(text)}</textarea></label>
+        <div class="actions"><button class="btn small" id="l-copy" type="button">Copy message</button><a class="btn small line" href="${esc(r.checkin_url)}" target="_blank" rel="noopener">Open as the family</a></div></div></div></div>`;
+      dlg().showModal();
+      $('l-close').onclick = () => dlg().close();
+      $('l-copy').onclick = async () => { try { await navigator.clipboard.writeText(text); toast('Copied. Paste it into a text message.'); } catch { $('l-text').select(); toast('Select the text and copy it.', true); } };
+    } catch (e) { toast(e.message, true); }
+  }
+
   // ----- patients -----
   function patientsView() {
     const all = S.patients.map((p) => ({ p, L: look(p) }));
@@ -462,6 +518,10 @@
         <label>Discount (%)<input id="st-disc" value="${s.block_discount}" inputmode="numeric"></label>
         <label>Invoice the next block at session<input id="st-renew" value="${s.renew_at}" inputmode="numeric"></label>
         <label>Then<select id="st-action"><option value="send"${s.renew_action === 'send' ? ' selected' : ''}>Send it automatically</option><option value="draft"${s.renew_action === 'draft' ? ' selected' : ''}>Save as a draft for me to review</option></select></label></div></section>
+      <section class="panel"><div class="panel-h"><h2>Deposits for high-demand appointments</h2></div><div class="form">
+        <label>Deposit held with PayPal (£)<input id="st-deposit" value="${((s.deposit_pence || 0) / 100).toFixed(2)}" inputmode="decimal"></label>
+        <fieldset class="dep-svcs"><legend>Services that need a deposit</legend>${S.services.filter((v) => v.minutes).map((v) => `<label class="chk"><input type="checkbox" data-depsvc="${esc(v.id)}"${(s.deposit_services || []).includes(v.id) ? ' checked' : ''}> ${depOfSvc(v.id) ? `<span class="code">${esc(depOfSvc(v.id).code)}</span> ` : ''}${esc(v.name)}</label>`).join('')}</fieldset>
+        <p class="muted">Held on the family’s PayPal at check-in, not taken. On arrival it goes toward the bill; on a no-show it’s kept; on a cancellation it’s released.</p></div></section>
       <section class="panel"><div class="panel-h"><h2>PayPal fees</h2></div><div class="form">
         <label>Percentage per payment<input id="st-fee" value="${s.fee_percent}" inputmode="decimal"></label>
         <label>Fixed fee per payment (£)<input id="st-fixed" value="${(s.fee_fixed_pence / 100).toFixed(2)}" inputmode="decimal"></label>
@@ -585,6 +645,11 @@
       case 'reject': act(b, `claims/${id}/reject`, {}, () => toast('Marked as not received.')); break;
       case 'reminders': act(b, 'reminders', {}, (d) => toast(d.sent ? `${count(d.sent, 'reminder', 'reminders')} sent.` : 'No reminders due.')); break;
       case 'parse': parse(b); break;
+      case 'ap-book': act(b, 'appointments', { patient_id: $('ap-pat').value, service_id: $('ap-svc').value, date: $('ap-date').value, time: $('ap-time').value }, () => toast('Booked.')); break;
+      case 'ap-link': openLink(id); break;
+      case 'ap-arrived': act(b, `appointments/${id}/arrived`, {}, () => toast('Arrived. The visit invoice is ready.')); break;
+      case 'ap-noshow': if (window.confirm('Mark as a no-show? A held deposit is kept as the no-show fee.')) act(b, `appointments/${id}/no-show`, {}, () => toast('Marked as a no-show.')); break;
+      case 'ap-cancel': if (window.confirm('Cancel this appointment? A held deposit is released.')) act(b, `appointments/${id}/cancel`, {}, () => toast('Cancelled.')); break;
       case 'payout-refresh': act(b, 'payouts/refresh', {}, () => toast('Checked with PayPal.')); break;
       case 'save-depts': act(b, 'departments/settings', { departments: [...document.querySelectorAll('[data-dep]')].map((r) => ({ id: r.dataset.dep, budget: r.querySelector('.bd').value, payout_email: r.querySelector('.em').value })) }, () => { toast('Saved.'); act(null, 'state'); }); break;
       case 'rq-approve': { const r = DEP.requests.find((x) => x.id === id); const over = !!b.dataset.over;
@@ -605,7 +670,7 @@
       case 'csv': csv(); break;
       case 'save-settings': act(b, 'settings', {
         practice: $('st-practice').value, therapist: $('st-therapist').value, block_size: $('st-block').value, block_discount: $('st-disc').value, renew_at: $('st-renew').value, renew_action: $('st-action').value,
-        reminder_days: $('st-days').value, reminder_texts: [...document.querySelectorAll('[data-reminder]')].map((t) => t.value), fee_percent: $('st-fee').value, fee_fixed: $('st-fixed').value,
+        reminder_days: $('st-days').value, reminder_texts: [...document.querySelectorAll('[data-reminder]')].map((t) => t.value), fee_percent: $('st-fee').value, fee_fixed: $('st-fixed').value, deposit: $('st-deposit').value, deposit_services: [...document.querySelectorAll('[data-depsvc]:checked')].map((c) => c.dataset.depsvc),
         services: [...document.querySelectorAll('[data-svc]')].map((r) => ({ id: r.dataset.svc, name: r.children[0].value, price: r.children[2].value })),
       }, () => { M = null; toast('Saved.'); }); break;
       case 'seed': if (window.confirm('Reset the demo data?')) act(b, 'seed', {}, () => { M = null; V.patient = null; V.tab = 'week'; toast('Demo data reset.'); }); break;

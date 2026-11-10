@@ -4,6 +4,7 @@
 import { makePractice } from './practice.js';
 import { paypal } from './paypal.js';
 import { claude } from './ai.js';
+import qrcode from 'qrcode-generator';
 
 const PRACTICE_ID = 'demo';
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
@@ -59,6 +60,7 @@ function practiceFor(env, D) {
     paypal: paypal(env, D),
     ai: claude(env, aiGuard(env, D)),
     linkFor: async (id) => `${origin}/paid#i=${id}&t=${await sign(env, id)}`,
+    checkinLinkFor: async (id) => `${origin}/checkin#a=${id}&t=${await sign(env, id)}`,
   });
 }
 const modeOf = (env) => env.PAYPAL_MODE || 'sandbox';
@@ -70,7 +72,7 @@ async function withPractice(env, fn, origin) {
   const before = version ? JSON.stringify(D) : '';
   const P = practiceFor(env, D);
   // First visit, or data saved before departments existed: load the demo hospital.
-  if (!D.settings || !D.departments || !D.requests) await P.seed(D);
+  if (!D.settings || !D.departments || !D.requests || !D.appointments) await P.seed(D);
   const out = await fn(P, D);
   if (JSON.stringify(D) !== before) await save(env, D, version);
   return out;
@@ -103,6 +105,25 @@ async function handleApi(req, env, url) {
     if (!f.paid) f.checkout = modeOf(env) === 'mock' ? { mock: true } : env.PAYPAL_CLIENT_ID ? { client_id: env.PAYPAL_CLIENT_ID, currency: env.CURRENCY || 'GBP' } : null;
     return json(f);
   }
+  // Check-in & pay: the family's signed check-in link. Only the visit, price choices and deposit are shown.
+  if (path === '/api/public/checkin' && method === 'GET') {
+    const id = url.searchParams.get('a');
+    if (!(await checkLink(env, id, url.searchParams.get('t')))) return fail('This link is not valid.', 404);
+    const { D } = await load(env);
+    const v = D.settings && practiceFor(env, D).checkinView(D, id);
+    if (!v) return fail('This link is not valid.', 404);
+    v.paypal = modeOf(env) === 'mock' ? { mock: true } : env.PAYPAL_CLIENT_ID ? { client_id: env.PAYPAL_CLIENT_ID, currency: env.CURRENCY || 'GBP' } : null;
+    return json(v);
+  }
+  if (path.startsWith('/api/public/checkin/') && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.a, b.t))) return fail('This link is not valid.', 404);
+    const step = path.slice('/api/public/checkin/'.length);
+    if (step === 'start') return json(await withPractice(env, (P, D) => P.checkinStart(D, b.a, { scale: b.scale })));
+    if (step === 'hold' && typeof b.order_id === 'string') return json(await withPractice(env, (P, D) => P.checkinHold(D, b.a, b.order_id)));
+    if (step === 'cancel') { await withPractice(env, (P, D) => P.cancelAppt(D, b.a, true)); return json({ ok: true }); }
+    return fail('Not found', 404);
+  }
   if (path === '/api/public/checkout/create' && method === 'POST') {
     const b = await body(req);
     if (!(await checkLink(env, b.i, b.t))) return fail('This link is not valid.', 404);
@@ -126,7 +147,9 @@ async function handleApi(req, env, url) {
   const route = path.slice('/api/pay/'.length);
   if (method === 'GET' && route !== 'state') return fail('Not found', 404);
   const b = method === 'POST' ? await body(req) : {};
-  return json(await withPractice(env, (P, D) => P.handle(D, route, b, modeOf(env)), url.origin));
+  const out = await withPractice(env, (P, D) => P.handle(D, route, b, modeOf(env)), url.origin);
+  if (out && out.checkin_url) { const q = qrcode(0, 'M'); q.addData(out.checkin_url); q.make(); out.qr_svg = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); }
+  return json(out);
 }
 
 export default {
@@ -137,8 +160,8 @@ export default {
       catch (e) { console.error(e); return fail(e.message || 'Something went wrong.', 500); }
     }
     const res = await env.ASSETS.fetch(req);
-    // The family page loads PayPal's Checkout buttons, so it allows PayPal's domains. Every other page stays 'self' only.
-    if (url.pathname === '/paid' || url.pathname === '/paid.html') {
+    // The family pages load PayPal's buttons, so it allows PayPal's domains. Every other page stays 'self' only.
+    if (['/paid', '/paid.html', '/checkin', '/checkin.html'].includes(url.pathname)) {
       const out = new Response(res.body, res);
       out.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' https://*.paypal.com https://*.paypalobjects.com; connect-src 'self' https://*.paypal.com; frame-src https://*.paypal.com; img-src 'self' data: https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
       return out;

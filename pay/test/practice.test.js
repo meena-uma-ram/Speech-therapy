@@ -307,3 +307,61 @@ test('teams: the billing office cannot pay money requests, and finance cannot se
   assert.ok(billingTools.includes('check_paypal') && !billingTools.includes('department_budgets'));
   assert.ok(financeTools.includes('department_budgets') && !financeTools.includes('check_paypal'));
 });
+
+// ---------- check-in & pay: appointments, deposit holds, sliding scale ----------
+const dayAhead = (k) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
+
+test('check-in: deposit held with PayPal, sliding scale applied, deposit put toward the visit invoice on arrival', async () => {
+  const { D, P, calls } = await fresh();
+  const a = D.appointments.find((x) => x.patient_id === 'p_freya'); // EEG today, £280, deposit £20
+  assert.equal(a.deposit_pence, 2000);
+  const v = P.checkinView(D, a.id);
+  assert.equal(v.self_pay, true); assert.equal(v.bands.length, 4);
+  const o = await P.checkinStart(D, a.id, { scale: 's40' });
+  await assert.rejects(P.checkinHold(D, a.id, 'WRONG'), /could not be matched/);
+  await P.checkinHold(D, a.id, o.order_id);
+  assert.equal(a.status, 'checked_in'); assert.equal(a.hold.status, 'held');
+  await P.handle(D, `appointments/${a.id}/arrived`, {});
+  const i = D.invoices.find((x) => x.id === a.invoice_id);
+  assert.equal(i.total_pence, 16800); // £280 less 40%
+  assert.equal(i.paid_pence, 2000); assert.equal(i.status, 'DRAFT');
+  await assert.rejects(P.handle(D, `invoices/${i.id}/discard`, {}), /deposit has already been put toward/);
+  await P.handle(D, `invoices/${i.id}/send`, {});
+  assert.equal(i.status, 'PARTIALLY_PAID');
+  assert.deepEqual(calls.filter((c) => c[0] === 'record' && c[1] === i.paypal_id).map((c) => c[3]), [2000]);
+  await P.handle(D, `invoices/${i.id}/refresh`, {});
+  assert.equal(i.paid_pence, 2000); // not counted twice
+});
+
+test('check-in: no-show keeps the deposit as a fee; cancelling releases the hold; councils get no sliding scale', async () => {
+  const { D, P, pp } = await fresh();
+  const freya = D.appointments.find((x) => x.patient_id === 'p_freya');
+  const o = await P.checkinStart(D, freya.id, {}); await P.checkinHold(D, freya.id, o.order_id);
+  await P.handle(D, `appointments/${freya.id}/no-show`, {});
+  assert.equal(freya.status, 'no_show'); assert.equal(freya.hold.status, 'captured');
+  const fee = D.invoices.find((x) => x.id === freya.invoice_id);
+  assert.equal(fee.status, 'PAID'); assert.equal(fee.total_pence, 2000);
+  const amara = D.appointments.find((x) => x.patient_id === 'p_amara'); // tomorrow, deposit
+  const o2 = await P.checkinStart(D, amara.id, {}); await P.checkinHold(D, amara.id, o2.order_id);
+  await P.cancelAppt(D, amara.id, true);
+  assert.equal(amara.status, 'cancelled'); assert.equal(amara.hold.status, 'released');
+  assert.equal(D.mock_paypal[amara.hold.auth_id].status, 'VOIDED');
+  await assert.rejects(P.handle(D, `appointments/${freya.id}/arrived`, {}), /already closed/);
+  const tomas = D.appointments.find((x) => x.patient_id === 'p_tomas');
+  await P.checkinStart(D, tomas.id, { scale: 's60' });
+  assert.equal(tomas.scale, 'full'); assert.equal(tomas.status, 'checked_in'); // no deposit for OT, council pays full price
+});
+
+test('check-in: opens 3 days before; a deposit smaller than the scaled price is capped; the family can’t cancel on the day', async () => {
+  const { D, P } = await fresh();
+  const far = (await P.handle(D, 'appointments', { patient_id: 'p_amara', service_id: 'svc_aid', date: dayAhead(10), time: '11:00' })).booked;
+  await assert.rejects(P.checkinStart(D, far, {}), /opens 3 days before/);
+  D.settings.deposit_services.push('svc_30');
+  const id = (await P.handle(D, 'appointments', { patient_id: 'p_liam', service_id: 'svc_30', date: dayAhead(0), time: '17:00' })).booked;
+  const a = D.appointments.find((x) => x.id === id);
+  const o = await P.checkinStart(D, id, { scale: 's60' }); await P.checkinHold(D, id, o.order_id);
+  await assert.rejects(P.cancelAppt(D, id, true), /less than a day/);
+  await P.handle(D, `appointments/${id}/arrived`, {});
+  assert.equal(a.hold.captured_pence, 1800); // £45 less 60% = £18, below the £20 deposit
+  assert.equal(D.invoices.find((x) => x.id === a.invoice_id).status, 'PAID');
+});
