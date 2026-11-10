@@ -20,8 +20,9 @@
     "PAYPAL_MODE": "sandbox",
     // Short writing jobs (invoice notes, reading payments, rewording reminders)
     "AI_MODEL": "claude-haiku-5-5",
-    // The billing assistant, which plans with tools
-    "AGENT_MODEL": "claude-opus-5-5",
+    // The billing and finance assistants, which plan with tools. Claude Haiku 5.5 keeps costs low;
+    // "claude-sonnet-5-5" or "claude-opus-5-5" plan more carefully at a higher price.
+    "AGENT_MODEL": "claude-haiku-5-5",
     // Most AI requests per day (UTC). After that, standard wording and built-in rules take over.
     "AI_DAILY_LIMIT": "150",
     "CURRENCY": "GBP",

@@ -41,7 +41,7 @@ TJS Pay now runs a **hospital**: ten departments, each with a code (ENT-01, PAED
 
 ### The billing and finance assistants (an agent with tools)
 
-Staff ask in plain words. The **billing office** gets billing tools and actions (reminders, invoices, confirming payments); the **finance department** gets budget tools and one action (pay a money request). Neither can use the other's tools: this is enforced in the code, not just the prompt. Claude (`AGENT_MODEL`, Claude Opus 5.5 by default) runs a tool-use loop over tools that the billing code defines and runs (`src/practice.js`, *the billing assistant*):
+Staff ask in plain words. The **billing office** gets billing tools and actions (reminders, invoices, confirming payments); the **finance department** gets budget tools and one action (pay a money request). Neither can use the other's tools: this is enforced in the code, not just the prompt. Claude (`AGENT_MODEL`, Claude Haiku 5.5 by default, to keep costs low; Sonnet 5.5 or Opus 5.5 can be set instead) runs a tool-use loop over tools that the billing code defines and runs (`src/practice.js`, *the billing assistant*):
 
 | Tool | What it does |
 |---|---|

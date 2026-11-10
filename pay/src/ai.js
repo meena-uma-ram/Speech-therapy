@@ -15,7 +15,7 @@ export function claude(env, guard = () => {}) {
   if (!env.ANTHROPIC_API_KEY) return null;
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY, maxRetries: 1, timeout: 60_000 });
   const SMALL = env.AI_MODEL || 'claude-haiku-5-5';
-  const AGENT = env.AGENT_MODEL || 'claude-opus-5-5';
+  const AGENT = env.AGENT_MODEL || 'claude-haiku-5-5';
   const textOf = (msg) => msg.content.filter((b) => b.type === 'text').map((b) => b.text).join('').trim();
 
   async function ask(system, user, max = 1500) {
@@ -66,8 +66,8 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
         const msg = await client.beta.messages.create({
           model: AGENT,
           max_tokens: 16000,
-          betas: ['server-side-fallback-2026-07-01'],
-          fallbacks: 'default', // if the model declines, the API retries on a fallback model in the same call
+          // Server-side refusal fallback exists for Opus, Sonnet and Fable, not for Haiku.
+          ...(/opus|sonnet|fable/.test(AGENT) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
           output_config: { effort: 'medium' },
           cache_control: { type: 'ephemeral' }, // later steps reuse the instructions, tools and figures at a fraction of the cost
           system,
