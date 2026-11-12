@@ -1,9 +1,13 @@
-# Copy to .dev.vars for local development. Never commit .dev.vars.
-PAYPAL_CLIENT_ID=your-sandbox-client-id
-PAYPAL_CLIENT_SECRET=your-sandbox-secret
-PAYPAL_WEBHOOK_ID=your-webhook-id
-ANTHROPIC_API_KEY=sk-ant-...
+# Secrets for your own copy of TJS Pay. Copy to .dev.vars for local development; never commit .dev.vars.
+# With the Deploy to Cloudflare button, you are asked for these.
+# PayPal: from developer.paypal.com > Apps & Credentials (Sandbox to try, Live for real money)
+PAYPAL_CLIENT_ID=your-paypal-client-id
+PAYPAL_CLIENT_SECRET=your-paypal-secret
+# A passcode staff type to open TJS Pay. Required for your own copy.
+ADMIN_PASSCODE=choose-a-long-passcode
+# Any long random string (signs the links families get)
 LINK_SECRET=any-long-random-string
-DEMO_RECIPIENT_EMAIL=your-sandbox-personal-account@personal.example.com
-# Optional: require a passcode for the therapist screen
-# ADMIN_PASSCODE=choose-one
+# Optional: your own Anthropic key for the AI assistants (without it, built-in rules are used)
+ANTHROPIC_API_KEY=
+# Optional: from your PayPal app's webhook (payments then show up at once)
+PAYPAL_WEBHOOK_ID=

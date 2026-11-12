@@ -4,13 +4,26 @@
 import { makePractice } from './practice.js';
 import { paypal } from './paypal.js';
 import { claude } from './ai.js';
+import qrcode from 'qrcode-generator';
 
 const PRACTICE_ID = 'demo';
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' } });
 const fail = (message, status = 400) => json({ error: message }, status);
 
 // ---------- loading and saving the practice ----------
+// The table is created on first use, so a fresh copy deployed with the Deploy to Cloudflare button just works.
+let tableReady = false;
+async function ensureTable(env) {
+  if (tableReady) return;
+  await env.DB.prepare('CREATE TABLE IF NOT EXISTS practice (id TEXT PRIMARY KEY, version INTEGER NOT NULL, doc TEXT NOT NULL, updated_at TEXT NOT NULL)').run();
+  tableReady = true;
+}
+// "demo": the public demo (made-up hospital, open to all, sandbox emails redirected to the demo account).
+// Anything else (the default): a clinic's own copy (starts empty, needs ADMIN_PASSCODE, never loads demo data).
+const isClinic = (env) => env.CLINIC_MODE !== 'demo';
+
 async function load(env) {
+  await ensureTable(env);
   const row = await env.DB.prepare('SELECT version, doc FROM practice WHERE id = ?').bind(PRACTICE_ID).first();
   return row ? { D: JSON.parse(row.doc), version: row.version } : { D: { patients: [] }, version: 0 };
 }
@@ -41,12 +54,27 @@ async function checkLink(env, id, token) {
   return diff === 0;
 }
 
+// A cap on AI requests per day (UTC), so a public demo link can't run up the Anthropic bill.
+// When it is reached, every AI job falls back to standard wording and rules.
+function aiGuard(env, D) {
+  const limit = parseInt(env.AI_DAILY_LIMIT || '150', 10);
+  return () => {
+    const day = new Date().toISOString().slice(0, 10);
+    if (!D.ai_usage || D.ai_usage.day !== day) D.ai_usage = { day, requests: 0 };
+    if (D.ai_usage.requests >= limit) throw new Error('daily AI limit reached');
+    D.ai_usage.requests += 1;
+  };
+}
+
 function practiceFor(env, D) {
   const origin = env.PUBLIC_URL || D.origin || '';
   return makePractice({
     paypal: paypal(env, D),
-    ai: claude(env),
+    ai: claude(env, aiGuard(env, D)),
+    aiLimit: parseInt(env.AI_DAILY_LIMIT || '150', 10),
+    clinic: isClinic(env),
     linkFor: async (id) => `${origin}/paid#i=${id}&t=${await sign(env, id)}`,
+    checkinLinkFor: async (id) => `${origin}/checkin#a=${id}&t=${await sign(env, id)}`,
   });
 }
 const modeOf = (env) => env.PAYPAL_MODE || 'sandbox';
@@ -57,7 +85,10 @@ async function withPractice(env, fn, origin) {
   if (origin && D.origin !== origin) D.origin = origin;
   const before = version ? JSON.stringify(D) : '';
   const P = practiceFor(env, D);
-  if (!D.settings) await P.seed(D);
+  if (!D.settings) await P.seed(D, { empty: isClinic(env), name: env.PRACTICE_NAME });
+  // The demo reloads its made-up hospital when it was saved by an older version; a clinic's data is only extended.
+  else if (isClinic(env)) P.migrate(D);
+  else if (!D.departments || !D.requests || !D.appointments || !D.partners) await P.seed(D);
   const out = await fn(P, D);
   if (JSON.stringify(D) !== before) await save(env, D, version);
   return out;
@@ -75,6 +106,7 @@ async function handleApi(req, env, url) {
     if (modeOf(env) !== 'mock' && !(await paypal(env, {}).verifyWebhook(req.headers, event))) return fail('Signature check failed', 401);
     const ppId = event.resource?.invoice?.id || event.resource?.id;
     if (ppId && String(event.event_type || '').startsWith('INVOICING.INVOICE.')) await withPractice(env, (P, D) => P.syncAll(D, ppId));
+    if (String(event.event_type || '').startsWith('PAYMENT.PAYOUTS')) await withPractice(env, (P, D) => P.refreshPayouts(D));
     return json({ ok: true });
   }
 
@@ -84,7 +116,39 @@ async function handleApi(req, env, url) {
     if (!(await checkLink(env, id, url.searchParams.get('t')))) return fail('This link is not valid.', 404);
     const { D } = await load(env);
     const f = D.settings && practiceFor(env, D).family(D, id);
-    return f ? json(f) : fail('This link is not valid.', 404);
+    if (!f) return fail('This link is not valid.', 404);
+    // PayPal Checkout buttons: the client ID is public by design; the secret never leaves the Worker.
+    if (!f.paid) f.checkout = modeOf(env) === 'mock' ? { mock: true } : env.PAYPAL_CLIENT_ID ? { client_id: env.PAYPAL_CLIENT_ID, currency: env.CURRENCY || 'GBP' } : null;
+    return json(f);
+  }
+  // Check-in & pay: the family's signed check-in link. Only the visit, price choices and deposit are shown.
+  if (path === '/api/public/checkin' && method === 'GET') {
+    const id = url.searchParams.get('a');
+    if (!(await checkLink(env, id, url.searchParams.get('t')))) return fail('This link is not valid.', 404);
+    const { D } = await load(env);
+    const v = D.settings && practiceFor(env, D).checkinView(D, id);
+    if (!v) return fail('This link is not valid.', 404);
+    v.paypal = modeOf(env) === 'mock' ? { mock: true } : env.PAYPAL_CLIENT_ID ? { client_id: env.PAYPAL_CLIENT_ID, currency: env.CURRENCY || 'GBP' } : null;
+    return json(v);
+  }
+  if (path.startsWith('/api/public/checkin/') && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.a, b.t))) return fail('This link is not valid.', 404);
+    const step = path.slice('/api/public/checkin/'.length);
+    if (step === 'start') return json(await withPractice(env, (P, D) => P.checkinStart(D, b.a, { scale: b.scale })));
+    if (step === 'hold' && typeof b.order_id === 'string') return json(await withPractice(env, (P, D) => P.checkinHold(D, b.a, b.order_id)));
+    if (step === 'cancel') { await withPractice(env, (P, D) => P.cancelAppt(D, b.a, true)); return json({ ok: true }); }
+    return fail('Not found', 404);
+  }
+  if (path === '/api/public/checkout/create' && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.i, b.t))) return fail('This link is not valid.', 404);
+    return json(await withPractice(env, (P, D) => P.checkoutStart(D, b.i)));
+  }
+  if (path === '/api/public/checkout/capture' && method === 'POST') {
+    const b = await body(req);
+    if (!(await checkLink(env, b.i, b.t)) || typeof b.order_id !== 'string') return fail('This link is not valid.', 404);
+    return json(await withPractice(env, (P, D) => P.checkoutFinish(D, b.i, b.order_id)));
   }
   if (path === '/api/public/claim' && method === 'POST') {
     const b = await body(req);
@@ -95,11 +159,14 @@ async function handleApi(req, env, url) {
 
   // Everything else is the therapist's screen.
   if (!path.startsWith('/api/pay/')) return fail('Not found', 404);
+  if (isClinic(env) && !env.ADMIN_PASSCODE) return fail('Set an ADMIN_PASSCODE secret before using TJS Pay with real patients (see “Use it in your clinic”).', 403);
   if (env.ADMIN_PASSCODE && req.headers.get('x-passcode') !== env.ADMIN_PASSCODE) return fail('Passcode needed', 401);
   const route = path.slice('/api/pay/'.length);
   if (method === 'GET' && route !== 'state') return fail('Not found', 404);
   const b = method === 'POST' ? await body(req) : {};
-  return json(await withPractice(env, (P, D) => P.handle(D, route, b, modeOf(env)), url.origin));
+  const out = await withPractice(env, (P, D) => P.handle(D, route, b, modeOf(env)), url.origin);
+  if (out && out.checkin_url) { const q = qrcode(0, 'M'); q.addData(out.checkin_url); q.make(); out.qr_svg = q.createSvgTag({ cellSize: 4, margin: 2, scalable: true }); }
+  return json(out);
 }
 
 export default {
@@ -109,13 +176,21 @@ export default {
       try { return await handleApi(req, env, url); }
       catch (e) { console.error(e); return fail(e.message || 'Something went wrong.', 500); }
     }
-    return env.ASSETS.fetch(req);
+    const res = await env.ASSETS.fetch(req);
+    // The family pages load PayPal's buttons, so it allows PayPal's domains. Every other page stays 'self' only.
+    if (['/paid', '/paid.html', '/checkin', '/checkin.html'].includes(url.pathname)) {
+      const out = new Response(res.body, res);
+      out.headers.set('Content-Security-Policy', "default-src 'self'; script-src 'self' https://*.paypal.com https://*.paypalobjects.com; connect-src 'self' https://*.paypal.com; frame-src https://*.paypal.com; img-src 'self' data: https://*.paypal.com https://*.paypalobjects.com; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+      return out;
+    }
+    return res;
   },
   // Every hour: check PayPal for payments (so the webhook is optional). At 09:00 UTC: send reminders that are due.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(withPractice(env, async (P, D) => {
       await P.syncAll(D);
-      if (new Date(event.scheduledTime).getUTCHours() === 9) await P.reminders(D);
+      await P.refreshPayouts(D);
+      if (new Date(event.scheduledTime).getUTCHours() === 9) { await P.reminders(D); await P.sendDueInstalments(D); }
     }).catch((e) => console.error('scheduled run failed', e)));
   },
 };

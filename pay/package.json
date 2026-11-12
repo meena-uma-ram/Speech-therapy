@@ -8,11 +8,18 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "dev:mock": "wrangler dev --var PAYPAL_MODE:mock",
+    "dev:mock": "wrangler dev --var PAYPAL_MODE:mock --var CLINIC_MODE:demo",
     "db:local": "wrangler d1 execute tjs-pay --local --file=schema.sql",
     "db:remote": "wrangler d1 execute tjs-pay --remote --file=schema.sql",
     "deploy": "wrangler deploy",
+    "deploy:demo": "wrangler deploy --var CLINIC_MODE:demo",
     "test": "node --test test/*.test.js"
   },
-  "devDependencies": { "wrangler": "^4.0.0" }
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^1.7.0",
+    "qrcode-generator": "^1.4.4"
+  }
 }

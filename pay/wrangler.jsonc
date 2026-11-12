@@ -8,18 +8,28 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/paid", "/paid.html", "/checkin", "/checkin.html"]
   },
   "d1_databases": [
-    { "binding": "DB", "database_name": "tjs-pay", "database_id": "REPLACE_WITH_YOUR_D1_ID" }
+    // No database_id: Cloudflare creates the database on the first deploy.
+    { "binding": "DB", "database_name": "tjs-pay" }
   ],
   // Every hour: check PayPal for payments. At 09:00 UTC also send reminders that are due.
   "triggers": { "crons": ["0 * * * *"] },
   "vars": {
     // "sandbox" talks to the PayPal sandbox. "mock" simulates PayPal for local testing only.
     "PAYPAL_MODE": "sandbox",
+    // "clinic" (default): your own copy. Starts empty, needs the ADMIN_PASSCODE secret, never loads demo data.
+    // "demo": the public demo with a made-up hospital (npm run deploy:demo).
+    "CLINIC_MODE": "clinic",
+    // Short writing jobs (invoice notes, reading payments, rewording reminders)
     "AI_MODEL": "claude-haiku-5-5",
+    // The billing and finance assistants, which plan with tools. Claude Haiku 5.5 keeps costs low;
+    // "claude-sonnet-5-5" or "claude-opus-5-5" plan more carefully at a higher price.
+    "AGENT_MODEL": "claude-haiku-5-5",
+    // Most AI requests per day (UTC). After that, standard wording and built-in rules take over.
+    "AI_DAILY_LIMIT": "150",
     "CURRENCY": "GBP",
-    "PRACTICE_NAME": "Northern Voices Speech Therapy"
+    "PRACTICE_NAME": "Our clinic"
   }
 }

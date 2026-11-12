@@ -41,9 +41,25 @@ test('plain words without AI: name only, bare numbers, references', async () => 
 
 test('AI parse can only pick a real patient; code still does the sums', async () => {
   const { D, P } = await fresh({ parsePayment: async () => ({ patient_id: 'p_nobody', amount: 50, method: 'cash' }), invoiceNote: async () => { throw new Error('x'); } });
-  const r = await P.handle(D, 'claims/parse', { text: 'Liam paid 50 cash' });
+  const r = await P.handle(D, 'claims/parse', { text: 'the boy with the red coat paid 50 cash' });
   assert.equal(r.patient_id, null);
   assert.ok(r.unclear);
+});
+
+test('fewer AI calls: the built-in reader goes first, and invoices use standard wording unless asked', async () => {
+  let parseCalls = 0, noteCalls = 0;
+  const { D, P } = await fresh({ parsePayment: async () => { parseCalls++; return { patient_id: 'p_freya', amount: 60, method: 'bank' }; }, invoiceNote: async () => { noteCalls++; return { subject: 'AI subject', note: 'AI note' }; } });
+  const r1 = await P.handle(D, 'claims/parse', { text: 'Liam paid 135 cash' });
+  assert.equal(r1.who, 'Liam'); assert.equal(parseCalls, 0);
+  const r2 = await P.handle(D, 'claims/parse', { text: 'Emma’s husband sent the money for the assessment, 60 by bank' });
+  assert.equal(r2.who, 'Freya'); assert.equal(parseCalls, 1);
+  const id = (await P.handle(D, 'invoices/draft', { patient_id: 'p_arjun' })).draft;
+  const i = D.invoices.find((x) => x.id === id);
+  assert.equal(noteCalls, 0); assert.equal(i.note_by_ai, false);
+  const w = await P.handle(D, `invoices/${id}/ai-note`, {});
+  assert.equal(noteCalls, 1); assert.equal(w.note, 'AI note'); assert.equal(i.note_by_ai, true);
+  const plan = (await P.handle(D, 'assistant', { request: 'Who owes us money?', instant: true })).plan;
+  assert.equal(plan.by_ai, false);
 });
 
 test('recording a payment writes it to the PayPal invoice and splits correctly', async () => {
@@ -125,4 +141,345 @@ test('reminders go in order even if several are overdue', async () => {
   await P.reminders(D);
   assert.equal(liam.reminder_count, 2);
   assert.match(liam.last_reminder, /still unpaid/);
+});
+
+// ---------- billing assistant ----------
+test('assistant without AI: "chase anyone more than two weeks late" proposes only Liam, and nothing is sent before approval', async () => {
+  const { D, P, calls } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Who owes me money? Chase anyone more than two weeks late.' });
+  assert.equal(plan.by_ai, false);
+  assert.deepEqual(plan.actions.map((a) => [a.type, D.invoices.find((i) => i.id === a.id).patient_id]), [['reminder', 'p_liam']]);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 0);
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] });
+  assert.deepEqual(st.results.map((r) => r.ok), [true]);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 1);
+  assert.equal(inv(D, 'p_liam').reminder_count, 2);
+  await assert.rejects(P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1] }), /already been handled/);
+});
+
+test('assistant without AI: "invoice everything" proposes Arjun and Amara, and approval sends through PayPal', async () => {
+  const { D, P, calls } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Invoice everything that’s waiting' });
+  assert.deepEqual(plan.actions.map((a) => [a.type, a.id]).sort(), [['invoice', 'p_amara'], ['invoice', 'p_arjun']]);
+  const before = calls.filter((c) => c[0] === 'send').length;
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1, 2] });
+  assert.ok(st.results.every((r) => r.ok));
+  assert.equal(calls.filter((c) => c[0] === 'send').length, before + 2);
+  assert.equal(D.sessions.filter((s) => ['p_arjun', 'p_amara'].includes(s.patient_id) && !s.invoice_id).length, 0);
+});
+
+test('assistant with AI: invalid proposals are refused, and every action is checked again at approval', async () => {
+  let seen = [];
+  const fakeAi = {
+    async assistant({ tools, run }) {
+      assert.ok(tools.every((t) => t.strict && t.input_schema.additionalProperties === false));
+      const open = await run('list_unpaid_invoices', {});
+      const paid = (await run('list_patients', {})).find((p) => p.known_as === 'Arjun');
+      seen = open.map((o) => o.patient);
+      await assert.rejects(run('propose_action', { type: 'reminder', id: 'inv_nope', reason: 'x' }), /No invoice/);
+      await assert.rejects(run('propose_action', { type: 'invoice', id: 'p_zara', reason: 'x' }), /no sessions waiting/);
+      for (const o of open) await run('propose_action', { type: 'reminder', id: o.invoice_id, reason: 'late' });
+      assert.equal((await run('propose_action', { type: 'reminder', id: open[0].invoice_id, reason: 'again' })).added, false);
+      assert.ok(paid);
+      return { text: 'Three invoices are unpaid. I proposed reminders 1 to 3.' };
+    },
+  };
+  const { D, P, pp, calls } = await fresh(fakeAi);
+  const { plan } = await P.handle(D, 'assistant', { request: 'chase everyone' });
+  assert.equal(plan.by_ai, true);
+  assert.deepEqual(seen.sort(), ['Freya', 'Liam', 'Tomás']);
+  assert.equal(plan.actions.length, 3);
+  // Freya pays through PayPal before the therapist approves: her reminder must not go out.
+  const freya = inv(D, 'p_freya', 'SENT');
+  await pp.simulatePay(freya.paypal_id);
+  await P.handle(D, 'invoices/' + freya.id + '/refresh', {});
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: plan.actions.map((a) => a.n) });
+  const fr = st.results.find((r) => plan.actions.find((a) => a.n === r.n).id === freya.id);
+  assert.equal(fr.ok, false); assert.match(fr.text, /already paid/);
+  assert.equal(calls.filter((c) => c[0] === 'remind').length, 2);
+});
+
+test('assistant falls back to the rules when the AI fails', async () => {
+  const { D, P } = await fresh({ assistant: async () => { throw new Error('daily AI limit reached'); } });
+  const { plan } = await P.handle(D, 'assistant', { request: 'chase anyone late' });
+  assert.equal(plan.by_ai, false);
+  assert.ok(plan.steps.some((s) => /AI unavailable/.test(s)));
+  assert.ok(plan.actions.length >= 1);
+});
+
+// ---------- PayPal Checkout on the family page ----------
+test('checkout: the family pays the amount owed, recorded on the PayPal invoice as a PayPal payment', async () => {
+  const { D, P, calls } = await fresh();
+  const i = inv(D, 'p_liam', 'SENT');
+  const o = await P.checkoutStart(D, i.id);
+  await assert.rejects(P.checkoutFinish(D, i.id, 'SOME-OTHER-ORDER'), /could not be matched/);
+  const r = await P.checkoutFinish(D, i.id, o.id);
+  assert.equal(r.paid, '£135.00');
+  assert.equal(i.status, 'PAID');
+  assert.deepEqual(calls.filter((c) => c[0] === 'record').pop(), ['record', i.paypal_id, 'paypal', 13500]);
+  await P.handle(D, 'invoices/' + i.id + '/refresh', {}); // the hourly check must not count it twice
+  assert.equal(i.paid_pence, 13500);
+  await assert.rejects(P.checkoutStart(D, i.id), /already settled/);
+});
+
+// ---------- departments and PayPal Payouts ----------
+const lastMonthOf = (D) => { const t = new Date(); t.setUTCDate(1); t.setUTCDate(0); return t.toISOString().slice(0, 7); };
+
+test('departments: ten with unique codes, and every invoice line carries one', async () => {
+  const { D } = await fresh();
+  assert.equal(D.departments.length, 10);
+  assert.equal(new Set(D.departments.map((d) => d.code)).size, 10);
+  for (const i of D.invoices) for (const it of i.items) assert.ok(it.code && D.departments.some((d) => d.id === it.dept_id), `${i.id} ${it.name}`);
+});
+
+test('split: pennies always add up, and a mixed invoice is shared by its lines', async () => {
+  const { D, P } = await fresh();
+  const parts = P._test.split(1001, [{ key: 'a', w: 1 }, { key: 'b', w: 1 }, { key: 'c', w: 1 }]);
+  assert.equal(parts.reduce((t, x) => t + x.pence, 0), 1001);
+  const mixed = D.invoices.find((i) => i.items.some((it) => it.code === 'ENT-01') && i.items.some((it) => it.code === 'AUD-01'));
+  const pay = D.payments.find((x) => x.invoice_id === mixed.id);
+  const s = P._test.deptSplit(D, pay);
+  assert.deepEqual(s.map((x) => x.pence).sort((a, b) => a - b), [8500, 15000]);
+});
+
+test('budgets: income by department adds up to the year’s payments; used + left = budget', async () => {
+  const { D, P } = await fresh();
+  const B = await P.handle(D, 'departments', {});
+  const fy = P._test.fyOf(new Date().toISOString().slice(0, 10));
+  const paid = D.payments.filter((x) => x.date >= fy.start && x.date <= fy.end).reduce((t, x) => t + x.pence, 0);
+  assert.equal(B.totals.income, paid);
+  for (const r of B.departments) assert.equal(r.used + r.left, r.budget);
+  assert.equal(B.totals.waiting, 3);
+});
+
+test('requests: a department asks, administration pays with PayPal Payouts, and it counts against the budget', async () => {
+  const { D, P } = await fresh();
+  await assert.rejects(P.handle(D, 'requests', { dept_id: 'dep_ot', amount: '120', purpose: 'Weighted blankets', pay_to: 'supplier', payee_email: 'not-an-email' }), /supplier’s PayPal email/);
+  const st = await P.handle(D, 'requests', { dept_id: 'dep_ot', amount: '120', purpose: 'Weighted blankets' });
+  const r = D.requests[0];
+  assert.equal(r.status, 'pending'); assert.equal(r.payee_email, 'ot-01.payouts@example.org');
+  const before = st.budgets.departments.find((x) => x.id === 'dep_ot');
+  const after = (await P.handle(D, `requests/${r.id}/approve`, {})).budgets.departments.find((x) => x.id === 'dep_ot');
+  assert.equal(r.status, 'sending'); assert.ok(r.payout.batch_id);
+  assert.equal(after.left, before.left - 12000);
+  await assert.rejects(P.handle(D, `requests/${r.id}/approve`, {}), /already been handled/);
+  await P.refreshPayouts(D);
+  assert.equal(r.status, 'paid');
+});
+
+test('requests: over budget needs an explicit decision; a failed payout stops counting and can be approved again', async () => {
+  const { D, P, pp } = await fresh();
+  const neuro = D.requests.find((x) => x.dept_id === 'dep_neuro' && x.status === 'pending');
+  await assert.rejects(P.handle(D, `requests/${neuro.id}/approve`, {}), /over its budget/);
+  await P.handle(D, `requests/${neuro.id}/approve`, { over_budget: true });
+  assert.match(neuro.reason, /over budget/);
+  const left = () => P._test.budgets(D).departments.find((x) => x.id === 'dep_neuro').left;
+  assert.ok(left() < 0);
+  pp.failPayoutItem(neuro.payout.batch_id, neuro.payout.item_id);
+  await P.refreshPayouts(D);
+  assert.equal(neuro.status, 'failed');
+  assert.ok(left() > 0);
+  const pt = D.requests.find((x) => x.dept_id === 'dep_pt');
+  await P.handle(D, `requests/${pt.id}/reject`, { reason: 'Use the existing stock first.' });
+  assert.equal(pt.status, 'rejected');
+  await assert.rejects(P.handle(D, `requests/${pt.id}/approve`, {}), /already been handled/);
+});
+
+test('assistant without AI: money requests that fit the budget are proposed; the over-budget one is left to administration', async () => {
+  const { D, P } = await fresh();
+  const { plan } = await P.handle(D, 'assistant', { request: 'Review the money requests from departments', team: 'finance' });
+  const depts = plan.actions.map((a) => D.requests.find((r) => r.id === a.id).dept_id).sort();
+  assert.deepEqual(depts, ['dep_aud', 'dep_pt']);
+  assert.match(plan.text, /over budget/);
+  const st = await P.handle(D, 'assistant/approve', { plan_id: plan.id, numbers: [1, 2] });
+  assert.ok(st.results.every((x) => x.ok));
+  assert.equal(D.requests.filter((r) => r.status === 'sending').length, 2);
+});
+
+test('teams: the billing office cannot pay money requests, and finance cannot send reminders', async () => {
+  let billingTools = [], financeTools = [];
+  const ai = {
+    async assistant({ tools, run }) {
+      const names = tools.map((t) => t.name);
+      const enumOf = tools.find((t) => t.name === 'propose_action').input_schema.properties.type.enum;
+      if (names.includes('department_budgets')) {
+        financeTools = names;
+        assert.deepEqual(enumOf, ['pay_request']);
+        await assert.rejects(run('propose_action', { type: 'reminder', id: 'x', reason: 'x' }), /not a finance action/);
+        await assert.rejects(run('check_paypal', { invoice_ids: [] }), /not available/);
+      } else {
+        billingTools = names;
+        assert.ok(!enumOf.includes('pay_request'));
+        await assert.rejects(run('department_budgets', {}), /not available/);
+        await assert.rejects(run('propose_action', { type: 'pay_request', id: 'x', reason: 'x' }), /not a billing office action/);
+      }
+      return { text: 'ok' };
+    },
+  };
+  const { D, P } = await fresh(ai);
+  const b = (await P.handle(D, 'assistant', { request: 'pay the requests' })).plan;
+  const f = (await P.handle(D, 'assistant', { request: 'chase everyone', team: 'finance' })).plan;
+  assert.equal(b.team, 'billing'); assert.equal(f.team, 'finance');
+  assert.ok(billingTools.includes('check_paypal') && !billingTools.includes('department_budgets'));
+  assert.ok(financeTools.includes('department_budgets') && !financeTools.includes('check_paypal'));
+});
+
+// ---------- check-in & pay: appointments, deposit holds, sliding scale ----------
+const dayAhead = (k) => { const d = new Date(); d.setUTCDate(d.getUTCDate() + k); return d.toISOString().slice(0, 10); };
+
+test('check-in: deposit held with PayPal, sliding scale applied, deposit put toward the visit invoice on arrival', async () => {
+  const { D, P, calls } = await fresh();
+  const a = D.appointments.find((x) => x.patient_id === 'p_freya'); // EEG today, £280, deposit £20
+  assert.equal(a.deposit_pence, 2000);
+  const v = P.checkinView(D, a.id);
+  assert.equal(v.self_pay, true); assert.equal(v.bands.length, 4);
+  const o = await P.checkinStart(D, a.id, { scale: 's40' });
+  await assert.rejects(P.checkinHold(D, a.id, 'WRONG'), /could not be matched/);
+  await P.checkinHold(D, a.id, o.order_id);
+  assert.equal(a.status, 'checked_in'); assert.equal(a.hold.status, 'held');
+  await P.handle(D, `appointments/${a.id}/arrived`, {});
+  const i = D.invoices.find((x) => x.id === a.invoice_id);
+  assert.equal(i.total_pence, 16800); // £280 less 40%
+  assert.equal(i.paid_pence, 2000); assert.equal(i.status, 'DRAFT');
+  await assert.rejects(P.handle(D, `invoices/${i.id}/discard`, {}), /deposit has already been put toward/);
+  await P.handle(D, `invoices/${i.id}/send`, {});
+  assert.equal(i.status, 'PARTIALLY_PAID');
+  assert.deepEqual(calls.filter((c) => c[0] === 'record' && c[1] === i.paypal_id).map((c) => c[3]), [2000]);
+  await P.handle(D, `invoices/${i.id}/refresh`, {});
+  assert.equal(i.paid_pence, 2000); // not counted twice
+});
+
+test('check-in: no-show keeps the deposit as a fee; cancelling releases the hold; councils get no sliding scale', async () => {
+  const { D, P, pp } = await fresh();
+  const freya = D.appointments.find((x) => x.patient_id === 'p_freya');
+  const o = await P.checkinStart(D, freya.id, {}); await P.checkinHold(D, freya.id, o.order_id);
+  await P.handle(D, `appointments/${freya.id}/no-show`, {});
+  assert.equal(freya.status, 'no_show'); assert.equal(freya.hold.status, 'captured');
+  const fee = D.invoices.find((x) => x.id === freya.invoice_id);
+  assert.equal(fee.status, 'PAID'); assert.equal(fee.total_pence, 2000);
+  const amara = D.appointments.find((x) => x.patient_id === 'p_amara'); // tomorrow, deposit
+  const o2 = await P.checkinStart(D, amara.id, {}); await P.checkinHold(D, amara.id, o2.order_id);
+  await P.cancelAppt(D, amara.id, true);
+  assert.equal(amara.status, 'cancelled'); assert.equal(amara.hold.status, 'released');
+  assert.equal(D.mock_paypal[amara.hold.auth_id].status, 'VOIDED');
+  await assert.rejects(P.handle(D, `appointments/${freya.id}/arrived`, {}), /already closed/);
+  const tomas = D.appointments.find((x) => x.patient_id === 'p_tomas');
+  await P.checkinStart(D, tomas.id, { scale: 's60' });
+  assert.equal(tomas.scale, 'full'); assert.equal(tomas.status, 'checked_in'); // no deposit for OT, council pays full price
+});
+
+test('check-in: opens 3 days before; a deposit smaller than the scaled price is capped; the family can’t cancel on the day', async () => {
+  const { D, P } = await fresh();
+  const far = (await P.handle(D, 'appointments', { patient_id: 'p_amara', service_id: 'svc_aid', date: dayAhead(10), time: '11:00' })).booked;
+  await assert.rejects(P.checkinStart(D, far, {}), /opens 3 days before/);
+  D.settings.deposit_services.push('svc_30');
+  const id = (await P.handle(D, 'appointments', { patient_id: 'p_liam', service_id: 'svc_30', date: dayAhead(0), time: '17:00' })).booked;
+  const a = D.appointments.find((x) => x.id === id);
+  const o = await P.checkinStart(D, id, { scale: 's60' }); await P.checkinHold(D, id, o.order_id);
+  await assert.rejects(P.cancelAppt(D, id, true), /less than a day/);
+  await P.handle(D, `appointments/${id}/arrived`, {});
+  assert.equal(a.hold.captured_pence, 1800); // £45 less 60% = £18, below the £20 deposit
+  assert.equal(D.invoices.find((x) => x.id === a.invoice_id).status, 'PAID');
+});
+
+// ---------- insurance, outside providers, surgery payment plans ----------
+test('insurance: the excess stays with the family, the rest is claimed; a part payment sends the shortfall to the family', async () => {
+  const { D, P } = await fresh();
+  const id = (await P.handle(D, 'invoices/draft', { patient_id: 'p_amara' })).draft; // 4 × £45 = £180
+  const i = D.invoices.find((x) => x.id === id);
+  await assert.rejects(P.handle(D, 'insurance/split', { invoice_id: id, excess: '500' }), /covers the whole bill/);
+  await P.handle(D, 'insurance/split', { invoice_id: id });
+  const c = D.insurance_claims[0], ci = D.invoices.find((x) => x.id === c.invoice_id);
+  assert.equal(i.total_pence, 5000); assert.equal(i.items.reduce((t, x) => t + x.pence, 0), 5000);
+  assert.equal(c.claimed_pence, 13000); assert.equal(ci.to.name, 'Carewell Health Insurance'); assert.equal(ci.paypal_id, null);
+  assert.match(i.note, /comes to £50\.00/); assert.equal(i.claim_id, c.id);
+  await assert.rejects(P.handle(D, 'insurance/split', { invoice_id: id }), /covers the whole bill/);
+  assert.ok(ci.items.every((x) => x.code === 'SLT-01'));
+  await P.handle(D, `insurance/${c.id}/paid`, { amount: '100', reference: 'CW-PAY-1' });
+  assert.equal(c.status, 'part_paid'); assert.equal(c.paid_pence, 10000);
+  const short = D.invoices.find((x) => x.id === c.shortfall_invoice_id);
+  assert.equal(short.total_pence, 3000); assert.equal(short.status, 'DRAFT'); assert.equal(short.to.name, 'Chidi Okafor');
+  await assert.rejects(P.handle(D, `insurance/${c.id}/rejected`, {}), /already been settled/);
+  const seeded = D.insurance_claims.find((x) => x.status === 'submitted');
+  await P.handle(D, `insurance/${seeded.id}/rejected`, { reason: 'Not covered under this policy' });
+  assert.equal(D.invoices.find((x) => x.id === seeded.shortfall_invoice_id).total_pence, seeded.claimed_pence);
+});
+
+test('outside provider: Lakeside is owed its fee only from money collected, and is paid once with PayPal Payouts', async () => {
+  const { D, P } = await fresh();
+  const row = () => P._test.partnerSummary(D).find((x) => x.id === 'pt_lakeside');
+  assert.equal(row().earned, 80000); assert.equal(row().to_pay, 80000);
+  await P.handle(D, 'partners/pt_lakeside/pay', {});
+  assert.equal(row().to_pay, 0); assert.equal(D.partner_payouts[0].pence, 80000);
+  await assert.rejects(P.handle(D, 'partners/pt_lakeside/pay', {}), /Nothing is owed/);
+  await P.refreshPayouts(D);
+  assert.equal(D.partner_payouts[0].status, 'paid');
+  // A new scan, half paid so far: Lakeside has earned half its fee.
+  await P.handle(D, 'sessions', { patient_id: 'p_freya', service_id: 'svc_petct' });
+  const sid = (await P.handle(D, 'invoices/draft', { patient_id: 'p_freya' })).draft;
+  await P.handle(D, `invoices/${sid}/send`, {});
+  await P.handle(D, 'claims/record', { patient_id: 'p_freya', pence: 47500 + 6000, method: 'bank' }); // Freya's older £60 first, then half the scan
+  assert.equal(row().to_pay, 40000);
+});
+
+test('surgery plan: deposit sent now, instalments sent when due, amounts add up, department code on each', async () => {
+  const { D, P, calls } = await fresh();
+  await assert.rejects(P.handle(D, 'plans', { patient_id: 'p_zara', service_id: 'svc_tonsil', date: dayAhead(5) }), /at least 2 weeks/);
+  await P.handle(D, 'plans', { patient_id: 'p_zara', service_id: 'svc_tonsil', date: dayAhead(37), deposit_percent: 30, instalments: 3 });
+  const plan = D.payment_plans[0];
+  assert.equal(plan.parts.length, 4);
+  assert.equal(plan.parts.reduce((t, x) => t + x.pence, 0), 320000);
+  assert.equal(plan.parts[0].pence, 96000); assert.ok(plan.parts[0].invoice_id);
+  assert.ok(plan.parts.slice(1).every((x) => !x.invoice_id && x.due <= dayAhead(30)));
+  const dep = D.invoices.find((x) => x.id === plan.parts[0].invoice_id);
+  assert.equal(dep.status, 'SENT'); assert.equal(dep.items[0].code, 'ENT-01');
+  assert.equal(await P.sendDueInstalments(D), 0);
+  await P.handle(D, `plans/${plan.id}/send`, { part: 1 });
+  assert.ok(plan.parts[1].invoice_id);
+  await assert.rejects(P.handle(D, `plans/${plan.id}/send`, { part: 1 }), /already been sent/);
+  plan.parts[2].due = dayAhead(0);
+  assert.equal(await P.sendDueInstalments(D), 1);
+  assert.equal(calls.filter((c) => c[0] === 'send').length, 3 + 3);
+});
+
+// ---------- a clinic's own copy ----------
+import { paypal as realPaypal } from '../src/paypal.js';
+
+test('own copy: starts empty with editable departments, can’t load demo data, and keeps its data across updates', async () => {
+  const D = {}; const P = makePractice({ paypal: mockPaypal(D), ai: null, clinic: true });
+  await P.seed(D, { empty: true, name: 'Sunrise Children’s Clinic' });
+  assert.equal(D.settings.practice, 'Sunrise Children’s Clinic');
+  assert.equal(D.patients.length, 0); assert.equal(D.invoices.length, 0); assert.equal(D.appointments.length, 0);
+  assert.equal(D.departments.length, 10); assert.ok(D.departments.every((x) => x.budget_pence === 0 && x.payout_email === ''));
+  assert.equal(D.partners.length, 0); assert.ok(!D.services.some((v) => v.partner_id));
+  await assert.rejects(P.handle(D, 'seed', {}), /demo data can’t be loaded/);
+  await P.handle(D, 'departments/settings', { departments: [{ id: 'dep_slt', name: 'Speech Therapy', code: 'st-1', budget: '5000' }, { id: 'dep_ent', code: 'ST-1' }] });
+  assert.equal(D.departments.find((x) => x.id === 'dep_slt').code, 'ST-1');
+  assert.equal(D.departments.find((x) => x.id === 'dep_ent').code, 'ENT-01'); // codes stay unique
+  await P.handle(D, 'patients', { name: 'Real Patient', caregiver_name: 'Real Parent', email: 'parent@example.com' });
+  delete D.appointments; delete D.payment_plans;
+  P.migrate(D);
+  assert.equal(D.patients.length, 1); assert.deepEqual(D.appointments, []); assert.deepEqual(D.payment_plans, []);
+});
+
+test('own copy: invoices and payouts go to the real people, never to the demo account', async () => {
+  const sent = [];
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url: String(url), body: init && init.body && String(init.body).startsWith('{') ? JSON.parse(init.body) : null });
+    const body = String(url).endsWith('/oauth2/token') ? { access_token: 't', expires_in: 3600 } : String(url).includes('/payouts') ? { batch_header: { payout_batch_id: 'B1', batch_status: 'PENDING' } } : { id: 'INV2-1', detail: { metadata: {} } };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  try {
+    for (const mode of ['clinic', 'demo']) {
+      sent.length = 0;
+      const pp = realPaypal({ PAYPAL_MODE: 'sandbox', CLINIC_MODE: mode, PAYPAL_CLIENT_ID: 'id', PAYPAL_CLIENT_SECRET: 's', DEMO_RECIPIENT_EMAIL: 'demo@personal.example.com' }, {});
+      await pp.createAndSend({ invoice: { id: 'inv_1', items: [{ name: 'Session', pence: 6000 }], kind: 'session' }, to: { name: 'Priya Patel', email: 'priya@example.com' }, practice: 'X', note: 'n', subject: 's', dueDate: '2026-12-01' });
+      await pp.createPayout({ batchId: 'b', subject: 's', items: [{ email: 'supplier@example.com', pence: 100, itemId: 'i', note: 'n' }] });
+      const to = sent.find((x) => x.url.endsWith('/v2/invoicing/invoices')).body.primary_recipients[0].billing_info.email_address;
+      const payee = sent.find((x) => x.url.endsWith('/v1/payments/payouts')).body.items[0].receiver;
+      if (mode === 'clinic') { assert.equal(to, 'priya@example.com'); assert.equal(payee, 'supplier@example.com'); }
+      else { assert.equal(to, 'demo@personal.example.com'); assert.equal(payee, 'demo@personal.example.com'); }
+    }
+  } finally { globalThis.fetch = fetchBefore; }
 });
