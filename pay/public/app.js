@@ -23,6 +23,9 @@
   const PAID = ['PAID', 'MARKED_AS_PAID'];
   const outstanding = (i) => Math.max(0, i.total_pence - i.paid_pence);
   const isOpen = (i) => ['SENT', 'PARTIALLY_PAID'].includes(i.status) && outstanding(i) > 0;
+  // A draft for an insured patient can be split: the family pays the excess, the rest is claimed.
+  const canSplit = (i) => { const p = pat(i.patient_id); return !!(p && p.insurance && i.status === 'DRAFT' && !i.paid_pence && i.kind !== 'claim' && !i.claim_id && i.total_pence > p.insurance.excess_pence); };
+  const insName = (p) => ((S.insurers || []).find((x) => x.id === p.insurance.insurer_id) || {}).name || 'their insurer';
   const isLate = (i) => isOpen(i) && i.due_date && i.due_date < S.today;
   const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const day = (iso) => { const [y, m, d] = iso.slice(0, 10).split('-').map(Number); return `${d} ${MON[m - 1]}${y !== +S.today.slice(0, 4) ? ' ' + y : ''}`; };
@@ -154,7 +157,7 @@
     });
     S.invoices.filter((i) => i.status === 'DRAFT').forEach((i) => {
       const p = pat(i.patient_id);
-      out.push({ html: `<p><b>${esc(p.known_as)}</b>: draft invoice, ${esc(i.kind === 'block' ? 'next block' : i.period)}, ${m(i.total_pence)}.</p><p class="muted">Not sent yet.</p>`, actions: `<button class="btn small" data-act="review" data-id="${esc(i.id)}">Review and send</button>` });
+      out.push({ html: `<p><b>${esc(p.known_as)}</b>: draft invoice, ${esc(i.kind === 'block' ? 'next block' : i.period)}, ${m(i.total_pence)}.</p><p class="muted">Not sent yet.</p>`, actions: `${canSplit(i) ? `<button class="btn small line" data-act="ins-split" data-id="${esc(i.id)}">Split with insurance</button>` : ''}<button class="btn small" data-act="review" data-id="${esc(i.id)}">Review and send</button>` });
     });
     S.patients.forEach((p) => {
       const L = look(p);
@@ -389,6 +392,7 @@
         <div class="actions">${c.status === 'submitted' ? `<button class="btn small" data-act="ic-paid" data-id="${esc(c.id)}">Insurer paid</button><button class="btn small line" data-act="ic-rej" data-id="${esc(c.id)}">Rejected</button>` : ''}</div></li>`; };
     return `<div class="page-h"><h1>Insurance claims</h1><span class="muted">${m(open.reduce((t, c) => t + c.claimed_pence, 0))} waiting</span></div>
     <p class="muted dep-intro">For an insured patient, open their draft invoice and choose <b>Split with insurance</b>: the family pays their excess through PayPal, and the rest is claimed from the insurer. When the insurer pays (usually by bank), record it here. Anything the insurer doesn’t cover becomes a draft invoice to the family.</p>
+    ${(() => { const ready = S.invoices.filter(canSplit); return ready.length ? `<section class="panel"><div class="panel-h"><h2>Ready to claim</h2><span class="muted">${ready.length}</span></div><ul class="rows">${ready.map((i) => { const p = pat(i.patient_id); return `<li class="rq"><div><p><b>${esc(p.known_as)}</b>, ${esc(i.period)} · ${m(i.total_pence)}</p><p class="muted">${esc(insName(p))}, policy ${esc(p.insurance.policy)}: family pays ${m(p.insurance.excess_pence)}, ${m(i.total_pence - p.insurance.excess_pence)} is claimed</p></div><div class="actions"><button class="btn small" data-act="ins-split" data-id="${esc(i.id)}">Split with insurance</button><button class="btn small line" data-act="review" data-id="${esc(i.id)}">Open draft</button></div></li>`; }).join('')}</ul></section>` : ''; })()}
     <section class="panel"><div class="panel-h"><h2>Claims</h2><span class="muted">${list.length}</span></div>${list.length ? `<ul class="rows">${list.map(row).join('')}</ul>` : '<p class="empty">No claims yet.</p>'}</section>`;
   }
   // ----- surgery payment plans (patient page) -----
@@ -582,7 +586,9 @@
       <ul class="items">${i.items.map((it) => `<li><span>${it.code ? `<span class="code">${esc(it.code)}</span> ` : ''}${esc(it.name)}</span><span>${m(it.pence)}</span></li>`).join('')}<li class="sum"><span>Total</span><span>${m(i.total_pence)}</span></li></ul>
       <label>Email subject<input id="d-subject" maxlength="100" value="${esc(i.subject)}"></label>
       <label>Message<textarea id="d-note" rows="4" maxlength="1500">${esc(i.note)}</textarea></label>
-      ${p.insurance && !i.paid_pence && i.kind !== 'claim' && !i.claim_id ? `<p class="hint ins-hint">Insured with ${esc((S.insurers.find((x) => x.id === p.insurance.insurer_id) || {}).name || '')} (excess ${esc(gbp(p.insurance.excess_pence))}). <button class="btn text" id="d-ins" type="button">Split with insurance</button></p>` : ''}
+      ${canSplit(i) ? `<div class="ins-box"><p><b>${esc(p.known_as)} is insured</b> with ${esc(insName(p))} (policy ${esc(p.insurance.policy)}, excess ${m(p.insurance.excess_pence)}).<br><span class="muted">Split it: the family pays the excess through PayPal, and the rest is claimed from the insurer.</span></p><button class="btn small" id="d-ins" type="button">Split with insurance</button></div>`
+        : p.insurance && i.status === 'DRAFT' && !i.claim_id && i.kind !== 'claim' ? `<p class="hint">${esc(p.known_as)}’s ${m(p.insurance.excess_pence)} insurance excess covers this whole bill, so there’s nothing to claim.</p>`
+        : i.claim_id ? `<p class="hint">Split with insurance: this is the family’s excess. The rest is on the Insurance claims page.</p>` : ''}
       <p class="hint">${i.note_by_ai ? 'Written by AI from billing details only.' : 'Standard wording.'} Edit as needed.${S.ai && S.mode !== 'review' ? ' <button class="btn text" id="d-ai" type="button">Write with AI</button>' : ''}</p>
       <div class="actions"><button class="btn" id="d-send" type="button">Send through PayPal</button><button class="btn line" id="d-discard" type="button">Delete draft</button></div></form>`;
     dlg().showModal();
@@ -691,6 +697,7 @@
       case 'reject': act(b, `claims/${id}/reject`, {}, () => toast('Marked as not received.')); break;
       case 'reminders': act(b, 'reminders', {}, (d) => toast(d.sent ? `${count(d.sent, 'reminder', 'reminders')} sent.` : 'No reminders due.')); break;
       case 'parse': parse(b); break;
+      case 'ins-split': act(b, 'insurance/split', { invoice_id: id }, () => toast('Split: the family’s excess stays on the invoice, and the rest is claimed from the insurer.')); break;
       case 'ic-paid': { const amt = window.prompt('How much did the insurer pay (£)?'); if (amt === null) break; const ref = window.prompt('Payment reference (optional)') || ''; act(b, `insurance/${id}/paid`, { amount: amt, reference: ref }, () => toast('Recorded.')); break; }
       case 'ic-rej': { const why = window.prompt('Why was it rejected?'); if (why === null) break; act(b, `insurance/${id}/rejected`, { reason: why }, () => toast('The full amount is now a draft invoice to the family.')); break; }
       case 'pt-pay': if (window.confirm('Pay this provider with PayPal Payouts?')) act(b, `partners/${id}/pay`, {}, () => toast('Sent with PayPal Payouts.')); break;

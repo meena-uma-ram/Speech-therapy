@@ -304,3 +304,5 @@ details.done summary { padding: 10px 16px; cursor: pointer; color: var(--muted);
 .own .deploy { display: inline-block; margin: 8px 0 4px; text-decoration: none; }
 .own a:not(.btn) { color: var(--primary); }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; background: var(--wait-soft); padding: 0 4px; border-radius: 4px; }
+.ins-box { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--wait-soft); font-size: .88rem; }
+.ins-box p { flex: 1 1 260px; margin: 0; }
