@@ -52,7 +52,12 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
         if (e instanceof Anthropic.AuthenticationError) throw new Error('the AI key was not accepted');
         if (e instanceof Anthropic.RateLimitError) throw new Error('the AI is busy right now');
         if (e instanceof Anthropic.APIConnectionError) throw new Error('the AI could not be reached');
-        if (e instanceof Anthropic.APIError) { console.error('Assistant AI error:', e.status, e.message); throw new Error(`the AI returned an error (${e.status})`); }
+        if (e instanceof Anthropic.APIError) {
+          console.error('Assistant AI error:', e.status, e.message);
+          // Show Anthropic's own reason (e.g. no credit left on the account); it never contains the key.
+          const why = String((e.error && e.error.error && e.error.error.message) || '').replace(/\s+/g, ' ').slice(0, 140);
+          throw new Error(`the AI returned an error (${e.status}${why ? ': ' + why : ''})`);
+        }
         throw e;
       }
     },
