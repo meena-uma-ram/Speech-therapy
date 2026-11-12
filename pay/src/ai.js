@@ -52,7 +52,7 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
         if (e instanceof Anthropic.AuthenticationError) throw new Error('the AI key was not accepted');
         if (e instanceof Anthropic.RateLimitError) throw new Error('the AI is busy right now');
         if (e instanceof Anthropic.APIConnectionError) throw new Error('the AI could not be reached');
-        if (e instanceof Anthropic.APIError) throw new Error(`the AI returned an error (${e.status})`);
+        if (e instanceof Anthropic.APIError) { console.error('Assistant AI error:', e.status, e.message); throw new Error(`the AI returned an error (${e.status})`); }
         throw e;
       }
     },
@@ -60,10 +60,12 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
 
   async function agentLoop({ system, request, tools, run, maxTurns = 6 }) {
       const messages = [{ role: 'user', content: request }];
-      let calls = 0;
+      let calls = 0, simple = false;
+      // The same request without caching, effort, fallbacks or strict tool schemas.
+      const plain = ({ cache_control, output_config, betas, fallbacks, ...rest }) => ({ ...rest, tools: rest.tools.map(({ strict, ...t }) => t) });
       for (let turn = 0; turn < maxTurns; turn++) {
         guard(); calls++;
-        const msg = await client.beta.messages.create({
+        const full = {
           model: AGENT,
           max_tokens: 16000,
           // Server-side refusal fallback exists for Opus, Sonnet and Fable, not for Haiku.
@@ -73,7 +75,16 @@ Never guess an amount that is not written. Use "other" for phone apps.`, text),
           system,
           tools,
           messages,
-        });
+        };
+        let msg;
+        try { msg = await client.beta.messages.create(simple ? plain(full) : full); }
+        catch (e) {
+          // If the API rejects the request (400), log its reason and retry once without the optional extras.
+          if (!(e instanceof Anthropic.BadRequestError) || simple) throw e;
+          console.error('Assistant request rejected, retrying without optional features:', e.message);
+          simple = true; guard(); calls++;
+          msg = await client.beta.messages.create(plain(full));
+        }
         if (msg.stop_reason === 'refusal') throw new Error('The assistant declined this request.');
         messages.push({ role: 'assistant', content: msg.content }); // full content, thinking blocks included
         const uses = msg.content.filter((b) => b.type === 'tool_use');
